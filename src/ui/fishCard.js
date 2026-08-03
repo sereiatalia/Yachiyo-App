@@ -1,11 +1,66 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { AttachmentBuilder } from 'discord.js';
-const FONT='sans-serif';
-async function background(url){ const response=await fetch(url); if(!response.ok) throw new Error('Fish background unavailable'); return loadImage(Buffer.from(await response.arrayBuffer())); }
-function xml(value){ return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-export async function createFishCard({fish,rarity,reward,valueBonus=0,luckBonus=0}) {
-  let imageData=''; try { const response=await fetch(rarity.background); imageData=`data:image/jpeg;base64,${Buffer.from(await response.arrayBuffer()).toString('base64')}`; } catch {}
-  const flavor=rarity.label==='Common'?'Just a regular day at the river...':rarity.label==='Epic'?'A truly remarkable find, this will be remembered!':'The cosmic tide has granted you a remarkable discovery!';
-  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="600" viewBox="0 0 1000 600"><rect width="1000" height="600" fill="#162a48"/>${imageData?`<image href="${imageData}" width="1000" height="600" preserveAspectRatio="xMidYMid slice"/>`:''}<rect width="1000" height="600" fill="#101426" opacity=".28"/><g text-anchor="middle" fill="white" font-family="DejaVu Sans, Arial, sans-serif" stroke="#111827" stroke-width="5" paint-order="stroke" stroke-linejoin="round"><text x="500" y="78" font-size="27" font-style="italic" stroke-width="3">You successfully catch a...</text><text x="500" y="132" font-size="52" font-weight="700">${xml(rarity.label.toUpperCase())} CATCH!</text><text x="500" y="171" font-size="23" font-style="italic" stroke-width="3">${xml(flavor)}</text><text x="500" y="298" font-size="84" font-weight="700">${xml(fish.name.toUpperCase())}</text><text x="500" y="380" font-size="30" font-style="italic" stroke-width="3">Successfully saved to Almanac</text><text x="500" y="430" font-size="28" stroke-width="3">Est. Value: ${fish.value.toLocaleString()} coins</text><text x="500" y="478" font-size="25" stroke-width="3">Fishing Reward: +${reward.toLocaleString()} coins</text><text x="500" y="525" font-size="23" stroke-width="3">Value Bonus: +${valueBonus}%  |  Luck Bonus: +${luckBonus}%</text></g></svg>`;
-  const canvas=createCanvas(1000,600); const ctx=canvas.getContext('2d'); const image=await loadImage(Buffer.from(svg)); ctx.drawImage(image,0,0,1000,600); return new AttachmentBuilder(await canvas.encode('png'),{name:'yachiyo-fish-catch.png'});
+
+const WIDTH = 1000;
+const HEIGHT = 500;
+
+async function loadBackground(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Fish background unavailable');
+  return loadImage(Buffer.from(await response.arrayBuffer()));
+}
+
+function drawCentered(ctx, text, font, y, options = {}) {
+  ctx.font = font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = options.color ?? '#ffffff';
+  ctx.fillText(text, WIDTH / 2, y);
+}
+
+export async function createFishCard({ fish, rarity, reward, valueBonus = 0, luckBonus = 0 }) {
+  const canvas = createCanvas(WIDTH, HEIGHT);
+  const ctx = canvas.getContext('2d');
+
+  try {
+    const background = await loadBackground(rarity.background);
+    ctx.drawImage(background, 0, 0, WIDTH, HEIGHT);
+  } catch {
+    const gradient = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
+    gradient.addColorStop(0, '#263c62');
+    gradient.addColorStop(1, '#111827');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  }
+
+  // Match the old Yachiyo card: white canvas text with a strong shadow.
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.82)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 2;
+
+  const flavor = rarity.label === 'Common'
+    ? 'Just a regular day at the river...'
+    : rarity.label === 'Epic'
+      ? 'A truly remarkable find, this will be remembered!'
+      : 'The cosmic tide has granted you a remarkable discovery!';
+
+  drawCentered(ctx, 'You successfully catch a...', 'italic 28px sans-serif', 80);
+  drawCentered(ctx, `${rarity.label.toUpperCase()} CATCH!`, '700 50px sans-serif', 130);
+  drawCentered(ctx, flavor, 'italic 20px sans-serif', 165);
+
+  // Keep long fish names inside the card.
+  const fishName = fish.name.toUpperCase();
+  const nameSize = Math.min(115, Math.max(48, Math.floor(900 / Math.max(fishName.length, 8) * 1.35)));
+  drawCentered(ctx, fishName, `700 ${nameSize}px sans-serif`, 290);
+
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  drawCentered(ctx, 'Successfully saved to Almanac', 'italic 32px sans-serif', 360);
+  drawCentered(ctx, `Est. Value: ${Number(fish.value ?? 0).toLocaleString()} coins`, '24px sans-serif', 395);
+  drawCentered(ctx, `Fishing Reward: +${Number(reward ?? 0).toLocaleString()} coins`, '22px sans-serif', 420);
+  drawCentered(ctx, `Value Bonus: +${Math.round(valueBonus)}% | Luck Bonus: +${Math.round(luckBonus)}%`, '22px sans-serif', 450);
+
+  return new AttachmentBuilder(await canvas.encode('png'), { name: 'yachiyo-fish-catch.png' });
 }
