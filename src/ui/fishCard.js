@@ -29,7 +29,7 @@ function centerText(ctx, text, font, y, shadow = true) {
   ctx.fillText(text, 500, y);
 }
 
-export async function createFishCard({ fish, rarity, reward, valueBonus = 0, luckBonus = 0 }) {
+export async function createFishCard({ fish, rarity, valueBonus = 0, luckBonus = 0 }) {
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext('2d');
 
@@ -59,8 +59,7 @@ export async function createFishCard({ fish, rarity, reward, valueBonus = 0, luc
 
   centerText(ctx, 'Successfully saved to Almanac', 'italic 32px sans-serif', 360, false);
   centerText(ctx, 'Est. Value: ' + Number(fish.value ?? 0).toLocaleString() + ' coins', '24px sans-serif', 395, false);
-  centerText(ctx, 'Fishing Reward: +' + Number(reward ?? 0).toLocaleString() + ' coins', '22px sans-serif', 430, false);
-  centerText(ctx, 'Value Bonus: +' + Math.round(valueBonus) + '% | Luck Bonus: +' + Math.round(luckBonus) + '%', '22px sans-serif', 465, false);
+  centerText(ctx, 'Value Bonus: +' + Math.round(valueBonus) + '% | Luck Bonus: +' + Math.round(luckBonus) + '%', '22px sans-serif', 430, false);
 
-  return new AttachmentBuilder(await canvas.encode('png'), { name: 'fish-card.png' });
+  return new AttachmentBuilder(await canvas.encode('png'), { name: 'fish-card-v3.png' });
 }
