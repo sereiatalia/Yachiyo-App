@@ -1,10 +1,11 @@
-import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { balance, claim, castFish, addMoney, transfer, bankMove, leaderboard, rollFish, saveFish, fishInventory, fishAlmanac, cooldownRemaining } from './services/economyService.js';
 import { FISH_RARITIES } from './config/fishRarities.js';
 import { createFishCard } from './ui/fishCard.js';
 import { runPullSequence } from './services/fishingPresentation.js';
 import { setLogChannel, ensureGuild } from './services/guildService.js';
 import { createCase, warn, recentCases } from './services/moderationService.js';
+import { recentConfessions } from './services/confessionService.js';
 const YACHIYO_PURPLE = 0x8e7dff;
 const YACHIYO_BLUE = 0x4db8e8;
 const yEmbed = (title, description, color = YACHIYO_PURPLE) => new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setFooter({ text: 'Yachiyo • Cosmic server manager' });
@@ -17,6 +18,8 @@ export const commands = [
   new SlashCommandBuilder().setName('fish').setDescription('Go fishing for coins.'),
   new SlashCommandBuilder().setName('economy-add').setDescription('Add global coins to a user.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addUserOption(o=>o.setName('user').setDescription('Target').setRequired(true)).addIntegerOption(o=>o.setName('amount').setDescription('Amount').setRequired(true)),
   new SlashCommandBuilder().setName('logs').setDescription('Set the audit-log channel.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addChannelOption(o=>o.setName('channel').setDescription('Text channel').setRequired(true))
+  ,new SlashCommandBuilder().setName('confession').setDescription('Submit an anonymous confession.').setDMPermission(false)
+  ,new SlashCommandBuilder().setName('confession-log').setDescription('View confession authors and contents.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
   ,new SlashCommandBuilder().setName('warn').setDescription('Warn a member.').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Reason').setRequired(false))
   ,new SlashCommandBuilder().setName('warnings').setDescription('View recent warnings and cases.').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true))
   ,new SlashCommandBuilder().setName('kick').setDescription('Kick a member.').setDefaultMemberPermissions(PermissionFlagsBits.KickMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Reason').setRequired(false))
@@ -49,10 +52,23 @@ export const commands = [
 export async function handleCommand(interaction) {
   await ensureGuild(interaction.guildId);
   const name=interaction.commandName;
+  const adminOnly=['economy-add','logs','confession-log','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout'];
+  if(adminOnly.includes(name) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return interaction.reply({content:'🛡️ Only server administrators can use this command.',ephemeral:true});
   if(name==='ping') return interaction.reply({embeds:[yEmbed('☾ Yachiyo is watching over this server.','✦ The moonlit command center is online and watching this server.',YACHIYO_BLUE)]});
   if(name==='help') return interaction.reply({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('☾ YACHIYO COMMAND CENTER').setDescription('*The moonlit server manager is ready to assist.*').addFields({name:'✦ Economy',value:'`/balance`  `/daily`  `/work`  `/fish`\n`/pay`  `/deposit`  `/withdraw`  `/leaderboard`'},{name:'✦ Fishing',value:'`/fishinventory`  `/fishalmanac`\nUse the buttons on a catch card to explore your collection.'},{name:'✦ Moderation',value:'`/warn`  `/warnings`  `/kick`  `/ban`  `/timeout`\n`/untimeout`  `/unban`  `/purge`  `/lock`  `/unlock`  `/logs`'}).setFooter({text:'Yachiyo • Cosmic server manager'})]});
   if(name==='balance') { const user=interaction.options.getUser('user')??interaction.user; const b=await balance(user.id); return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf0b6d8).setAuthor({name:'Yachiyo • Cosmic Treasury',iconURL:interaction.client.user.displayAvatarURL()}).setTitle('🌸 NYANKO_' + user.username.toUpperCase() + "'S BALANCE 🌸").setDescription('╭─────────────── ✦ ───────────────╮\\nHere is the current financial status of <@' + user.id + '>.\\n\\n💵 **Cash:** **' + b.wallet.toLocaleString() + '** coins\\n🏦 **Bank:** **' + b.bank.toLocaleString() + '** coins\\n✨ **Total:** **' + (b.wallet+b.bank).toLocaleString() + '** coins\\n╰─────────────── ✦ ───────────────╯').setFooter({text:'Global economy • shared across every server'})]}); }
   if(['daily','work'].includes(name)) { try { const r=await claim(interaction.user.id,name); return interaction.reply({embeds:[yEmbed(name==='daily'?'🌙 Daily Cosmic Allowance':'🛠️ Work Complete',`✦ You received **${r.amount.toLocaleString()}** global coins.\n\nYour fortune has been recorded across every server.`)]}); } catch(e) { return interaction.reply({content:`Yachiyo says: ${e.message}`,ephemeral:true}); } }
+  if(name==='confession') {
+    const modal=new ModalBuilder().setCustomId('confession_submit').setTitle('☾ Send a private confession');
+    const input=new TextInputBuilder().setCustomId('confession_content').setLabel('What would you like to confess?').setStyle(TextInputStyle.Paragraph).setPlaceholder('Write your confession here...').setRequired(true).setMaxLength(1000);
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return interaction.showModal(modal);
+  }
+  if(name==='confession-log') {
+    const rows=await recentConfessions(interaction.guildId,25);
+    const body=rows.length?rows.map(row=>'**Confession #'+row.id+'** • <@'+row.author_user_id+'>\n'+String(row.content).slice(0,700)).join('\n\n'):'*No confessions have been submitted in this server.*';
+    return interaction.reply({ephemeral:true,embeds:[new EmbedBuilder().setColor(0xe74c3c).setTitle('🛡️ YACHIYO CONFESSION LOG').setDescription(body).setFooter({text:'Administrator view • confession authors are visible here'})]});
+  }
   if(name==='fish') { const wait=await cooldownRemaining(interaction.user.id,'fish'); if(wait>0) return interaction.reply({content:`🎣 Please wait **${Math.ceil(wait/1000)} second(s)** before fishing again.`,ephemeral:true}); try { await interaction.deferReply(); const casting=new EmbedBuilder().setColor(0x4db8e8).setTitle('🎣 YACHIYO’S CELESTIAL FISHING').setDescription('╭ 𖦹 ˚｡⋆ Casting your line...\n╰──────────────\n`[████░░░░░░░░░░░░░░░░]`\n\n*The cosmic tide is moving.*'); await interaction.editReply({embeds:[casting]}); await new Promise(r=>setTimeout(r,900)); const bite=new EmbedBuilder().setColor(0x8e7dff).setTitle('🎣 A BITE!').setDescription('╭ 𖦹 ˚｡⋆ Something is pulling the line!\n╰──────────────\n`[████████████░░░░░░░░]`\n\n*Reeling in the unknown...*'); await interaction.editReply({embeds:[bite]}); await new Promise(r=>setTimeout(r,500)); const fish=rollFish(); const rarity=FISH_RARITIES[fish.rarity]; await runPullSequence(interaction,fish.rarity); await castFish(interaction.user.id); await saveFish(interaction.user.id,fish); const card=await createFishCard({fish,rarity,valueBonus:0,luckBonus:0}); const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('fish_again').setLabel('Cast Again').setEmoji('🎣').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('fish_almanac').setLabel('Fish Almanac').setEmoji('📖').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('fish_inventory').setLabel('Inventory').setEmoji('🎒').setStyle(ButtonStyle.Success)); return interaction.editReply({content:`🐟 **${interaction.user.displayName}** caught a ${fish.name}!`,files:[card],components:[row],embeds:[]}); } catch(e) { return interaction.editReply({content:`Yachiyo says: ${e.message}`,embeds:[],components:[]}); } }
   if(name==='fishinventory') { const rows=await fishInventory(interaction.user.id); return interaction.reply({embeds:[new EmbedBuilder().setColor(0x4db8e8).setAuthor({name:'Yachiyo • Celestial Waters',iconURL:interaction.client.user.displayAvatarURL()}).setTitle('🌊 RYETSURI’S AQUARIUM 𓆝').setDescription('────────── 𓆝 ⋆｡°✩ ──────────\\n' + (rows.length?rows.map((x,i)=>'**'+(i+1)+'. '+(FISH_RARITIES[x.rarity]?.label||x.rarity)+'**  •  '+x.fish_name+'  ×'+x.quantity).join('\n'):'*The aquarium is empty. Cast `/fish` to discover the tide.*') + '\\n────────── 𓆝 ⋆｡°✩ ──────────').setFooter({text:'Use the catch-card buttons to explore your collection.'})]}); }
   if(name==='fishalmanac') {
