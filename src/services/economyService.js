@@ -1,4 +1,5 @@
 import { query } from '../database/db.js';
+import { FISH_TABLE } from '../config/fishRarities.js';
 const COOLDOWNS = { daily: 86400000, work: 1800000, fish: 2700000 };
 async function ensure(userId) { await query('INSERT INTO economy_users (user_id) VALUES ($1) ON CONFLICT DO NOTHING', [userId]); return (await query('SELECT * FROM economy_users WHERE user_id=$1', [userId])).rows[0]; }
 export async function balance(userId) { return ensure(userId); }
@@ -7,3 +8,4 @@ export async function claim(userId, type) { const user = await ensure(userId); c
 export async function transfer(fromId,toId,amount) { if(fromId===toId||amount<1) throw new Error('Choose another user and a positive amount.'); await ensure(fromId); await ensure(toId); const c=await query('UPDATE economy_users SET wallet=wallet-$1 WHERE user_id=$2 AND wallet >= $1',[amount,fromId]); if(!c.rowCount) throw new Error('Insufficient wallet funds.'); await query('UPDATE economy_users SET wallet=wallet+$1 WHERE user_id=$2',[amount,toId]); await query('INSERT INTO economy_transactions (user_id,type,amount,metadata) VALUES ($1,$2,$3,$4),($5,$6,$7,$8)',[fromId,'transfer_out',-amount,JSON.stringify({toId}),toId,'transfer_in',amount,JSON.stringify({fromId})]); return balance(fromId); }
 export async function bankMove(userId,amount,direction) { if(amount<1) throw new Error('Amount must be positive.'); const u=await ensure(userId); if(direction==='deposit'&&u.wallet<amount) throw new Error('Insufficient wallet funds.'); if(direction==='withdraw'&&u.bank<amount) throw new Error('Insufficient bank funds.'); const delta=direction==='deposit'?[ -amount, amount ]:[ amount,-amount ]; await query('UPDATE economy_users SET wallet=wallet+$1,bank=bank+$2 WHERE user_id=$3',[delta[0],delta[1],userId]); return balance(userId); }
 export async function leaderboard(limit=10) { return (await query('SELECT user_id,wallet,bank,(wallet+bank) AS total FROM economy_users ORDER BY total DESC LIMIT $1',[limit])).rows; }
+export function rollFish() { const total=FISH_TABLE.reduce((a,f)=>a+f.weight,0); let n=Math.random()*total; for(const fish of FISH_TABLE){ n-=fish.weight; if(n<=0) return fish; } return FISH_TABLE[0]; }
