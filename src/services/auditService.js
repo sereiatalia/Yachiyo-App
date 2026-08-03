@@ -26,6 +26,12 @@ function formatEvent(payload) {
   if (data.content !== undefined) embed.addFields({ name: 'Message', value: clip(data.content) || '*(empty message)*', inline: false });
   if (data.before !== undefined || data.after !== undefined) embed.addFields({ name: 'Before', value: clip(data.before) || '*(empty message)*', inline: true }, { name: 'After', value: clip(data.after) || '*(empty message)*', inline: true });
   if (data.attachments) embed.addFields({ name: 'Attachments', value: String(data.attachments), inline: true });
+  if (data.attachmentUrls?.length) {
+    embed.addFields({ name: 'Saved attachment links', value: data.attachmentUrls.map((url, index) => '[' + (index + 1) + '](' + url + ')').join('\\n').slice(0, 1024), inline: false });
+    const image = data.attachmentUrls.find(url => /\\.(png|jpe?g|gif|webp)(\\?|$)/i.test(url));
+    if (image) embed.setImage(image);
+  }
+  if (data.previousAttachmentUrls?.length) embed.addFields({ name: 'Previous attachment links', value: data.previousAttachmentUrls.map((url, index) => '[' + (index + 1) + '](' + url + ')').join('\\n').slice(0, 1024), inline: false });
   return embed;
 }
 
