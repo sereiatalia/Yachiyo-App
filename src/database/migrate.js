@@ -31,6 +31,15 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   target_id TEXT, data JSONB NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS audit_logs_guild_idx ON audit_logs(guild_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS fish_catches (
+  id BIGSERIAL PRIMARY KEY, user_id TEXT NOT NULL, fish_name TEXT NOT NULL, rarity TEXT NOT NULL,
+  value BIGINT NOT NULL, caught_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS fish_catches_user_idx ON fish_catches(user_id, caught_at DESC);
+CREATE TABLE IF NOT EXISTS fish_inventory (
+  user_id TEXT NOT NULL, fish_name TEXT NOT NULL, rarity TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, fish_name)
+);
 `;
 
 try { await pool.query(sql); console.log('Yachiyo database migration complete.'); }
