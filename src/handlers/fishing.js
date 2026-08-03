@@ -2,6 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 import { castFish, rollFish, saveFish, cooldownRemaining } from '../services/economyService.js';
 import { FISH_RARITIES } from '../config/fishRarities.js';
 import { createFishCard } from '../ui/fishCard.js';
+import { runPullSequence } from '../services/fishingPresentation.js';
 
 export async function fishAgain(interaction) {
   const wait=await cooldownRemaining(interaction.user.id,'fish');
@@ -11,8 +12,10 @@ export async function fishAgain(interaction) {
     await interaction.editReply({embeds:[new EmbedBuilder().setColor(0x4db8e8).setTitle('🎣 YACHIYO’S CELESTIAL FISHING').setDescription('╭ 𖦹 ˚｡⋆ Casting your line...\n╰──────────────\n`[████░░░░░░░░░░░░░░░░]`\n\n*The cosmic tide is moving.*')]});
     await new Promise(r=>setTimeout(r,900));
     await interaction.editReply({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('🎣 A BITE!').setDescription('╭ 𖦹 ˚｡⋆ Something is pulling the line!\n╰──────────────\n`[████████████░░░░░░░░]`\n\n*Reeling in the unknown...*')]});
-    await new Promise(r=>setTimeout(r,900));
-    await castFish(interaction.user.id); const fish=rollFish(); await saveFish(interaction.user.id,fish); const rarity=FISH_RARITIES[fish.rarity];
+    await new Promise(r=>setTimeout(r,500));
+    const fish=rollFish(); const rarity=FISH_RARITIES[fish.rarity];
+    await runPullSequence(interaction, fish.rarity);
+    await castFish(interaction.user.id); await saveFish(interaction.user.id,fish);
     const card=await createFishCard({fish,rarity,valueBonus:0,luckBonus:0});
     const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('fish_again').setLabel('Cast Again').setEmoji('🎣').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('fish_almanac').setLabel('Fish Almanac').setEmoji('📖').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('fish_inventory').setLabel('Inventory').setEmoji('🎒').setStyle(ButtonStyle.Success));
     return interaction.editReply({content:`🐟 **${interaction.user.displayName}** caught a ${fish.name}!`,files:[card],components:[row],embeds:[]});
