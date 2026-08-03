@@ -12,7 +12,7 @@ export async function createFishCard({fish,rarity,reward,valueBonus=0,luckBonus=
   ctx.font='italic 23px Arial'; ctx.fillText(rarity.label==='Common'?'Just a regular day at the river...':rarity.label==='Epic'?'A truly remarkable find, this will be remembered!':'The cosmic tide has granted you a remarkable discovery!',500,171);
   center(ctx,`${fish.name.toUpperCase()}`,298,84,'bold');
   ctx.font='italic 30px Arial'; ctx.fillText('Successfully saved to Almanac',500,380);
-  ctx.font='28px Arial'; ctx.fillText(`Est. Value: ${value.toLocaleString()} coins`,500,430);
+  ctx.font='28px Arial'; ctx.fillText(`Est. Value: ${fish.value.toLocaleString()} coins`,500,430);
   ctx.font='25px Arial'; ctx.fillText(`Fishing Reward: +${reward.toLocaleString()} coins`,500,478);
   ctx.font='23px Arial'; ctx.fillText(`Value Bonus: +${valueBonus}%  |  Luck Bonus: +${luckBonus}%`,500,525);
   ctx.shadowBlur=0; return new AttachmentBuilder(await canvas.encode('png'),{name:'yachiyo-fish-catch.png'});
