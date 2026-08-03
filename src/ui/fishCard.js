@@ -21,7 +21,7 @@ async function loadBackground(url) {
 }
 
 function drawText(ctx, text, y, size, { bold = false, italic = false, shadow = true } = {}) {
-  const family = bold ? 'YachiyoSansBold, DejaVu Sans' : 'YachiyoSans, DejaVu Sans';
+  const family = bold ? 'Arial' : 'Arial';
   ctx.font = (italic ? 'italic ' : '') + size + 'px ' + family;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
