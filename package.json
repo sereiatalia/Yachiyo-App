@@ -1,0 +1,21 @@
+{
+  "name": "yachiyo-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Yachiyo — a cosmic server manager for Discord",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "db:migrate": "node src/database/migrate.js",
+    "commands:deploy": "node src/deploy-commands.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "discord.js": "^14.25.1",
+    "dotenv": "^17.2.3",
+    "pg": "^8.16.3",
+    "zod": "^3.25.76"
+  }
+}
