@@ -36,6 +36,11 @@ CREATE TABLE IF NOT EXISTS fish_catches (
   value BIGINT NOT NULL, caught_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS fish_catches_user_idx ON fish_catches(user_id, caught_at DESC);
+CREATE TABLE IF NOT EXISTS confessions (
+  id BIGSERIAL PRIMARY KEY, guild_id TEXT NOT NULL, author_user_id TEXT NOT NULL,
+  content TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS confessions_guild_idx ON confessions(guild_id, id DESC);
 CREATE TABLE IF NOT EXISTS fish_inventory (
   user_id TEXT NOT NULL, fish_name TEXT NOT NULL, rarity TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, fish_name)
