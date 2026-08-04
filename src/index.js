@@ -45,7 +45,7 @@ client.on('interactionCreate', async interaction => {
         .setColor(0xf3a6c7)
         .setTitle('💌 Confession (#'+row.id+')')
         .setDescription('> '+content.replace(/\n/g,'\n> ')+'\n\nHey anon! Please use this space wisely.')
-        .setFooter({text:'Your identity is visible only to server administrators.'});
+        ;
       const buttons=new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('confession_submit_again').setLabel('Submit a confession (ง •̀_•́)ง').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('confession_reply').setLabel('Reply ◎☆').setStyle(ButtonStyle.Danger)
