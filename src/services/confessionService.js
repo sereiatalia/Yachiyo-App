@@ -15,3 +15,15 @@ export async function recentConfessions(guildId, limit = 25) {
   );
   return result.rows;
 }
+
+export async function setConfessionChannel(guildId, channelId) {
+  await query(
+    'INSERT INTO guild_settings (guild_id, confession_channel_id) VALUES ($1,$2) ON CONFLICT (guild_id) DO UPDATE SET confession_channel_id=$2, updated_at=NOW()',
+    [guildId, channelId]
+  );
+}
+
+export async function getConfessionChannel(guildId) {
+  const result = await query('SELECT confession_channel_id FROM guild_settings WHERE guild_id=$1', [guildId]);
+  return result.rows[0]?.confession_channel_id ?? null;
+}
