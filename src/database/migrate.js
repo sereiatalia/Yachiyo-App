@@ -7,7 +7,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process
 const sql = `
 CREATE TABLE IF NOT EXISTS guild_settings (
   guild_id TEXT PRIMARY KEY, prefix TEXT NOT NULL DEFAULT '.', timezone TEXT NOT NULL DEFAULT 'UTC',
-  log_channel_id TEXT, moderation_log_channel_id TEXT, economy_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  log_channel_id TEXT, moderation_log_channel_id TEXT, confession_channel_id TEXT, economy_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE TABLE IF NOT EXISTS economy_users (
