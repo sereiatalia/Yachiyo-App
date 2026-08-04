@@ -26,6 +26,7 @@ function formatEvent(payload) {
   if (data.messageId) embed.addFields({ name: 'Message ID', value: '`' + data.messageId + '`', inline: false });
   if (data.authorId) embed.addFields({ name: 'Message author', value: '<@' + data.authorId + '>', inline: false });
   if (data.createdTimestamp) embed.addFields({ name: 'Message created', value: '<t:' + Math.floor(data.createdTimestamp / 1000) + ':R>', inline: false });
+  if (data.serverName || data.confessionId) embed.addFields({ name: 'Confession context', value: (data.serverName ? '**' + clip(data.serverName) + '**' : '') + (data.confessionId ? ' • Confession #' + data.confessionId : ''), inline: false });
   if (data.summary) embed.setDescription(data.summary);
   if (data.reason) embed.addFields({ name: 'Reason', value: clip(data.reason), inline: false });
   if (data.confession) embed.addFields({ name: 'Confession', value: clip(data.confession), inline: false });
