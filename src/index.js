@@ -73,7 +73,15 @@ client.on('interactionCreate', async interaction => {
         const message=channel?.messages?.fetch?await channel.messages.fetch(confession.message_id).catch(()=>null):null;
         if(!message) return interaction.reply({content:'The original confession message could not be found.',ephemeral:true});
         const thread=message.thread??await message.startThread({name:'Confession #'+confession.id+' replies',autoArchiveDuration:1440});
-        await thread.send({embeds:[anonymousEmbed]});
+        const threadReply=await thread.send({embeds:[anonymousEmbed]});
+        const originalSender=await client.users.fetch(confession.author_user_id).catch(()=>null);
+        if(originalSender && originalSender.id!==interaction.user.id) {
+          const threadUrl='https://discord.com/channels/'+interaction.guildId+'/'+thread.id+'/'+threadReply.id;
+          await originalSender.send({
+            embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('💬 Someone replied to your confession').setDescription('An anonymous reply was added to **'+serverName+' • Confession #'+confession.id+'**.\n\nUse the button below to view the thread.')],
+            components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('Open Thread').setStyle(ButtonStyle.Link).setURL(threadUrl))]
+          }).catch(()=>null);
+        }
       } else {
         const recipient=await client.users.fetch(confession.author_user_id).catch(()=>null);
         if(!recipient) return interaction.reply({content:'The confession sender could not be reached.',ephemeral:true});
