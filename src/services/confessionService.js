@@ -27,3 +27,19 @@ export async function getConfessionChannel(guildId) {
   const result = await query('SELECT confession_channel_id FROM guild_settings WHERE guild_id=$1', [guildId]);
   return result.rows[0]?.confession_channel_id ?? null;
 }
+
+export async function attachConfessionMessage(id, channelId, messageId) {
+  await query('UPDATE confessions SET channel_id=$1,message_id=$2 WHERE id=$3',[channelId,messageId,id]);
+}
+export async function getConfession(id, guildId) {
+  const result=await query('SELECT id,guild_id,author_user_id,content,channel_id,message_id FROM confessions WHERE id=$1 AND guild_id=$2',[id,guildId]);
+  return result.rows[0] ?? null;
+}
+export async function createConfessionReply({confessionId,guildId,authorId,mode,content}) {
+  const result=await query('INSERT INTO confession_replies (confession_id,guild_id,author_user_id,mode,content) VALUES ($1,$2,$3,$4,$5) RETURNING id,created_at',[confessionId,guildId,authorId,mode,content]);
+  return result.rows[0];
+}
+export async function recentConfessionReplies(guildId, limit=50) {
+  const result=await query('SELECT r.id,r.confession_id,r.author_user_id,r.mode,r.content,r.created_at,c.author_user_id AS confession_author_id FROM confession_replies r JOIN confessions c ON c.id=r.confession_id WHERE r.guild_id=$1 ORDER BY r.id DESC LIMIT $2',[guildId,limit]);
+  return result.rows;
+}
