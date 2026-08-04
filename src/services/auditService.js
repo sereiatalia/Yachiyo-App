@@ -16,11 +16,13 @@ function formatEvent(payload) {
     'channel.create': { title: '📁 Channel created', color: 0x3498db },
     'channel.delete': { title: '🗑️ Channel deleted', color: 0xe74c3c },
     'confession.create': { title: '💌 Confession submitted', color: 0xe74c3c },
+    'confession.reply': { title: '💬 Anonymous confession reply', color: 0xf3a6c7 },
     'moderation.action': { title: '🛡️ Moderation action', color: 0xffc857 }
   };
   const definition = definitions[payload.eventType] ?? { title: '🛡️ ' + payload.eventType, color: 0x8e7dff };
   const embed = new EmbedBuilder().setTitle(definition.title).setColor(definition.color).setTimestamp();
   if (data.channelName || payload.targetId) embed.addFields({ name: 'Channel', value: data.channelName ? data.channelName + ' <#' + payload.targetId + '>' : '<#' + payload.targetId + '>', inline: false });
+  if (data.actorLabel || payload.actorId) embed.addFields({ name: data.actorLabel ?? 'Sender', value: data.actorLabel ? clip(data.actorLabel) : '<@' + payload.actorId + '>', inline: false });
   if (data.messageId) embed.addFields({ name: 'Message ID', value: '`' + data.messageId + '`', inline: false });
   if (data.authorId) embed.addFields({ name: 'Message author', value: '<@' + data.authorId + '>', inline: false });
   if (data.createdTimestamp) embed.addFields({ name: 'Message created', value: '<t:' + Math.floor(data.createdTimestamp / 1000) + ':R>', inline: false });
