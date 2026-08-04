@@ -6,6 +6,7 @@ import { sendAuditLog } from './services/auditService.js';
 import { fishInventory, fishAlmanac } from './services/economyService.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { fishAgain } from './handlers/fishing.js';
+import { buyItem } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
@@ -114,6 +115,16 @@ client.on('interactionCreate', async interaction => {
     const input=new TextInputBuilder().setCustomId('confession_reply_content').setLabel('Anonymous reply').setStyle(TextInputStyle.Paragraph).setPlaceholder('Write your reply...').setRequired(true).setMaxLength(1000);
     modal.addComponents(new ActionRowBuilder().addComponents(input));
     return interaction.showModal(modal);
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('fish_buy:')) {
+    const itemId=interaction.customId.split(':')[1];
+    const labels={luck_drink:'🍀 Luck Drink',value_drink:'💎 Value Drink'};
+    try {
+      await buyItem(interaction.user.id,itemId,1000);
+      return interaction.reply({content:'✅ '+labels[itemId]+' added to your cosmic pouch. Use /fishdrink to activate it.',ephemeral:true});
+    } catch(error) {
+      return interaction.reply({content:'Yachiyo says: '+error.message,ephemeral:true});
+    }
   }
   if (interaction.isButton()) {
     if (interaction.customId === 'fish_again') { const fishChannel=await getFishChannel(interaction.guildId); if(fishChannel && interaction.channelId!==fishChannel) return interaction.reply({content:'🎣 Fishing is only available in <#'+fishChannel+'>.',ephemeral:true}); return fishAgain(interaction); }
