@@ -50,7 +50,7 @@ client.on('interactionCreate', async interaction => {
       if(!channel?.isTextBased()) return interaction.reply({content:'The configured confession channel is unavailable.',ephemeral:true});
       const message=await channel.send({embeds:[confessionEmbed],components:[buttons]});
       await attachConfessionMessage(row.id,channelId,message.id);
-      await sendAuditLog(client,interaction.guild,{eventType:'confession.create',actorId:interaction.user.id,targetId:channelId,data:{summary:'A new confession was submitted.',confession:content}});
+      await sendAuditLog(client,interaction.guild,{eventType:'confession.create',actorId:interaction.user.id,targetId:channelId,data:{summary:'A new confession was submitted.',confession:content,confessionId:row.confession_number,serverName:interaction.guild?.name ?? 'this server'}});
       return interaction.reply({content:'💌 Your confession was submitted anonymously.',ephemeral:true});
     } catch(error) {
       console.error('[CONFESSION]',error);
