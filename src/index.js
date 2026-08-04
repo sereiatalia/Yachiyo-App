@@ -119,7 +119,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId === 'fish_again') { const fishChannel=await getFishChannel(interaction.guildId); if(fishChannel && interaction.channelId!==fishChannel) return interaction.reply({content:'🎣 Fishing is only available in <#'+fishChannel+'>.',ephemeral:true}); return fishAgain(interaction); }
     if (interaction.customId === 'fish_inventory') {
       const rows=await fishInventory(interaction.user.id);
-      return interaction.reply({ephemeral:true,embeds:[new EmbedBuilder().setColor(0x4db8e8).setTitle('🎒 '+interaction.user.displayName+'’s Aquarium').setDescription(rows.length?rows.map(x=>'**'+x.fish_name+'** • ×'+x.quantity).join('\n'):'Your aquarium is empty.')]});
+      return interaction.reply({ephemeral:true,embeds:[new EmbedBuilder().setColor(0x4db8e8).setTitle('🎒 '+interaction.user.username+'’s Aquarium').setDescription(rows.length?rows.map(x=>'**'+x.fish_name+'** • ×'+x.quantity).join('\n'):'Your aquarium is empty.')]});
     }
     if (interaction.customId === 'fish_almanac') {
       const rows=await fishAlmanac(interaction.user.id);
