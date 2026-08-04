@@ -66,7 +66,8 @@ client.on('interactionCreate', async interaction => {
       const confession=await getConfession(confessionId,interaction.guildId);
       if(!confession) return interaction.reply({content:'That confession no longer exists.',ephemeral:true});
       await createConfessionReply({confessionId,guildId:interaction.guildId,authorId:interaction.user.id,mode,content});
-      const anonymousEmbed=new EmbedBuilder().setColor(0xf3a6c7).setDescription('> '+content.replace(/\n/g,'\n> ')+'\n\n*Anonymous reply from Yachiyo.*');
+      const serverName=interaction.guild?.name ?? 'this server';
+      const anonymousEmbed=new EmbedBuilder().setColor(0xf3a6c7).setTitle('💬 Anonymous reply • '+serverName+' • Confession #'+confession.id).setDescription('> '+content.replace(/\n/g,'\n> ')+'\n\n*Anonymous reply from Yachiyo.*');
       if(mode==='thread') {
         const channel=await client.channels.fetch(confession.channel_id).catch(()=>null);
         const message=channel?.messages?.fetch?await channel.messages.fetch(confession.message_id).catch(()=>null):null;
@@ -78,7 +79,7 @@ client.on('interactionCreate', async interaction => {
         if(!recipient) return interaction.reply({content:'The confession sender could not be reached.',ephemeral:true});
         await recipient.send({embeds:[anonymousEmbed]}).catch(()=>null);
       }
-      await sendAuditLog(client,interaction.guild,{eventType:'confession.reply',actorId:interaction.user.id,targetId:confession.author_user_id,data:{summary:'An anonymous '+mode+' reply was sent for confession #'+confession.id+'.',confession:content}});
+      await sendAuditLog(client,interaction.guild,{eventType:'confession.reply',actorId:interaction.user.id,targetId:confession.channel_id,data:{channelName:interaction.guild.channels.cache.get(confession.channel_id)?.name ?? 'confessions',summary:'An anonymous '+mode+' reply was sent for confession #'+confession.id+'.',confession:content,confessionId:confession.id,serverName}});
       return interaction.reply({content:'✅ Your anonymous reply was sent.',ephemeral:true});
     } catch(error) {
       console.error('[CONFESSION_REPLY]',error);
