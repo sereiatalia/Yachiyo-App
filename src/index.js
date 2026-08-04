@@ -41,7 +41,7 @@ client.on('interactionCreate', async interaction => {
       const channelId=await getConfessionChannel(interaction.guildId);
       if(!channelId) return interaction.reply({content:'💌 Confessions are not set up yet. Ask an administrator to run /confession-setup.',ephemeral:true});
       const row=await createConfession({guildId:interaction.guildId,authorId:interaction.user.id,content});
-      const confessionEmbed=new EmbedBuilder().setColor(0xf3a6c7).setTitle('💌 Confession (#'+row.id+')').setDescription('> '+content.replace(/\n/g,'\n> ')+'\n\nHey anon! Please use this space wisely.');
+      const confessionEmbed=new EmbedBuilder().setColor(0xf3a6c7).setTitle('💌 Confession (#'+row.confession_number+')').setDescription('> '+content.replace(/\n/g,'\n> ')+'\n\nHey anon! Please use this space wisely.');
       const buttons=new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('confession_submit_again').setLabel('Submit a confession (ง •̀_•́)ง').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('confession_reply:'+row.id).setLabel('Reply ◎☆').setStyle(ButtonStyle.Danger)
@@ -67,18 +67,18 @@ client.on('interactionCreate', async interaction => {
       if(!confession) return interaction.reply({content:'That confession no longer exists.',ephemeral:true});
       await createConfessionReply({confessionId,guildId:interaction.guildId,authorId:interaction.user.id,mode,content});
       const serverName=interaction.guild?.name ?? 'this server';
-      const anonymousEmbed=new EmbedBuilder().setColor(0xf3a6c7).setTitle('💬 Anonymous reply • '+serverName+' • Confession #'+confession.id).setDescription('> '+content.replace(/\n/g,'\n> ')+'\n\n*Anonymous reply from Yachiyo.*');
+      const anonymousEmbed=new EmbedBuilder().setColor(0xf3a6c7).setTitle('💬 Anonymous reply • '+serverName+' • Confession #'+confession.confession_number).setDescription('> '+content.replace(/\n/g,'\n> ')+'\n\n*Anonymous reply from Yachiyo.*');
       if(mode==='thread') {
         const channel=await client.channels.fetch(confession.channel_id).catch(()=>null);
         const message=channel?.messages?.fetch?await channel.messages.fetch(confession.message_id).catch(()=>null):null;
         if(!message) return interaction.reply({content:'The original confession message could not be found.',ephemeral:true});
-        const thread=message.thread??await message.startThread({name:'Confession #'+confession.id+' replies',autoArchiveDuration:1440});
+        const thread=message.thread??await message.startThread({name:'Confession #'+confession.confession_number+' replies',autoArchiveDuration:1440});
         const threadReply=await thread.send({embeds:[anonymousEmbed]});
         const originalSender=await client.users.fetch(confession.author_user_id).catch(()=>null);
         if(originalSender && originalSender.id!==interaction.user.id) {
           const threadUrl='https://discord.com/channels/'+interaction.guildId+'/'+thread.id+'/'+threadReply.id;
           await originalSender.send({
-            embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('💬 Someone replied to your confession').setDescription('An anonymous reply was added to **'+serverName+' • Confession #'+confession.id+'**.\n\nUse the button below to view the thread.')],
+            embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('💬 Someone replied to your confession').setDescription('An anonymous reply was added to **'+serverName+' • Confession #'+confession.confession_number+'**.\n\nUse the button below to view the thread.')],
             components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('Open Thread').setStyle(ButtonStyle.Link).setURL(threadUrl))]
           }).catch(()=>null);
         }
@@ -87,7 +87,7 @@ client.on('interactionCreate', async interaction => {
         if(!recipient) return interaction.reply({content:'The confession sender could not be reached.',ephemeral:true});
         await recipient.send({embeds:[anonymousEmbed]}).catch(()=>null);
       }
-      await sendAuditLog(client,interaction.guild,{eventType:'confession.reply',actorId:interaction.user.id,targetId:confession.channel_id,data:{channelName:interaction.guild.channels.cache.get(confession.channel_id)?.name ?? 'confessions',summary:'An anonymous '+mode+' reply was sent for confession #'+confession.id+'.',confession:content,confessionId:confession.id,serverName}});
+      await sendAuditLog(client,interaction.guild,{eventType:'confession.reply',actorId:interaction.user.id,targetId:confession.channel_id,data:{channelName:interaction.guild.channels.cache.get(confession.channel_id)?.name ?? 'confessions',summary:'An anonymous '+mode+' reply was sent for confession #'+confession.confession_number+'.',confession:content,confessionId:confession.confession_number,serverName}});
       return interaction.reply({content:'✅ Your anonymous reply was sent.',ephemeral:true});
     } catch(error) {
       console.error('[CONFESSION_REPLY]',error);
