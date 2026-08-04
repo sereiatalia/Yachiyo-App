@@ -23,7 +23,7 @@ export async function upgradeRod(userId, wallet) {
   const next = ROD_TIERS.find(tier => tier.level === rod.level + 1);
   if (!next) throw new Error('Your rod has reached its celestial maximum.');
   if (wallet < next.cost) throw new Error(`You need ${next.cost.toLocaleString()} coins for the next rod tier.`);
-  await query('UPDATE fish_rods SET level=$1, updated_at=NOW() WHERE user_id=$2', [next.level, userId]);
+  const charged=await query('UPDATE economy_users SET wallet=wallet-$1, updated_at=NOW() WHERE user_id=$2 AND wallet>=$1', [next.cost, userId]); if (!charged.rowCount) throw new Error('Your wallet changed before the upgrade completed. Please try again.'); await query('INSERT INTO economy_transactions (user_id,type,amount,metadata) VALUES ($1,$2,$3,$4)', [userId,'fish_rod_upgrade',-next.cost,JSON.stringify({rod:next.name})]);
   return next;
 }
 
