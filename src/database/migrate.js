@@ -51,6 +51,22 @@ CREATE TABLE IF NOT EXISTS confessions (
   content TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS confessions_guild_idx ON confessions(guild_id, id DESC);
+ALTER TABLE confessions ADD COLUMN IF NOT EXISTS confession_number INTEGER;
+WITH numbered AS (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY guild_id ORDER BY id) AS number
+  FROM confessions
+)
+UPDATE confessions c SET confession_number=number FROM numbered n WHERE c.id=n.id AND c.confession_number IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS confessions_guild_number_idx ON confessions(guild_id, confession_number);
+CREATE TABLE IF NOT EXISTS confession_counters (
+  guild_id TEXT PRIMARY KEY,
+  next_number INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO confession_counters (guild_id, next_number)
+SELECT guild_id, MAX(confession_number) + 1
+FROM confessions
+GROUP BY guild_id
+ON CONFLICT (guild_id) DO UPDATE SET next_number=GREATEST(confession_counters.next_number, EXCLUDED.next_number);
 CREATE TABLE IF NOT EXISTS fish_inventory (
   user_id TEXT NOT NULL, fish_name TEXT NOT NULL, rarity TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, fish_name)
