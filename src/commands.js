@@ -68,8 +68,8 @@ export async function handleCommand(interaction) {
       .setColor(0xf0b6d8)
       .setTitle('💰 '+user.username+' • Balance')
       .setDescription(
-        '**Cash:** '+b.wallet.toLocaleString()+' coins\\n'+
-        '**Bank:** '+b.bank.toLocaleString()+' coins\\n'+
+        '**Cash:** '+b.wallet.toLocaleString()+' coins\n'+
+        '**Bank:** '+b.bank.toLocaleString()+' coins\n'+
         '**Total:** '+total.toLocaleString()+' coins'
       )
       .setFooter({text:'Global economy • shared across every server'})]});
@@ -93,7 +93,7 @@ export async function handleCommand(interaction) {
   }
 
   if(name==='fish') { const fishChannel=await getFishChannel(interaction.guildId); if(fishChannel && interaction.channelId!==fishChannel) return interaction.reply({content:'🎣 Fishing is only available in <#'+fishChannel+'>.',ephemeral:true}); const wait=await cooldownRemaining(interaction.user.id,'fish'); if(wait>0) return interaction.reply({content:`🎣 Please wait **${Math.ceil(wait/1000)} second(s)** before fishing again.`,ephemeral:true}); try { await interaction.deferReply(); const casting=new EmbedBuilder().setColor(0x4db8e8).setTitle('🎣 YACHIYO’S CELESTIAL FISHING').setDescription('╭ 𖦹 ˚｡⋆ Casting your line...\n╰──────────────\n`[████░░░░░░░░░░░░░░░░]`\n\n*The cosmic tide is moving.*'); await interaction.editReply({embeds:[casting]}); await new Promise(r=>setTimeout(r,900)); const bite=new EmbedBuilder().setColor(0x8e7dff).setTitle('🎣 A BITE!').setDescription('╭ 𖦹 ˚｡⋆ Something is pulling the line!\n╰──────────────\n`[████████████░░░░░░░░]`\n\n*Reeling in the unknown...*'); await interaction.editReply({embeds:[bite]}); await new Promise(r=>setTimeout(r,500)); const fish=rollFish(); const rarity=FISH_RARITIES[fish.rarity]; await runPullSequence(interaction,fish.rarity); await castFish(interaction.user.id); await saveFish(interaction.user.id,fish); const card=await createFishCard({fish,rarity,valueBonus:0,luckBonus:0}); const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('fish_again').setLabel('Cast Again').setEmoji('🎣').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('fish_almanac').setLabel('Fish Almanac').setEmoji('📖').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('fish_inventory').setLabel('Inventory').setEmoji('🎒').setStyle(ButtonStyle.Success)); return interaction.editReply({content:`🐟 **${interaction.user.displayName}** caught a ${fish.name}!`,files:[card],components:[row],embeds:[]}); } catch(e) { return interaction.editReply({content:`Yachiyo says: ${e.message}`,embeds:[],components:[]}); } }
-  if(name==='fishinventory') { const rows=await fishInventory(interaction.user.id); return interaction.reply({embeds:[new EmbedBuilder().setColor(0x4db8e8).setAuthor({name:'Yachiyo • Celestial Waters',iconURL:interaction.client.user.displayAvatarURL()}).setTitle('🌊 '+interaction.user.username+'’s Aquarium 𓆝').setDescription('────────── 𓆝 ⋆｡°✩ ──────────\\n' + (rows.length?rows.map((x,i)=>'**'+(i+1)+'. '+(FISH_RARITIES[x.rarity]?.label||x.rarity)+'**  •  '+x.fish_name+'  ×'+x.quantity).join('\n'):'*The aquarium is empty. Cast `/fish` to discover the tide.*') + '\\n────────── 𓆝 ⋆｡°✩ ──────────').setFooter({text:'Use the catch-card buttons to explore your collection.'})]}); }
+  if(name==='fishinventory') { const rows=await fishInventory(interaction.user.id); return interaction.reply({embeds:[new EmbedBuilder().setColor(0x4db8e8).setAuthor({name:'Yachiyo • Celestial Waters',iconURL:interaction.client.user.displayAvatarURL()}).setTitle('🌊 '+interaction.user.username+'’s Aquarium 𓆝').setDescription('────────── 𓆝 ⋆｡°✩ ──────────\n' + (rows.length?rows.map((x,i)=>'**'+(i+1)+'. '+(FISH_RARITIES[x.rarity]?.label||x.rarity)+'**  •  '+x.fish_name+'  ×'+x.quantity).join('\n'):'*The aquarium is empty. Cast `/fish` to discover the tide.*') + '\n────────── 𓆝 ⋆｡°✩ ──────────').setFooter({text:'Use the catch-card buttons to explore your collection.'})]}); }
   if(name==='fishalmanac') {
     const rows=await fishAlmanac(interaction.user.id);
     const order=['common','uncommon','rare','epic','legendary','mythic','ancient','celestial','secret','tsukuyomi'];
@@ -123,10 +123,10 @@ export async function handleCommand(interaction) {
   }
   if(name==='fishstatuseffects') {
     const effects=await getActiveEffects(interaction.user.id);
-    return interaction.reply({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('🧪 Active Tide Effects').setDescription(effects.length?effects.map(x=>'**'+x.item_id+'** • '+Math.max(0,x.seconds_left)+'s remaining').join('\\n'):'*No active effects. The tide is calm.*')]});
+    return interaction.reply({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('🧪 Active Tide Effects').setDescription(effects.length?effects.map(x=>'**'+x.item_id+'** • '+Math.max(0,x.seconds_left)+'s remaining').join('\n'):'*No active effects. The tide is calm.*')]});
   }
   if(name==='fishdrink') {
-    try { const effects=await drinkItem(interaction.user.id,interaction.options.getString('item')); return interaction.reply({embeds:[yEmbed('🧪 Buff activated', 'Your fishing drink is now flowing through the cosmic reel.\\n\\n'+effects.map(x=>'**'+x.item_id+'** • '+x.seconds_left+'s remaining').join('\\n'),0xf3a6c7)]}); }
+    try { const effects=await drinkItem(interaction.user.id,interaction.options.getString('item')); return interaction.reply({embeds:[yEmbed('🧪 Buff activated', 'Your fishing drink is now flowing through the cosmic reel.\n\n'+effects.map(x=>'**'+x.item_id+'** • '+x.seconds_left+'s remaining').join('\n'),0xf3a6c7)]}); }
     catch(e) { return interaction.reply({content:e.message,ephemeral:true}); }
   }
   if(name==='fishshop') {
@@ -134,7 +134,7 @@ export async function handleCommand(interaction) {
       new ButtonBuilder().setCustomId('fish_buy:luck_drink').setLabel('Buy Luck Drink • 1,000').setEmoji('🍀').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('fish_buy:value_drink').setLabel('Buy Value Drink • 1,000').setEmoji('💎').setStyle(ButtonStyle.Success)
     );
-    return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('🧪 Yachiyo’s Tide Boutique').setDescription('Temporary drinks turn an ordinary cast into a little bit of magic.\\n\\n🍀 **Luck Drink** — improves rare-pull odds for 5 minutes.\\n💎 **Value Drink** — marks your next fishing session with a value boost.\\n\\n*Your global wallet pays for every purchase.*')],components:[shopRow]});
+    return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('🧪 Yachiyo’s Tide Boutique').setDescription('Temporary drinks turn an ordinary cast into a little bit of magic.\n\n🍀 **Luck Drink** — improves rare-pull odds for 5 minutes.\n💎 **Value Drink** — marks your next fishing session with a value boost.\n\n*Your global wallet pays for every purchase.*')],components:[shopRow]});
   }
   if(['fishmarket','fishaquarium','fishbattle','fishbattlepvp'].includes(name)) return interaction.reply({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('☾ '+name.toUpperCase()).setDescription('This enhanced interface is now registered. Its interactive shop, aquarium, battle, and market panels are being connected to your global fishing data.') ]});
   if(name==='economy-add') { const b=await addMoney(interaction.options.getUser('user').id,interaction.options.getInteger('amount'),'admin'); return interaction.reply(`Added coins. New wallet: **${b.wallet.toLocaleString()}**.`); }
