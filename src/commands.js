@@ -45,7 +45,7 @@ export const commands = [
   ,new SlashCommandBuilder().setName('fishprofile').setDescription('View a global fishing profile.').addUserOption(o=>o.setName('user').setDescription('User').setRequired(false))
   ,new SlashCommandBuilder().setName('fishleaderboard').setDescription('View the global fishing leaderboard.')
   ,new SlashCommandBuilder().setName('fishshop').setDescription('Open the cosmic fish shop.')
-  ,new SlashCommandBuilder().setName('fishrod').setDescription('View or upgrade your fishing rod.')
+  ,new SlashCommandBuilder().setName('fishrod').setDescription('View or upgrade your fishing rod.').addStringOption(o=>o.setName('action').setDescription('Rod action').setRequired(false).addChoices({name:'View rod',value:'view'},{name:'Upgrade rod',value:'upgrade'}))
   ,new SlashCommandBuilder().setName('fishstatuseffects').setDescription('View active fishing effects.')
   ,new SlashCommandBuilder().setName('fishdrink').setDescription('Drink a fishing buff.').addStringOption(o=>o.setName('item').setDescription('Buff drink').setRequired(true).addChoices({name:'Luck drink • 5 minutes',value:'luck_drink'},{name:'Value drink • 5 minutes',value:'value_drink'}))
   ,new SlashCommandBuilder().setName('fishmarket').setDescription('View the changing fish market.')
@@ -101,6 +101,8 @@ export async function handleCommand(interaction) {
   if(name==='fishleaderboard') { const rows=await leaderboard(10); return interaction.reply({embeds:[new EmbedBuilder().setColor(0x4db8e8).setTitle('🏆 GLOBAL FISHER LEADERBOARD').setDescription(rows.map((x,i)=>`${i+1}. <@${x.user_id}> — **${Number(x.total).toLocaleString()}** coins`).join('\n')||'No fishers yet.') ]}); }
   if(name==='fishrod') {
     try {
+      const action=interaction.options.getString('action')||'view';
+      if(action==='upgrade') { const b=await balance(interaction.user.id); const upgraded=await upgradeRod(interaction.user.id,Number(b.wallet)); return interaction.reply({embeds:[yEmbed('✨ Rod evolution complete', '**'+upgraded.name+'** is now yours.\n\nLuck bonus: **+'+upgraded.luck+'%**\nValue bonus: **+'+upgraded.value+'%**',0xf3a6c7)]}); }
       const rod=await getRod(interaction.user.id);
       const next=rod.level<5?rod.tier.level+1:null;
       const nextTier=next?[{level:2,name:'Pearl Rod',cost:2500,luck:5,value:5},{level:3,name:'Starlace Rod',cost:10000,luck:10,value:12},{level:4,name:'Celestial Ribbon',cost:35000,luck:18,value:22},{level:5,name:'Tsukuyomi Thread',cost:100000,luck:30,value:40}].find(x=>x.level===next):null;
