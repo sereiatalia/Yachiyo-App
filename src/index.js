@@ -3,7 +3,8 @@ import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { handleCommand } from './commands.js';
 import { ensureGuild, getFishChannel } from './services/guildService.js';
 import { sendAuditLog } from './services/auditService.js';
-import { fishInventory, fishAlmanac } from './services/economyService.js';
+import { fishInventory, fishAlmanac, fishCollection } from './services/economyService.js';
+import { buildAlmanacView } from './ui/almanac.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { fishAgain } from './handlers/fishing.js';
 import { buyItem, getRod, upgradeRod } from './services/fishingProgression.js';
@@ -136,6 +137,13 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply({content:'Yachiyo says: '+error.message,ephemeral:true});
     }
   }
+  if (interaction.isButton() && /^(fish_almanac_prev|fish_almanac_next):/.test(interaction.customId)) {
+    const [action, rawPage] = interaction.customId.split(':');
+    const rows = await fishCollection(interaction.user.id);
+    const page = Number(rawPage) + (action.endsWith('next') ? 1 : -1);
+    const view = buildAlmanacView(rows, page, interaction.user.username);
+    return interaction.update({ embeds: [view.embed], components: [view.controls] });
+  }
   if (interaction.isButton()) {
     if (interaction.customId === 'fish_again') { const fishChannel=await getFishChannel(interaction.guildId); if(fishChannel && interaction.channelId!==fishChannel) return interaction.reply({content:'🎣 Fishing is only available in <#'+fishChannel+'>.',ephemeral:true}); return fishAgain(interaction); }
     if (interaction.customId === 'fish_inventory') {
@@ -143,8 +151,9 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply({ephemeral:true,embeds:[new EmbedBuilder().setColor(0x4db8e8).setTitle('🎒 '+interaction.user.username+'’s Aquarium').setDescription(rows.length?rows.map(x=>'**'+x.fish_name+'** • ×'+x.quantity).join('\n'):'Your aquarium is empty.')]});
     }
     if (interaction.customId === 'fish_almanac') {
-      const rows=await fishAlmanac(interaction.user.id);
-      return interaction.reply({ephemeral:true,embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('📖 CELESTIAL FISH ALMANAC').setDescription(rows.length?rows.map(x=>'**'+x.rarity+'** — '+x.discovered+' discovered • '+x.caught+' caught').join('\n'):'No discoveries yet.')]});
+      const rows = await fishCollection(interaction.user.id);
+      const view = buildAlmanacView(rows, 0, interaction.user.username);
+      return interaction.reply({ephemeral:true, embeds:[view.embed], components:[view.controls]});
     }
   }
   if (interaction.isChatInputCommand()) {
