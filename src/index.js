@@ -6,7 +6,7 @@ import { sendAuditLog } from './services/auditService.js';
 import { fishInventory, fishAlmanac } from './services/economyService.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { fishAgain } from './handlers/fishing.js';
-import { createConfession, getConfessionChannel } from './services/confessionService.js';
+import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -41,18 +41,15 @@ client.on('interactionCreate', async interaction => {
       const channelId=await getConfessionChannel(interaction.guildId);
       if(!channelId) return interaction.reply({content:'💌 Confessions are not set up yet. Ask an administrator to run /confession-setup.',ephemeral:true});
       const row=await createConfession({guildId:interaction.guildId,authorId:interaction.user.id,content});
-      const confessionEmbed=new EmbedBuilder()
-        .setColor(0xf3a6c7)
-        .setTitle('💌 Confession (#'+row.id+')')
-        .setDescription('> '+content.replace(/\n/g,'\n> ')+'\n\nHey anon! Please use this space wisely.')
-        ;
+      const confessionEmbed=new EmbedBuilder().setColor(0xf3a6c7).setTitle('💌 Confession (#'+row.id+')').setDescription('> '+content.replace(/\n/g,'\n> ')+'\n\nHey anon! Please use this space wisely.');
       const buttons=new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('confession_submit_again').setLabel('Submit a confession (ง •̀_•́)ง').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('confession_reply').setLabel('Reply ◎☆').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId('confession_reply:'+row.id).setLabel('Reply ◎☆').setStyle(ButtonStyle.Danger)
       );
       const channel=await client.channels.fetch(channelId).catch(()=>null);
       if(!channel?.isTextBased()) return interaction.reply({content:'The configured confession channel is unavailable.',ephemeral:true});
-      await channel.send({embeds:[confessionEmbed],components:[buttons]});
+      const message=await channel.send({embeds:[confessionEmbed],components:[buttons]});
+      await attachConfessionMessage(row.id,channelId,message.id);
       await sendAuditLog(client,interaction.guild,{eventType:'confession.create',actorId:interaction.user.id,targetId:channelId,data:{summary:'A new confession was submitted.',confession:content}});
       return interaction.reply({content:'💌 Your confession was submitted anonymously.',ephemeral:true});
     } catch(error) {
@@ -60,9 +57,52 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply({content:'Yachiyo could not save that confession. Please try again.',ephemeral:true});
     }
   }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('confession_reply:')) {
+    try {
+      const parts=interaction.customId.split(':');
+      const confessionId=parts[1];
+      const mode=parts[2];
+      const content=interaction.fields.getTextInputValue('confession_reply_content').trim();
+      const confession=await getConfession(confessionId,interaction.guildId);
+      if(!confession) return interaction.reply({content:'That confession no longer exists.',ephemeral:true});
+      await createConfessionReply({confessionId,guildId:interaction.guildId,authorId:interaction.user.id,mode,content});
+      const anonymousEmbed=new EmbedBuilder().setColor(0xf3a6c7).setDescription('> '+content.replace(/\n/g,'\n> ')+'\n\n*Anonymous reply from Yachiyo.*');
+      if(mode==='thread') {
+        const channel=await client.channels.fetch(confession.channel_id).catch(()=>null);
+        const message=channel?.messages?.fetch?await channel.messages.fetch(confession.message_id).catch(()=>null):null;
+        if(!message) return interaction.reply({content:'The original confession message could not be found.',ephemeral:true});
+        const thread=message.thread??await message.startThread({name:'Confession #'+confession.id+' replies',autoArchiveDuration:1440});
+        await thread.send({embeds:[anonymousEmbed]});
+      } else {
+        const recipient=await client.users.fetch(confession.author_user_id).catch(()=>null);
+        if(!recipient) return interaction.reply({content:'The confession sender could not be reached.',ephemeral:true});
+        await recipient.send({embeds:[anonymousEmbed]}).catch(()=>null);
+      }
+      await sendAuditLog(client,interaction.guild,{eventType:'confession.reply',actorId:interaction.user.id,targetId:confession.author_user_id,data:{summary:'An anonymous '+mode+' reply was sent for confession #'+confession.id+'.',confession:content}});
+      return interaction.reply({content:'✅ Your anonymous reply was sent.',ephemeral:true});
+    } catch(error) {
+      console.error('[CONFESSION_REPLY]',error);
+      return interaction.reply({content:'Yachiyo could not send that reply.',ephemeral:true});
+    }
+  }
   if (interaction.isButton() && interaction.customId === 'confession_submit_again') {
     const modal=new ModalBuilder().setCustomId('confession_submit').setTitle('☾ Send a private confession');
     const input=new TextInputBuilder().setCustomId('confession_content').setLabel('What would you like to confess?').setStyle(TextInputStyle.Paragraph).setPlaceholder('Write your confession here...').setRequired(true).setMaxLength(1000);
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return interaction.showModal(modal);
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('confession_reply:')) {
+    const confessionId=interaction.customId.split(':')[1];
+    const options=new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('confession_reply_option:'+confessionId+':thread').setLabel('Reply Thread').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('confession_reply_option:'+confessionId+':private').setLabel('Reply Privately').setStyle(ButtonStyle.Secondary)
+    );
+    return interaction.reply({content:'Choose how you want to reply anonymously:',components:[options],ephemeral:true});
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('confession_reply_option:')) {
+    const parts=interaction.customId.split(':');
+    const modal=new ModalBuilder().setCustomId('confession_reply:'+parts[1]+':'+parts[2]).setTitle(parts[2]==='thread'?'Reply in confession thread':'Reply privately');
+    const input=new TextInputBuilder().setCustomId('confession_reply_content').setLabel('Anonymous reply').setStyle(TextInputStyle.Paragraph).setPlaceholder('Write your reply...').setRequired(true).setMaxLength(1000);
     modal.addComponents(new ActionRowBuilder().addComponents(input));
     return interaction.showModal(modal);
   }
