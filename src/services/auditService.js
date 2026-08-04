@@ -14,7 +14,9 @@ function formatEvent(payload) {
     'role.create': { title: '🟢 Role created', color: 0x2ecc71 },
     'role.delete': { title: '🔴 Role deleted', color: 0xe74c3c },
     'channel.create': { title: '📁 Channel created', color: 0x3498db },
-    'channel.delete': { title: '🗑️ Channel deleted', color: 0xe74c3c }
+    'channel.delete': { title: '🗑️ Channel deleted', color: 0xe74c3c },
+    'confession.create': { title: '💌 Confession submitted', color: 0xe74c3c },
+    'moderation.action': { title: '🛡️ Moderation action', color: 0xffc857 }
   };
   const definition = definitions[payload.eventType] ?? { title: '🛡️ ' + payload.eventType, color: 0x8e7dff };
   const embed = new EmbedBuilder().setTitle(definition.title).setColor(definition.color).setTimestamp();
@@ -23,6 +25,8 @@ function formatEvent(payload) {
   if (data.authorId) embed.addFields({ name: 'Message author', value: '<@' + data.authorId + '>', inline: false });
   if (data.createdTimestamp) embed.addFields({ name: 'Message created', value: '<t:' + Math.floor(data.createdTimestamp / 1000) + ':R>', inline: false });
   if (data.summary) embed.setDescription(data.summary);
+  if (data.reason) embed.addFields({ name: 'Reason', value: clip(data.reason), inline: false });
+  if (data.confession) embed.addFields({ name: 'Confession', value: clip(data.confession), inline: false });
   if (data.content !== undefined) embed.addFields({ name: 'Message', value: clip(data.content) || '*(empty message)*', inline: false });
   if (data.before !== undefined || data.after !== undefined) embed.addFields({ name: 'Before', value: clip(data.before) || '*(empty message)*', inline: true }, { name: 'After', value: clip(data.after) || '*(empty message)*', inline: true });
   if (data.attachments) embed.addFields({ name: 'Attachments', value: String(data.attachments), inline: true });
