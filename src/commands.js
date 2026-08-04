@@ -1,6 +1,6 @@
 import { buildAlmanacView } from './ui/almanac.js';
 import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
-import { balance, claim, castFish, addMoney, transfer, bankMove, leaderboard, rollFish, saveFish, fishInventory, fishAlmanac, cooldownRemaining } from './services/economyService.js';
+import { balance, claim, castFish, addMoney, transfer, bankMove, leaderboard, rollFish, saveFish, fishInventory, fishAlmanac, fishCollection, cooldownRemaining } from './services/economyService.js';
 import { FISH_RARITIES } from './config/fishRarities.js';
 import { createFishCard } from './ui/fishCard.js';
 import { runPullSequence } from './services/fishingPresentation.js';
