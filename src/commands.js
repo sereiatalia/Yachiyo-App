@@ -6,7 +6,7 @@ import { runPullSequence } from './services/fishingPresentation.js';
 import { setLogChannel, setFishChannel, getFishChannel, ensureGuild } from './services/guildService.js';
 import { createCase, warn, recentCases } from './services/moderationService.js';
 import { sendAuditLog } from './services/auditService.js';
-import { recentConfessions, setConfessionChannel } from './services/confessionService.js';
+import { setConfessionChannel } from './services/confessionService.js';
 const YACHIYO_PURPLE = 0x8e7dff;
 const YACHIYO_BLUE = 0x4db8e8;
 const yEmbed = (title, description, color = YACHIYO_PURPLE) => new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setFooter({ text: 'Yachiyo • Cosmic server manager' });
@@ -20,7 +20,6 @@ export const commands = [
   new SlashCommandBuilder().setName('economy-add').setDescription('Add global coins to a user.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addUserOption(o=>o.setName('user').setDescription('Target').setRequired(true)).addIntegerOption(o=>o.setName('amount').setDescription('Amount').setRequired(true)),
   new SlashCommandBuilder().setName('logs').setDescription('Set the audit-log channel.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addChannelOption(o=>o.setName('channel').setDescription('Text channel').setRequired(true))
   ,new SlashCommandBuilder().setName('confession').setDescription('Submit an anonymous confession.').setDMPermission(false)
-  ,new SlashCommandBuilder().setName('confession-log').setDescription('View confession authors and contents.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
   ,new SlashCommandBuilder().setName('confession-setup').setDescription('Set the channel where confessions are published.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Confession channel').setRequired(true))
   ,new SlashCommandBuilder().setName('fish-setup').setDescription('Set the only channel where fishing is allowed.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Fishing channel').setRequired(true))
   ,new SlashCommandBuilder().setName('warn').setDescription('Warn a member.').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Reason').setRequired(false))
@@ -55,7 +54,7 @@ export const commands = [
 export async function handleCommand(interaction) {
   await ensureGuild(interaction.guildId);
   const name=interaction.commandName;
-  const adminOnly=['economy-add','logs','confession-log','confession-setup','fish-setup','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout'];
+  const adminOnly=['economy-add','logs','confession-setup','fish-setup','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout'];
   if(adminOnly.includes(name) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return interaction.reply({content:'🛡️ Only server administrators can use this command.',ephemeral:true});
   if(name==='ping') return interaction.reply({embeds:[yEmbed('☾ Yachiyo is watching over this server.','✦ The moonlit command center is online and watching this server.',YACHIYO_BLUE)]});
   if(name==='help') return interaction.reply({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('☾ YACHIYO COMMAND CENTER').setDescription('*The moonlit server manager is ready to assist.*').addFields({name:'✦ Economy',value:'`/balance`  `/daily`  `/work`  `/fish`\n`/pay`  `/deposit`  `/withdraw`  `/leaderboard`'},{name:'✦ Fishing',value:'`/fishinventory`  `/fishalmanac`\nUse the buttons on a catch card to explore your collection.'},{name:'✦ Moderation',value:'`/warn`  `/warnings`  `/kick`  `/ban`  `/timeout`\n`/untimeout`  `/unban`  `/purge`  `/lock`  `/unlock`  `/logs`'}).setFooter({text:'Yachiyo • Cosmic server manager'})]});
@@ -77,17 +76,7 @@ export async function handleCommand(interaction) {
     await setConfessionChannel(interaction.guildId,channel.id);
     return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('💌 Confession chamber prepared').setDescription('Confessions will now be published in <#'+channel.id+'>.\n\nOnly administrators can view the confession log and sender names.')]});
   }
-  if(name==='confession-log') {
-    const rows=await recentConfessions(interaction.guildId,25);
-    const replies=await recentConfessionReplies(interaction.guildId,50);
-    const body=rows.length?(await Promise.all(rows.map(async row=>{
-      const user=await interaction.client.users.fetch(row.author_user_id).catch(()=>null);
-      const related=replies.filter(reply=>Number(reply.confession_id)===Number(row.id));
-      const replyText=related.length?'\n'+related.map(reply=>'↳ **'+reply.mode+' reply** by '+(reply.author_user_id===interaction.client.user.id?'Yachiyo': '<@'+reply.author_user_id+'>')+': '+String(reply.content).slice(0,300)).join('\n'):'';
-      return '**Confession #'+row.id+'**\n**Sender:** '+(user?.tag||'Unknown user')+' (<@'+row.author_user_id+'>)\n**Content:** '+String(row.content).slice(0,700)+replyText;
-    }))).join('\n\n'):'*No confessions have been submitted in this server.*';
-    return interaction.reply({ephemeral:true,embeds:[new EmbedBuilder().setColor(0xe74c3c).setTitle('🛡️ YACHIYO CONFESSION LOG').setDescription(body).setFooter({text:'Administrator view • senders and replies are visible here'})]});
-  }
+
   if(name==='fish') { const fishChannel=await getFishChannel(interaction.guildId); if(fishChannel && interaction.channelId!==fishChannel) return interaction.reply({content:'🎣 Fishing is only available in <#'+fishChannel+'>.',ephemeral:true}); const wait=await cooldownRemaining(interaction.user.id,'fish'); if(wait>0) return interaction.reply({content:`🎣 Please wait **${Math.ceil(wait/1000)} second(s)** before fishing again.`,ephemeral:true}); try { await interaction.deferReply(); const casting=new EmbedBuilder().setColor(0x4db8e8).setTitle('🎣 YACHIYO’S CELESTIAL FISHING').setDescription('╭ 𖦹 ˚｡⋆ Casting your line...\n╰──────────────\n`[████░░░░░░░░░░░░░░░░]`\n\n*The cosmic tide is moving.*'); await interaction.editReply({embeds:[casting]}); await new Promise(r=>setTimeout(r,900)); const bite=new EmbedBuilder().setColor(0x8e7dff).setTitle('🎣 A BITE!').setDescription('╭ 𖦹 ˚｡⋆ Something is pulling the line!\n╰──────────────\n`[████████████░░░░░░░░]`\n\n*Reeling in the unknown...*'); await interaction.editReply({embeds:[bite]}); await new Promise(r=>setTimeout(r,500)); const fish=rollFish(); const rarity=FISH_RARITIES[fish.rarity]; await runPullSequence(interaction,fish.rarity); await castFish(interaction.user.id); await saveFish(interaction.user.id,fish); const card=await createFishCard({fish,rarity,valueBonus:0,luckBonus:0}); const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('fish_again').setLabel('Cast Again').setEmoji('🎣').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('fish_almanac').setLabel('Fish Almanac').setEmoji('📖').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('fish_inventory').setLabel('Inventory').setEmoji('🎒').setStyle(ButtonStyle.Success)); return interaction.editReply({content:`🐟 **${interaction.user.displayName}** caught a ${fish.name}!`,files:[card],components:[row],embeds:[]}); } catch(e) { return interaction.editReply({content:`Yachiyo says: ${e.message}`,embeds:[],components:[]}); } }
   if(name==='fishinventory') { const rows=await fishInventory(interaction.user.id); return interaction.reply({embeds:[new EmbedBuilder().setColor(0x4db8e8).setAuthor({name:'Yachiyo • Celestial Waters',iconURL:interaction.client.user.displayAvatarURL()}).setTitle('🌊 RYETSURI’S AQUARIUM 𓆝').setDescription('────────── 𓆝 ⋆｡°✩ ──────────\\n' + (rows.length?rows.map((x,i)=>'**'+(i+1)+'. '+(FISH_RARITIES[x.rarity]?.label||x.rarity)+'**  •  '+x.fish_name+'  ×'+x.quantity).join('\n'):'*The aquarium is empty. Cast `/fish` to discover the tide.*') + '\\n────────── 𓆝 ⋆｡°✩ ──────────').setFooter({text:'Use the catch-card buttons to explore your collection.'})]}); }
   if(name==='fishalmanac') {
