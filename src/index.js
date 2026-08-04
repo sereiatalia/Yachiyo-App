@@ -6,7 +6,7 @@ import { sendAuditLog } from './services/auditService.js';
 import { fishInventory, fishAlmanac } from './services/economyService.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { fishAgain } from './handlers/fishing.js';
-import { createConfession } from './services/confessionService.js';
+import { createConfession, getConfessionChannel } from './services/confessionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -38,6 +38,8 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isModalSubmit() && interaction.customId === 'confession_submit') {
     try {
       const content=interaction.fields.getTextInputValue('confession_content').trim();
+      const channelId=await getConfessionChannel(interaction.guildId);
+      if(!channelId) return interaction.reply({content:'💌 Confessions are not set up yet. Ask an administrator to run /confession-setup.',ephemeral:true});
       const row=await createConfession({guildId:interaction.guildId,authorId:interaction.user.id,content});
       const confessionEmbed=new EmbedBuilder()
         .setColor(0xf3a6c7)
@@ -48,7 +50,10 @@ client.on('interactionCreate', async interaction => {
         new ButtonBuilder().setCustomId('confession_submit_again').setLabel('Submit a confession (ง •̀_•́)ง').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('confession_reply').setLabel('Reply ◎☆').setStyle(ButtonStyle.Danger)
       );
-      return interaction.reply({embeds:[confessionEmbed],components:[buttons]});
+      const channel=await client.channels.fetch(channelId).catch(()=>null);
+      if(!channel?.isTextBased()) return interaction.reply({content:'The configured confession channel is unavailable.',ephemeral:true});
+      await channel.send({embeds:[confessionEmbed],components:[buttons]});
+      return interaction.reply({content:'💌 Your confession was submitted anonymously.',ephemeral:true});
     } catch(error) {
       console.error('[CONFESSION]',error);
       return interaction.reply({content:'Yachiyo could not save that confession. Please try again.',ephemeral:true});
