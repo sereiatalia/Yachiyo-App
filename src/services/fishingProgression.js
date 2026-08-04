@@ -1,4 +1,4 @@
-import { query } from './database/db.js';
+import { query } from '../database/db.js';
 
 export const ROD_TIERS = [
   { level: 1, name: 'Moonlit Twig', cost: 0, luck: 0, value: 0 },
