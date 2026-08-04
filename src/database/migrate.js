@@ -71,6 +71,13 @@ CREATE TABLE IF NOT EXISTS fish_inventory (
   user_id TEXT NOT NULL, fish_name TEXT NOT NULL, rarity TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, fish_name)
 );
+CREATE TABLE IF NOT EXISTS fish_rods (
+  user_id TEXT PRIMARY KEY, level INTEGER NOT NULL DEFAULT 1, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS fish_items (
+  user_id TEXT NOT NULL, item_id TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0,
+  expires_at TIMESTAMPTZ, PRIMARY KEY (user_id, item_id)
+);
 `;
 
 try { await pool.query(sql); console.log('Yachiyo database migration complete.'); }
