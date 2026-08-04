@@ -12,14 +12,6 @@ CREATE TABLE IF NOT EXISTS guild_settings (
 );
 ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS confession_channel_id TEXT;
 ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS fish_channel_id TEXT;
-ALTER TABLE confessions ADD COLUMN IF NOT EXISTS channel_id TEXT;
-ALTER TABLE confessions ADD COLUMN IF NOT EXISTS message_id TEXT;
-CREATE TABLE IF NOT EXISTS confession_replies (
-  id BIGSERIAL PRIMARY KEY, confession_id BIGINT NOT NULL REFERENCES confessions(id) ON DELETE CASCADE,
-  guild_id TEXT NOT NULL, author_user_id TEXT NOT NULL, mode TEXT NOT NULL, content TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS confession_replies_confession_idx ON confession_replies(confession_id, id DESC);
 CREATE TABLE IF NOT EXISTS economy_users (
   user_id TEXT PRIMARY KEY, wallet BIGINT NOT NULL DEFAULT 0 CHECK (wallet >= 0), bank BIGINT NOT NULL DEFAULT 0 CHECK (bank >= 0),
   bank_capacity BIGINT NOT NULL DEFAULT 10000, last_daily TIMESTAMPTZ, last_work TIMESTAMPTZ, last_fish TIMESTAMPTZ,
@@ -51,6 +43,14 @@ CREATE TABLE IF NOT EXISTS confessions (
   content TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS confessions_guild_idx ON confessions(guild_id, id DESC);
+ALTER TABLE confessions ADD COLUMN IF NOT EXISTS channel_id TEXT;
+ALTER TABLE confessions ADD COLUMN IF NOT EXISTS message_id TEXT;
+CREATE TABLE IF NOT EXISTS confession_replies (
+  id BIGSERIAL PRIMARY KEY, confession_id BIGINT NOT NULL REFERENCES confessions(id) ON DELETE CASCADE,
+  guild_id TEXT NOT NULL, author_user_id TEXT NOT NULL, mode TEXT NOT NULL, content TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS confession_replies_confession_idx ON confession_replies(confession_id, id DESC);
 ALTER TABLE confessions ADD COLUMN IF NOT EXISTS confession_number INTEGER;
 WITH numbered AS (
   SELECT id, ROW_NUMBER() OVER (PARTITION BY guild_id ORDER BY id) AS number
