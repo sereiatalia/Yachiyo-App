@@ -4,8 +4,13 @@ export const ROD_TIERS = [
   { level: 1, name: 'Moonlit Twig', cost: 0, luck: 0, value: 0 },
   { level: 2, name: 'Pearl Rod', cost: 2500, luck: 5, value: 5 },
   { level: 3, name: 'Starlace Rod', cost: 10000, luck: 10, value: 12 },
-  { level: 4, name: 'Celestial Ribbon', cost: 35000, luck: 18, value: 22 },
-  { level: 5, name: 'Tsukuyomi Thread', cost: 100000, luck: 30, value: 40 }
+  { level: 4, name: 'Coralheart Rod', cost: 25000, luck: 15, value: 18 },
+  { level: 5, name: 'Celestial Ribbon', cost: 50000, luck: 22, value: 28 },
+  { level: 6, name: 'Moonwake Rod', cost: 100000, luck: 30, value: 40 },
+  { level: 7, name: 'Aurora Glass Rod', cost: 200000, luck: 40, value: 55 },
+  { level: 8, name: 'Starlight Harpoon', cost: 400000, luck: 52, value: 75 },
+  { level: 9, name: 'Tsukuyomi Thread', cost: 800000, luck: 68, value: 100 },
+  { level: 10, name: 'Yachiyo’s Fateweaver', cost: 1500000, luck: 90, value: 135 }
 ];
 
 async function ensureRod(userId) {
