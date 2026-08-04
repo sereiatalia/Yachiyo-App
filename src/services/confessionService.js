@@ -2,7 +2,15 @@ import { query } from '../database/db.js';
 
 export async function createConfession({ guildId, authorId, content }) {
   const result = await query(
-    'INSERT INTO confessions (guild_id, author_user_id, content) VALUES ($1,$2,$3) RETURNING id, created_at',
+    `WITH next_number AS (
+       INSERT INTO confession_counters (guild_id, next_number)
+       VALUES ($1, 2)
+       ON CONFLICT (guild_id) DO UPDATE SET next_number=confession_counters.next_number+1
+       RETURNING next_number - 1 AS confession_number
+     )
+     INSERT INTO confessions (guild_id, confession_number, author_user_id, content)
+     SELECT $1, confession_number, $2, $3 FROM next_number
+     RETURNING id, confession_number, created_at`,
     [guildId, authorId, content]
   );
   return result.rows[0];
