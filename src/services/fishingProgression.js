@@ -33,7 +33,7 @@ export async function buyItem(userId, itemId, cost) {
 }
 
 export async function drinkItem(userId, itemId) {
-  const result = await query('UPDATE fish_items SET quantity=quantity-1, expires_at=NOW() + INTERVAL '1 minute' WHERE user_id=$1 AND item_id=$2 AND quantity>0', [userId, itemId]);
+  const result = await query("UPDATE fish_items SET quantity=quantity-1, expires_at=NOW() + INTERVAL '1 minute' WHERE user_id=$1 AND item_id=$2 AND quantity>0", [userId, itemId]);
   if (!result.rowCount) throw new Error('You do not have that drink in your cosmic pouch.');
   return getActiveEffects(userId);
 }
