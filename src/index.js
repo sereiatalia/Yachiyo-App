@@ -4,7 +4,7 @@ import { handleCommand } from './commands.js';
 import { ensureGuild } from './services/guildService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { fishInventory, fishAlmanac } from './services/economyService.js';
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { fishAgain } from './handlers/fishing.js';
 import { createConfession } from './services/confessionService.js';
 
@@ -39,8 +39,15 @@ client.on('interactionCreate', async interaction => {
     try {
       const content=interaction.fields.getTextInputValue('confession_content').trim();
       const row=await createConfession({guildId:interaction.guildId,authorId:interaction.user.id,content});
-      const confessionEmbed=new EmbedBuilder().setColor(0xf3a6c7).setTitle('💌 Confession (#'+row.id+')').setDescription('> '+content.replace(/\n/g,'\n> ')+'\n\nHey anon! Please use this space wisely.').setFooter({text:'Your identity is visible only to server administrators.'});
-      const buttons=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('confession_submit_again').setLabel('Submit a confession (ง •̀_•́)ง').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('confession_reply').setLabel('Reply ◎☆').setStyle(ButtonStyle.Danger));
+      const confessionEmbed=new EmbedBuilder()
+        .setColor(0xf3a6c7)
+        .setTitle('💌 Confession (#'+row.id+')')
+        .setDescription('> '+content.replace(/\n/g,'\n> ')+'\n\nHey anon! Please use this space wisely.')
+        .setFooter({text:'Your identity is visible only to server administrators.'});
+      const buttons=new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('confession_submit_again').setLabel('Submit a confession (ง •̀_•́)ง').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('confession_reply').setLabel('Reply ◎☆').setStyle(ButtonStyle.Danger)
+      );
       return interaction.reply({embeds:[confessionEmbed],components:[buttons]});
     } catch(error) {
       console.error('[CONFESSION]',error);
@@ -48,12 +55,29 @@ client.on('interactionCreate', async interaction => {
     }
   }
   if (interaction.isButton() && interaction.customId === 'confession_submit_again') {
-    const modal=new (await import('discord.js')).ModalBuilder().setCustomId('confession_submit').setTitle('☾ Send a private confession');
-    const input=new (await import('discord.js')).TextInputBuilder().setCustomId('confession_content').setLabel('What would you like to confess?').setStyle((await import('discord.js')).TextInputStyle.Paragraph).setPlaceholder('Write your confession here...').setRequired(true).setMaxLength(1000);
+    const modal=new ModalBuilder().setCustomId('confession_submit').setTitle('☾ Send a private confession');
+    const input=new TextInputBuilder().setCustomId('confession_content').setLabel('What would you like to confess?').setStyle(TextInputStyle.Paragraph).setPlaceholder('Write your confession here...').setRequired(true).setMaxLength(1000);
     modal.addComponents(new ActionRowBuilder().addComponents(input));
     return interaction.showModal(modal);
   }
-  if (interaction.isButton()) { if (interaction.isButton()) { if(interaction.customId==='fish_again') return fishAgain(interaction); if(interaction.customId==='fish_inventory') { const rows=await fishInventory(interaction.user.id); return interaction.reply({ephemeral:true,embeds:[new EmbedBuilder().setColor(0x4db8e8).setTitle('🎒 RYETSURI’S AQUARIUM').setDescription(rows.length?rows.map(x=>`**${x.fish_name}** • ×${x.quantity}`).join('\n'):'Your aquarium is empty.') ]}); } if(interaction.customId==='fish_almanac') { const rows=await fishAlmanac(interaction.user.id); return interaction.reply({ephemeral:true,embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('📖 CELESTIAL FISH ALMANAC').setDescription(rows.length?rows.map(x=>`**${x.rarity}** — ${x.discovered} discovered • ${x.caught} caught`).join('\n'):'No discoveries yet.') ]}); } } if (interaction.isChatInputCommand()) handleCommand(interaction).catch(async e => { console.error(e); if (!interaction.replied) await interaction.reply({content:'Yachiyo encountered an error.',ephemeral:true}); }); });
+  if (interaction.isButton()) {
+    if (interaction.customId === 'fish_again') return fishAgain(interaction);
+    if (interaction.customId === 'fish_inventory') {
+      const rows=await fishInventory(interaction.user.id);
+      return interaction.reply({ephemeral:true,embeds:[new EmbedBuilder().setColor(0x4db8e8).setTitle('🎒 RYETSURI’S AQUARIUM').setDescription(rows.length?rows.map(x=>'**'+x.fish_name+'** • ×'+x.quantity).join('\n'):'Your aquarium is empty.')]});
+    }
+    if (interaction.customId === 'fish_almanac') {
+      const rows=await fishAlmanac(interaction.user.id);
+      return interaction.reply({ephemeral:true,embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('📖 CELESTIAL FISH ALMANAC').setDescription(rows.length?rows.map(x=>'**'+x.rarity+'** — '+x.discovered+' discovered • '+x.caught+' caught').join('\n'):'No discoveries yet.')]});
+    }
+  }
+  if (interaction.isChatInputCommand()) {
+    handleCommand(interaction).catch(async error => {
+      console.error(error);
+      if (!interaction.replied && !interaction.deferred) await interaction.reply({content:'Yachiyo encountered an error.',ephemeral:true});
+    });
+  }
+});
 client.on('messageCreate', async message => { if (message.author.bot || !message.guild || !message.content.startsWith(process.env.PREFIX || '.')) return; const [name]=message.content.slice((process.env.PREFIX||'.').length).trim().split(/\s+/); if(name==='ping') return message.reply('Yachiyo is watching over this server.'); if(name==='balance') { const { balance }=await import('./services/economyService.js'); const b=await balance(message.author.id); return message.reply(`☾ You have **${b.wallet.toLocaleString()}** global coins.`); } });
 client.on('error', error => console.error('[DISCORD]', error));
 
