@@ -7,7 +7,7 @@ import { setLogChannel, setFishChannel, getFishChannel, ensureGuild } from './se
 import { createCase, warn, recentCases } from './services/moderationService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { setConfessionChannel } from './services/confessionService.js';
-import { getRod, upgradeRod, getActiveEffects, buyItem, drinkItem } from './services/fishingProgression.js';
+import { ROD_TIERS, getRod, upgradeRod, getActiveEffects, buyItem, drinkItem } from './services/fishingProgression.js';
 const YACHIYO_PURPLE = 0x8e7dff;
 const YACHIYO_BLUE = 0x4db8e8;
 const yEmbed = (title, description, color = YACHIYO_PURPLE) => new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setFooter({ text: 'Yachiyo • Cosmic server manager' });
@@ -104,8 +104,7 @@ export async function handleCommand(interaction) {
       const action=interaction.options.getString('action')||'view';
       if(action==='upgrade') { const b=await balance(interaction.user.id); const upgraded=await upgradeRod(interaction.user.id,Number(b.wallet)); return interaction.reply({embeds:[yEmbed('✨ Rod evolution complete', '**'+upgraded.name+'** is now yours.\n\nLuck bonus: **+'+upgraded.luck+'%**\nValue bonus: **+'+upgraded.value+'%**',0xf3a6c7)]}); }
       const rod=await getRod(interaction.user.id);
-      const next=rod.level<5?rod.tier.level+1:null;
-      const nextTier=next?[{level:2,name:'Pearl Rod',cost:2500,luck:5,value:5},{level:3,name:'Starlace Rod',cost:10000,luck:10,value:12},{level:4,name:'Celestial Ribbon',cost:35000,luck:18,value:22},{level:5,name:'Tsukuyomi Thread',cost:100000,luck:30,value:40}].find(x=>x.level===next):null;
+      const nextTier=ROD_TIERS.find(tier=>tier.level===rod.level+1) ?? null;
       return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('🎣 '+rod.tier.name).setDescription('Your fishing rod grows with every cosmic catch.').addFields({name:'✦ Level',value:'**'+rod.level+' / 5**',inline:true},{name:'🍀 Luck',value:'+'+rod.tier.luck+'%',inline:true},{name:'💎 Value',value:'+'+rod.tier.value+'%',inline:true},{name:'Next evolution',value:nextTier?'**'+nextTier.name+'** • '+nextTier.cost.toLocaleString()+' coins':'**Maximum tier reached**'}).setFooter({text:'Use /fishrod again after earning enough coins to upgrade.'})]});
     } catch(e) { return interaction.reply({content:e.message,ephemeral:true}); }
   }
