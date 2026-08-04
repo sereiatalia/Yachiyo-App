@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { handleCommand } from './commands.js';
-import { ensureGuild } from './services/guildService.js';
+import { ensureGuild, getFishChannel } from './services/guildService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { fishInventory, fishAlmanac } from './services/economyService.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
@@ -66,7 +66,7 @@ client.on('interactionCreate', async interaction => {
     return interaction.showModal(modal);
   }
   if (interaction.isButton()) {
-    if (interaction.customId === 'fish_again') return fishAgain(interaction);
+    if (interaction.customId === 'fish_again') { const fishChannel=await getFishChannel(interaction.guildId); if(fishChannel && interaction.channelId!==fishChannel) return interaction.reply({content:'🎣 Fishing is only available in <#'+fishChannel+'>.',ephemeral:true}); return fishAgain(interaction); }
     if (interaction.customId === 'fish_inventory') {
       const rows=await fishInventory(interaction.user.id);
       return interaction.reply({ephemeral:true,embeds:[new EmbedBuilder().setColor(0x4db8e8).setTitle('🎒 RYETSURI’S AQUARIUM').setDescription(rows.length?rows.map(x=>'**'+x.fish_name+'** • ×'+x.quantity).join('\n'):'Your aquarium is empty.')]});
