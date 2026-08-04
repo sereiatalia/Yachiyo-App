@@ -60,7 +60,20 @@ export async function handleCommand(interaction) {
   if(adminOnly.includes(name) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return interaction.reply({content:'🛡️ Only server administrators can use this command.',ephemeral:true});
   if(name==='ping') return interaction.reply({embeds:[yEmbed('☾ Yachiyo is watching over this server.','✦ The moonlit command center is online and watching this server.',YACHIYO_BLUE)]});
   if(name==='help') return interaction.reply({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('☾ YACHIYO COMMAND CENTER').setDescription('*The moonlit server manager is ready to assist.*').addFields({name:'✦ Economy',value:'`/balance`  `/daily`  `/work`  `/fish`\n`/pay`  `/deposit`  `/withdraw`  `/leaderboard`'},{name:'✦ Fishing',value:'`/fishinventory`  `/fishalmanac`\nUse the buttons on a catch card to explore your collection.'},{name:'✦ Moderation',value:'`/warn`  `/warnings`  `/kick`  `/ban`  `/timeout`\n`/untimeout`  `/unban`  `/purge`  `/lock`  `/unlock`  `/logs`'}).setFooter({text:'Yachiyo • Cosmic server manager'})]});
-  if(name==='balance') { const user=interaction.options.getUser('user')??interaction.user; const b=await balance(user.id); return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf0b6d8).setAuthor({name:'Yachiyo • Cosmic Treasury',iconURL:interaction.client.user.displayAvatarURL()}).setTitle('🌸 NYANKO_' + user.username.toUpperCase() + "'S BALANCE 🌸").setDescription('╭─────────────── ✦ ───────────────╮\\nHere is the current financial status of <@' + user.id + '>.\\n\\n💵 **Cash:** **' + b.wallet.toLocaleString() + '** coins\\n🏦 **Bank:** **' + b.bank.toLocaleString() + '** coins\\n✨ **Total:** **' + (b.wallet+b.bank).toLocaleString() + '** coins\\n╰─────────────── ✦ ───────────────╯').setFooter({text:'Global economy • shared across every server'})]}); }
+  if(name==='balance') {
+    const user=interaction.options.getUser('user')??interaction.user;
+    const b=await balance(user.id);
+    const total=b.wallet+b.bank;
+    return interaction.reply({embeds:[new EmbedBuilder()
+      .setColor(0xf0b6d8)
+      .setTitle('💰 '+user.username+' • Balance')
+      .setDescription(
+        '**Cash:** '+b.wallet.toLocaleString()+' coins\\n'+
+        '**Bank:** '+b.bank.toLocaleString()+' coins\\n'+
+        '**Total:** '+total.toLocaleString()+' coins'
+      )
+      .setFooter({text:'Global economy • shared across every server'})]});
+  }
   if(['daily','work'].includes(name)) { try { const r=await claim(interaction.user.id,name); return interaction.reply({embeds:[yEmbed(name==='daily'?'🌙 Daily Cosmic Allowance':'🛠️ Work Complete',`✦ You received **${r.amount.toLocaleString()}** global coins.\n\nYour fortune has been recorded across every server.`)]}); } catch(e) { return interaction.reply({content:`Yachiyo says: ${e.message}`,ephemeral:true}); } }
   if(name==='confession') {
     const modal=new ModalBuilder().setCustomId('confession_submit').setTitle('☾ Send a private confession');
