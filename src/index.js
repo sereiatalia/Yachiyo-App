@@ -6,7 +6,7 @@ import { sendAuditLog } from './services/auditService.js';
 import { fishInventory, fishAlmanac } from './services/economyService.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { fishAgain } from './handlers/fishing.js';
-import { buyItem } from './services/fishingProgression.js';
+import { buyItem, getRod, upgradeRod } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
@@ -115,6 +115,16 @@ client.on('interactionCreate', async interaction => {
     const input=new TextInputBuilder().setCustomId('confession_reply_content').setLabel('Anonymous reply').setStyle(TextInputStyle.Paragraph).setPlaceholder('Write your reply...').setRequired(true).setMaxLength(1000);
     modal.addComponents(new ActionRowBuilder().addComponents(input));
     return interaction.showModal(modal);
+  }
+  if (interaction.isButton() && interaction.customId === 'rod_upgrade') {
+    try {
+      const rod=await getRod(interaction.user.id);
+      const b=await (await import('./services/economyService.js')).balance(interaction.user.id);
+      const upgraded=await upgradeRod(interaction.user.id,Number(b.wallet));
+      return interaction.update({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('✨ Rod evolved').setDescription('Your **'+rod.tier.name+'** has become **'+upgraded.name+'**.\\n\\n🍀 Luck: **+'+upgraded.luck+'%**\\n💎 Value: **+'+upgraded.value+'%**\\n\\nThe cosmic tide recognizes your progress.')],components:[]});
+    } catch(error) {
+      return interaction.reply({content:'Yachiyo says: '+error.message,ephemeral:true});
+    }
   }
   if (interaction.isButton() && interaction.customId.startsWith('fish_buy:')) {
     const itemId=interaction.customId.split(':')[1];
