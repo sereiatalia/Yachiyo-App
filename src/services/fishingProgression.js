@@ -33,16 +33,31 @@ export async function upgradeRod(userId, wallet) {
 }
 
 export async function buyItem(userId, itemId, cost) {
+  const charged = await query('UPDATE economy_users SET wallet=wallet-$1, updated_at=NOW() WHERE user_id=$2 AND wallet >= $1', [cost, userId]);
+  if (!charged.rowCount) throw new Error('You do not have enough global coins for that drink.');
   await query('INSERT INTO fish_items (user_id,item_id,quantity) VALUES ($1,$2,1) ON CONFLICT (user_id,item_id) DO UPDATE SET quantity=fish_items.quantity+1', [userId, itemId]);
+  await query('INSERT INTO economy_transactions (user_id,type,amount,metadata) VALUES ($1,$2,$3,$4)', [userId, 'fish_item_purchase', -cost, JSON.stringify({ itemId })]);
   return { itemId, cost };
 }
 
 export async function drinkItem(userId, itemId) {
-  const result = await query("UPDATE fish_items SET quantity=quantity-1, expires_at=NOW() + INTERVAL '1 minute' WHERE user_id=$1 AND item_id=$2 AND quantity>0", [userId, itemId]);
+  const result = await query("UPDATE fish_items SET quantity=quantity-1, expires_at=NOW() + INTERVAL '5 minutes' WHERE user_id=$1 AND item_id=$2 AND quantity>0", [userId, itemId]);
   if (!result.rowCount) throw new Error('You do not have that drink in your cosmic pouch.');
   return getActiveEffects(userId);
 }
 
 export async function getActiveEffects(userId) {
   return (await query("SELECT item_id, quantity, EXTRACT(EPOCH FROM (expires_at-NOW()))::int AS seconds_left FROM fish_items WHERE user_id=$1 AND quantity>0 AND expires_at>NOW() ORDER BY expires_at", [userId])).rows;
+}
+
+export async function getFishingBonuses(userId) {
+  const rod = await getRod(userId);
+  const effects = await getActiveEffects(userId);
+  const ids = effects.map(effect => effect.item_id);
+  return {
+    rod,
+    effects,
+    luckBonus: rod.tier.luck + (ids.includes('luck_drink') ? 15 : 0),
+    valueBonus: rod.tier.value + (ids.includes('value_drink') ? 25 : 0)
+  };
 }
