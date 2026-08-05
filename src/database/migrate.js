@@ -101,6 +101,21 @@ CREATE TABLE IF NOT EXISTS fish_favorites (
   PRIMARY KEY (user_id, fish_name)
 );
 CREATE INDEX IF NOT EXISTS fish_favorites_user_idx ON fish_favorites(user_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS curse_settings (
+  guild_id TEXT PRIMARY KEY,
+  enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  words TEXT[] NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS curse_warnings (
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  word TEXT NOT NULL,
+  warning_count INTEGER NOT NULL DEFAULT 0,
+  last_warned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (guild_id, user_id, word)
+);
+CREATE INDEX IF NOT EXISTS curse_warnings_guild_idx ON curse_warnings(guild_id, last_warned_at DESC);
 
 `;
 
