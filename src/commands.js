@@ -152,7 +152,7 @@ if(name==='fishalmanac') {
           .setTitle((rod.tier.icon || '🎣') + ' ' + rod.tier.name)
           .setDescription(rod.tier.lore || 'Your fishing rod grows with every cosmic catch.')
           .addFields(
-            {name:'✦ Level', value:'**' + rod.level + ' / 10**', inline:true},
+            {name:'✦ Level', value:'**' + rod.level + ' / ' + ROD_TIERS.length + '**', inline:true},
             {name:'🍀 Luck', value:'+' + rod.tier.luck + '%', inline:true},
             {name:'💎 Value', value:'+' + rod.tier.value + '%', inline:true},
             {name:'Next evolution', value:nextTier ? (nextTier.icon || '✨') + ' **' + nextTier.name + '** • ' + nextTier.cost.toLocaleString() + ' coins' : '**Maximum tier reached**'}
