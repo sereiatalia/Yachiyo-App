@@ -80,6 +80,16 @@ CREATE TABLE IF NOT EXISTS fish_market_supply (
   base_value INTEGER NOT NULL DEFAULT 20, demand_multiplier NUMERIC(5,2) NOT NULL DEFAULT 1.00,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS fish_market_history (
+  id BIGSERIAL PRIMARY KEY,
+  fish_name TEXT NOT NULL,
+  rarity TEXT NOT NULL,
+  price NUMERIC(12,2) NOT NULL,
+  demand_multiplier NUMERIC(5,2) NOT NULL,
+  caught_count INTEGER NOT NULL DEFAULT 0,
+  recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS fish_market_history_fish_idx ON fish_market_history(fish_name, recorded_at DESC);
 CREATE TABLE IF NOT EXISTS fish_items (
   user_id TEXT NOT NULL, item_id TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0,
   expires_at TIMESTAMPTZ, PRIMARY KEY (user_id, item_id)
