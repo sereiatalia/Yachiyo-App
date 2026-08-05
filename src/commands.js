@@ -8,6 +8,7 @@ import { setLogChannel, setFishChannel, getFishChannel, ensureGuild } from './se
 import { createCase, warn, recentCases } from './services/moderationService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { setConfessionChannel } from './services/confessionService.js';
+import { getMarketSnapshot, getMarketFish, formatMarketLines } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
 const YACHIYO_PURPLE = 0x8e7dff;
 const YACHIYO_BLUE = 0x4db8e8;
@@ -163,7 +164,19 @@ if(name==='fishalmanac') {
     );
     return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('🧪 Yachiyo’s Tide Boutique').setDescription('Temporary drinks turn an ordinary cast into a little bit of magic.\n\n🍀 **Luck Drink** — improves rare-pull odds for 5 minutes.\n💎 **Value Drink** — marks your next fishing session with a value boost.\n\n*Your global wallet pays for every purchase.*')],components:[shopRow]});
   }
-  if(['fishmarket','fishaquarium','fishbattle','fishbattlepvp'].includes(name)) return interaction.reply({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('☾ '+name.toUpperCase()).setDescription('This enhanced interface is now registered. Its interactive shop, aquarium, battle, and market panels are being connected to your global fishing data.') ]});
+  if(name==='fishmarket') {
+    const rows = await getMarketSnapshot();
+    const hot = rows[0] ? '\n\n🔥 **Hot tide:** '+rows[0].fish_name+' · '+rows[0].price.toLocaleString()+' coins' : '';
+    return interaction.reply({embeds:[yEmbed('🌊 Celestial Fish Exchange', 'The global tide market shifts with catches from every server.\\n\\n'+formatMarketLines(rows)+hot)]});
+  }
+  if(name==='fishaquarium') {
+    const rows = await fishCollection(interaction.user.id);
+    const owned = rows.filter(row => Number(row.quantity)>0);
+    const total = rows.reduce((sum,row)=>sum+Number(row.quantity||0),0);
+    const lines = owned.length ? owned.slice(0,20).map(row=>'🐟 **'+row.name+'** · ×'+row.quantity+' · '+row.rarity).join('\\n') : '*Your aquarium is waiting for its first catch.*';
+    return interaction.reply({embeds:[yEmbed('🫧 '+interaction.user.username+'’s Aquarium', '**'+owned.length+'** species discovered · **'+total+'** total catches\\n\\n'+lines+'\\n\\n*Every discovery is preserved in Yachiyo’s celestial archive.*')]});
+  }
+  if(['fishbattle','fishbattlepvp'].includes(name)) return interaction.reply({embeds:[yEmbed('⚔️ Cosmic Tide Arena', 'Battle interfaces are being prepared. Your catches, rods, and global profile are already connected.') ]});
   if(name==='economy-add') { const b=await addMoney(interaction.options.getUser('user').id,interaction.options.getInteger('amount'),'admin'); return interaction.reply(`Added coins. New wallet: **${b.wallet.toLocaleString()}**.`); }
   if(name==='logs') { const channel=interaction.options.getChannel('channel'); await setLogChannel(interaction.guildId,channel.id); return interaction.reply({embeds:[yEmbed('🛡️ Audit Watch Activated',`Yachiyo will now send structured audit records to <#${channel.id}>.`)]}); }
   if(['warn','kick','ban','timeout'].includes(name)) { const user=interaction.options.getUser('user'); const reason=interaction.options.getString('reason')||'No reason provided'; const member=await interaction.guild.members.fetch(user.id).catch(()=>null); if(!member) return interaction.reply({content:'That member is not in this server.',ephemeral:true}); try { let duration=null; if(name==='warn') await warn(interaction.guildId,user.id,interaction.user.id,reason); if(name==='kick') { await member.kick(reason); await createCase({guildId:interaction.guildId,targetId:user.id,moderatorId:interaction.user.id,action:'kick',reason}); } if(name==='ban') { await member.ban({reason}); await createCase({guildId:interaction.guildId,targetId:user.id,moderatorId:interaction.user.id,action:'ban',reason}); } if(name==='timeout') { const minutes=interaction.options.getInteger('minutes'); if(minutes<1||minutes>40320) return interaction.reply({content:'Minutes must be between 1 and 40,320.',ephemeral:true}); duration=minutes*60; await member.timeout(minutes*60000,reason); await createCase({guildId:interaction.guildId,targetId:user.id,moderatorId:interaction.user.id,action:'timeout',reason,durationSeconds:duration}); } await sendAuditLog(interaction.client,interaction.guild,{eventType:'moderation.action',actorId:interaction.user.id,targetId:user.id,data:{summary:'Yachiyo completed a '+name+' action.',reason}}); return interaction.reply({embeds:[yEmbed('🛡️ Moderation Action Complete',`Action: **${name}**\nMember: <@${user.id}>\nReason: ${reason}\n\n✦ This action has been recorded in the moderation case log.`)]}); } catch(e) { return interaction.reply({content:`I could not complete that action: ${e.message}`,ephemeral:true}); } }
