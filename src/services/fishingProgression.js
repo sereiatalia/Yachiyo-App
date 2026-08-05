@@ -25,7 +25,7 @@ export async function getRod(userId) {
   const row = await ensureRod(userId);
   const tier = ROD_TIERS.find(item => item.level === Number(row.level)) ?? ROD_TIERS[0];
   const upgradeLevel = Math.min(UPGRADE_MAX, Math.max(1, Number(row.upgrade_level ?? 1)));
-  const progress = (upgradeLevel - 1) / (UPGRADE_MAX - 1);
+  const progress = upgradeLevel / UPGRADE_MAX;
   return {
     ...row,
     level: Number(row.level),
