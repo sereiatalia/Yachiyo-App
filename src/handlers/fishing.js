@@ -4,6 +4,7 @@ import { FISH_RARITIES } from '../config/fishRarities.js';
 import { createFishCard } from '../ui/fishCard.js';
 import { runPullSequence } from '../services/fishingPresentation.js';
 import { getFishingBonuses } from '../services/fishingProgression.js';
+import { recordSupply } from '../services/fishMarketService.js';
 
 export async function fishAgain(interaction) {
   const wait=await cooldownRemaining(interaction.user.id,'fish');
@@ -14,7 +15,8 @@ export async function fishAgain(interaction) {
     await new Promise(r=>setTimeout(r,450));
     await interaction.editReply({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('🎣 A BITE!').setDescription('╭───────────────╮\n  Something is pulling the line!\n╰───────────────╯\n`[████████████░░░░░░░░]`\n\n*Reeling in the unknown...*')]});
     await new Promise(r=>setTimeout(r,450));
-    const bonuses=await getFishingBonuses(interaction.user.id); const fish=rollFish({luckBonus:bonuses.luckBonus}); const rarity=FISH_RARITIES[fish.rarity];
+    const bonuses=await getFishingBonuses(interaction.user.id); const fish=rollFish({luckBonus:bonuses.luckBonus});
+    await recordSupply(fish); const rarity=FISH_RARITIES[fish.rarity];
     await runPullSequence(interaction, fish.rarity);
     await castFish(interaction.user.id); const result=await saveFish(interaction.user.id,fish);
     const card=await createFishCard({fish,rarity,valueBonus:bonuses.valueBonus,luckBonus:bonuses.luckBonus,badge:result.isNew?'NEW DISCOVERY':''});
