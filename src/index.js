@@ -136,13 +136,13 @@ client.on('interactionCreate', async interaction => {
           .setColor(0xf3a6c7)
           .setTitle('✨ Rod evolved')
           .setDescription(
-            'Your **' + rod.tier.name + '** has become **' + upgraded.name + '**.\\n\\n' +
-            '🍀 Luck: **+' + upgraded.luck + '%**\\n' +
-            '💎 Value: **+' + upgraded.value + '%**\\n\\n' +
+            'Your **' + rod.tier.name + '** has become **' + upgraded.name + '**.\n\n' +
+            '🍀 Luck: **+' + upgraded.luck + '%**\n' +
+            '💎 Value: **+' + upgraded.value + '%**\n\n' +
             (nextTier
               ? 'The next evolution is **' + nextTier.name + '** for **' + nextTier.cost.toLocaleString() + '** coins.'
               : 'Your rod has reached its celestial maximum.') +
-            '\\n\\nThe cosmic tide recognizes your progress.'
+            '\n\nThe cosmic tide recognizes your progress.'
           )],
         components: [continueRow]
       });
