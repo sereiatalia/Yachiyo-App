@@ -84,6 +84,14 @@ CREATE TABLE IF NOT EXISTS fish_items (
   user_id TEXT NOT NULL, item_id TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0,
   expires_at TIMESTAMPTZ, PRIMARY KEY (user_id, item_id)
 );
+CREATE TABLE IF NOT EXISTS fish_favorites (
+  user_id TEXT NOT NULL,
+  fish_name TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, fish_name)
+);
+CREATE INDEX IF NOT EXISTS fish_favorites_user_idx ON fish_favorites(user_id, created_at DESC);
+
 `;
 
 try { await pool.query(sql); console.log('Yachiyo database migration complete.'); }
