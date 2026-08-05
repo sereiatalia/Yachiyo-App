@@ -17,7 +17,8 @@ function formatEvent(payload) {
     'channel.delete': { title: '🗑️ Channel deleted', color: 0xe74c3c },
     'confession.create': { title: '💌 Confession submitted', color: 0xe74c3c },
     'confession.reply': { title: '💬 Anonymous confession reply', color: 0xf3a6c7 },
-    'moderation.action': { title: '🛡️ Moderation action', color: 0xffc857 }
+    'moderation.action': { title: '🛡️ Moderation action', color: 0xffc857 },
+    'moderation.curse_warning': { title: '🧼 Curse filter warning', color: 0xff6b9d }
   };
   const definition = definitions[payload.eventType] ?? { title: '🛡️ ' + payload.eventType, color: 0x8e7dff };
   const embed = new EmbedBuilder().setTitle(definition.title).setColor(definition.color).setTimestamp();
@@ -29,6 +30,9 @@ function formatEvent(payload) {
   if (data.serverName || data.confessionId) embed.addFields({ name: 'Confession context', value: (data.serverName ? '**' + clip(data.serverName) + '**' : '') + (data.confessionId ? ' • Confession #' + data.confessionId : ''), inline: false });
   if (data.summary) embed.setDescription(data.summary);
   if (data.reason) embed.addFields({ name: 'Reason', value: clip(data.reason), inline: false });
+  if (data.matchedWords?.length) embed.addFields({ name: 'Matched word(s)', value: clip(data.matchedWords.join(', ')), inline: false });
+  if (data.warningCounts?.length) embed.addFields({ name: 'Warnings', value: clip(data.warningCounts.map(item => item.word + ': ' + item.count + '/3').join(' • ')), inline: false });
+  if (data.timeoutApplied) embed.addFields({ name: 'Action', value: '1-minute timeout applied', inline: true });
   if (data.confession) embed.addFields({ name: 'Confession', value: clip(data.confession), inline: false });
   if (data.content !== undefined) embed.addFields({ name: 'Message', value: clip(data.content) || '*(empty message)*', inline: false });
   if (data.before !== undefined || data.after !== undefined) embed.addFields({ name: 'Before', value: clip(data.before) || '*(empty message)*', inline: true }, { name: 'After', value: clip(data.after) || '*(empty message)*', inline: true });
