@@ -7,7 +7,7 @@ import { fishInventory, fishAlmanac, fishCollection } from './services/economySe
 import { buildAlmanacView } from './ui/almanac.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { fishAgain } from './handlers/fishing.js';
-import { buyItem, getRod, upgradeRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
+import { ROD_TIERS, buyItem, getRod, upgradeRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
@@ -119,10 +119,33 @@ client.on('interactionCreate', async interaction => {
   }
   if (interaction.isButton() && interaction.customId === 'rod_upgrade') {
     try {
-      const rod=await getRod(interaction.user.id);
-      const b=await (await import('./services/economyService.js')).balance(interaction.user.id);
-      const upgraded=await upgradeRod(interaction.user.id,Number(b.wallet));
-      return interaction.update({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('✨ Rod evolved').setDescription('Your **'+rod.tier.name+'** has become **'+upgraded.name+'**.\\n\\n🍀 Luck: **+'+upgraded.luck+'%**\\n💎 Value: **+'+upgraded.value+'%**\\n\\nThe cosmic tide recognizes your progress.')],components:[]});
+      const rod = await getRod(interaction.user.id);
+      const b = await (await import('./services/economyService.js')).balance(interaction.user.id);
+      const upgraded = await upgradeRod(interaction.user.id, Number(b.wallet));
+      const nextTier = ROD_TIERS.find(tier => tier.level === upgraded.level + 1) ?? null;
+      const continueRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('rod_upgrade')
+          .setLabel(nextTier ? 'Evolve Again' : 'Maximum Tier')
+          .setEmoji(nextTier ? '✨' : '🌙')
+          .setStyle(nextTier ? ButtonStyle.Primary : ButtonStyle.Secondary)
+          .setDisabled(!nextTier)
+      );
+      return interaction.update({
+        embeds: [new EmbedBuilder()
+          .setColor(0xf3a6c7)
+          .setTitle('✨ Rod evolved')
+          .setDescription(
+            'Your **' + rod.tier.name + '** has become **' + upgraded.name + '**.\\n\\n' +
+            '🍀 Luck: **+' + upgraded.luck + '%**\\n' +
+            '💎 Value: **+' + upgraded.value + '%**\\n\\n' +
+            (nextTier
+              ? 'The next evolution is **' + nextTier.name + '** for **' + nextTier.cost.toLocaleString() + '** coins.'
+              : 'Your rod has reached its celestial maximum.') +
+            '\\n\\nThe cosmic tide recognizes your progress.'
+          )],
+        components: [continueRow]
+      });
     } catch(error) {
       return interaction.reply({content:'Yachiyo says: '+error.message,ephemeral:true});
     }
