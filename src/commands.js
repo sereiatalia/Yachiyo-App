@@ -9,6 +9,7 @@ import { setLogChannel, setFishChannel, getFishChannel, ensureGuild } from './se
 import { createCase, warn, recentCases } from './services/moderationService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { setConfessionChannel } from './services/confessionService.js';
+import { parseCurseWords, setCurseWords, setCurseEnabled, getCurseSettings } from './services/curseService.js';
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
 const YACHIYO_PURPLE = 0x8e7dff;
@@ -26,6 +27,8 @@ export const commands = [
   ,new SlashCommandBuilder().setName('confession').setDescription('Submit an anonymous confession.').setDMPermission(false)
   ,new SlashCommandBuilder().setName('confession-setup').setDescription('Set the channel where confessions are published.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Confession channel').setRequired(true))
   ,new SlashCommandBuilder().setName('fish-setup').setDescription('Set the only channel where fishing is allowed.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Fishing channel').setRequired(true))
+  ,new SlashCommandBuilder().setName('curse-setup').setDescription('Save curse words and activate the server filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('words').setDescription('Comma or newline separated words, in any language.').setRequired(true))
+  ,new SlashCommandBuilder().setName('curse').setDescription('Activate, deactivate, or view the curse filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Filter action').setRequired(true).addChoices({name:'Activate',value:'on'},{name:'Deactivate',value:'off'},{name:'View status',value:'status'}))
   ,new SlashCommandBuilder().setName('warn').setDescription('Warn a member.').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Reason').setRequired(false))
   ,new SlashCommandBuilder().setName('warnings').setDescription('View recent warnings and cases.').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true))
   ,new SlashCommandBuilder().setName('kick').setDescription('Kick a member.').setDefaultMemberPermissions(PermissionFlagsBits.KickMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Reason').setRequired(false))
@@ -59,10 +62,10 @@ export const commands = [
 export async function handleCommand(interaction) {
   await ensureGuild(interaction.guildId);
   const name=interaction.commandName;
-  const adminOnly=['economy-add','logs','confession-setup','fish-setup','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout'];
+  const adminOnly=['economy-add','logs','confession-setup','fish-setup','curse-setup','curse','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout'];
   if(adminOnly.includes(name) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return interaction.reply({content:'🛡️ Only server administrators can use this command.',ephemeral:true});
   if(name==='ping') return interaction.reply({embeds:[yEmbed('☾ Yachiyo is watching over this server.','✦ The moonlit command center is online and watching this server.',YACHIYO_BLUE)]});
-  if(name==='help') return interaction.reply({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('☾ YACHIYO COMMAND CENTER').setDescription('*The moonlit server manager is ready to assist.*').addFields({name:'✦ Economy',value:'`/balance`  `/daily`  `/work`  `/fish`\n`/pay`  `/deposit`  `/withdraw`  `/leaderboard`'},{name:'✦ Fishing',value:'`/fishinventory`  `/fishalmanac`\nUse the buttons on a catch card to explore your collection.'},{name:'✦ Moderation',value:'`/warn`  `/warnings`  `/kick`  `/ban`  `/timeout`\n`/untimeout`  `/unban`  `/purge`  `/lock`  `/unlock`  `/logs`'}).setFooter({text:'Yachiyo • Cosmic server manager'})]});
+  if(name==='help') return interaction.reply({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('☾ YACHIYO COMMAND CENTER').setDescription('*The moonlit server manager is ready to assist.*').addFields({name:'✦ Economy',value:'`/balance`  `/daily`  `/work`  `/fish`\n`/pay`  `/deposit`  `/withdraw`  `/leaderboard`'},{name:'✦ Fishing',value:'`/fishinventory`  `/fishalmanac`\nUse the buttons on a catch card to explore your collection.'},{name:'✦ Moderation',value:'`/warn`  `/warnings`  `/kick`  `/ban`  `/timeout`\n`/untimeout`  `/unban`  `/purge`  `/lock`  `/unlock`  `/logs`\n`/curse-setup`  `/curse`'}).setFooter({text:'Yachiyo • Cosmic server manager'})]});
   if(name==='balance') {
     const user=interaction.options.getUser('user')??interaction.user;
     const b=await balance(user.id);
@@ -93,6 +96,20 @@ export async function handleCommand(interaction) {
     const channel=interaction.options.getChannel('channel');
     await setConfessionChannel(interaction.guildId,channel.id);
     return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('💌 Confession chamber prepared').setDescription('Confessions will now be published in <#'+channel.id+'>.')]});
+  }
+  if(name==='curse-setup') {
+    const words=parseCurseWords(interaction.options.getString('words'));
+    if(!words.length) return interaction.reply({content:'Add at least one word, separated by commas or new lines.',ephemeral:true});
+    await setCurseWords(interaction.guildId,words);
+    await setCurseEnabled(interaction.guildId,true);
+    return interaction.reply({embeds:[new EmbedBuilder().setColor(0xff6b9d).setTitle('🧼 Curse filter activated').setDescription('Saved **'+words.length+'** filtered word(s) for this server.\n\nMessages containing a match are removed immediately. Warnings are tracked separately for each user and word; the third warning applies a 1-minute timeout.')]});
+  }
+  if(name==='curse') {
+    const action=interaction.options.getString('action');
+    const settings=await getCurseSettings(interaction.guildId);
+    if(action==='status') return interaction.reply({embeds:[new EmbedBuilder().setColor(settings.enabled?0x42d392:0x8e7dff).setTitle('🧼 Curse filter status').setDescription('Status: **'+(settings.enabled?'ACTIVE':'OFF')+'**\nSaved words: **'+(settings.words?.length??0)+'**\n\nUse `/curse-setup` to replace the list or choose Activate/Deactivate here.')]});
+    await setCurseEnabled(interaction.guildId,action==='on');
+    return interaction.reply({embeds:[new EmbedBuilder().setColor(action==='on'?0x42d392:0x8e7dff).setTitle(action==='on'?'🧼 Curse filter activated':'🧼 Curse filter deactivated').setDescription(action==='on'?'Filtered messages will be removed and warnings will be recorded.':'The filter is off; saved words remain available for the next activation.')]});
   }
 
   if(name==='fish') return handleFishCommand(interaction);
