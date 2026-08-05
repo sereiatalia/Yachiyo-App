@@ -7,7 +7,7 @@ import { fishInventory, fishAlmanac, fishCollection } from './services/economySe
 import { buildAlmanacView } from './ui/almanac.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { fishAgain } from './handlers/fishing.js';
-import { ROD_TIERS, buyItem, getRod, upgradeRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
+import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
@@ -117,35 +117,23 @@ client.on('interactionCreate', async interaction => {
     modal.addComponents(new ActionRowBuilder().addComponents(input));
     return interaction.showModal(modal);
   }
-  if (interaction.isButton() && interaction.customId === 'rod_upgrade') {
+  if (interaction.isButton() && (interaction.customId === 'rod_upgrade' || interaction.customId === 'rod_evolve')) {
     try {
-      const rod = await getRod(interaction.user.id);
       const b = await (await import('./services/economyService.js')).balance(interaction.user.id);
-      const upgraded = await upgradeRod(interaction.user.id, Number(b.wallet));
-      const nextTier = ROD_TIERS.find(tier => tier.level === upgraded.level + 1) ?? null;
-      const continueRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('rod_upgrade')
-          .setLabel(nextTier ? 'Evolve Again' : 'Maximum Tier')
-          .setEmoji(nextTier ? '✨' : '🌙')
-          .setStyle(nextTier ? ButtonStyle.Primary : ButtonStyle.Secondary)
-          .setDisabled(!nextTier)
+      const current = await getRod(interaction.user.id);
+      const rod = interaction.customId === 'rod_upgrade'
+        ? await upgradeRod(interaction.user.id, Number(b.wallet))
+        : await evolveRod(interaction.user.id, Number(b.wallet));
+      const nextTier = ROD_TIERS.find(tier => tier.level === rod.level + 1) ?? null;
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('rod_upgrade').setLabel(rod.upgradeLevel < rod.upgradeMax ? 'Upgrade Rod' : 'Fully Upgraded').setEmoji('⬆️').setStyle(ButtonStyle.Primary).setDisabled(rod.upgradeLevel >= rod.upgradeMax)
       );
-      return interaction.update({
-        embeds: [new EmbedBuilder()
-          .setColor(0xf3a6c7)
-          .setTitle('✨ Rod evolved')
-          .setDescription(
-            'Your **' + rod.tier.name + '** has become **' + upgraded.name + '**.\n\n' +
-            '🍀 Luck: **+' + upgraded.luck + '%**\n' +
-            '💎 Value: **+' + upgraded.value + '%**\n\n' +
-            (nextTier
-              ? 'The next evolution is **' + nextTier.name + '** for **' + nextTier.cost.toLocaleString() + '** coins.'
-              : 'Your rod has reached its celestial maximum.') +
-            '\n\nThe cosmic tide recognizes your progress.'
-          )],
-        components: [continueRow]
-      });
+      if (nextTier) row.addComponents(new ButtonBuilder().setCustomId('rod_evolve').setLabel('Evolve Rod').setEmoji('✨').setStyle(ButtonStyle.Success).setDisabled(rod.upgradeLevel < rod.upgradeMax));
+      const title = interaction.customId === 'rod_evolve' ? '✨ Rod evolved' : '⬆️ Rod upgraded';
+      const text = interaction.customId === 'rod_evolve'
+        ? 'Your new **' + rod.tier.name + '** begins at **1/' + rod.upgradeMax + '**. Keep upgrading to reveal its full cosmic power.'
+        : '**' + rod.tier.name + '** is now at **' + rod.upgradeLevel + '/' + rod.upgradeMax + '**.\n🍀 Luck: **+' + rod.luck + '%**\n💎 Value: **+' + rod.value + '%**' + (rod.upgradeLevel >= rod.upgradeMax ? '\n\n✨ Ready to evolve.' : '\n\nNext upgrade: **' + rod.nextUpgradeCost.toLocaleString() + '** coins.');
+      return interaction.update({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle(title).setDescription(text)],components:[row]});
     } catch(error) {
       return interaction.reply({content:'Yachiyo says: '+error.message,ephemeral:true});
     }
