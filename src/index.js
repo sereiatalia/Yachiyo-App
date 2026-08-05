@@ -179,13 +179,13 @@ client.on('interactionCreate', async interaction => {
           .setFooter({ text: 'Drink effects are stored in your global fishing profile.' })],
       });
     }
+  }
 
   if (interaction.isChatInputCommand()) {
     handleCommand(interaction).catch(async error => {
       console.error(error);
       if (!interaction.replied && !interaction.deferred) await interaction.reply({content:'Yachiyo encountered an error.',ephemeral:true});
     });
-  }
   }
 });
 client.on('messageCreate', async message => { if (message.author.bot || !message.guild || !message.content.startsWith(process.env.PREFIX || '.')) return; const [name]=message.content.slice((process.env.PREFIX||'.').length).trim().split(/\s+/); if(name==='ping') return message.reply('Yachiyo is watching over this server.'); if(name==='balance') { const { balance }=await import('./services/economyService.js'); const b=await balance(message.author.id); return message.reply(`☾ You have **${b.wallet.toLocaleString()}** global coins.`); } });
