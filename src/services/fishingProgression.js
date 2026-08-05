@@ -1,16 +1,16 @@
 import { query } from '../database/db.js';
 
 export const ROD_TIERS = [
-  { level: 1, name: 'Moonlit Twig', cost: 0, luck: 0, value: 0 },
-  { level: 2, name: 'Pearl Rod', cost: 2500, luck: 5, value: 5 },
-  { level: 3, name: 'Starlace Rod', cost: 10000, luck: 10, value: 12 },
-  { level: 4, name: 'Coralheart Rod', cost: 25000, luck: 15, value: 18 },
-  { level: 5, name: 'Celestial Ribbon', cost: 50000, luck: 22, value: 28 },
-  { level: 6, name: 'Moonwake Rod', cost: 100000, luck: 30, value: 40 },
-  { level: 7, name: 'Aurora Glass Rod', cost: 200000, luck: 40, value: 55 },
-  { level: 8, name: 'Starlight Harpoon', cost: 400000, luck: 52, value: 75 },
-  { level: 9, name: 'Tsukuyomi Thread', cost: 800000, luck: 68, value: 100 },
-  { level: 10, name: 'Yachiyo’s Fateweaver', cost: 1500000, luck: 90, value: 135 }
+  { level: 1, icon: '🌙', name: 'Moonlit Twig', cost: 0, luck: 0, value: 0, lore: 'A small branch that remembers the moon.' },
+  { level: 2, icon: '🫧', name: 'Pearl Rod', cost: 2500, luck: 5, value: 5, lore: 'A quiet shimmer draws kinder tides.' },
+  { level: 3, icon: '✨', name: 'Starlace Rod', cost: 10000, luck: 10, value: 12, lore: 'Woven from a thread of falling starlight.' },
+  { level: 4, icon: '🪸', name: 'Coralheart Rod', cost: 25000, luck: 15, value: 18, lore: 'Its pulse follows the hidden reef.' },
+  { level: 5, icon: '🎀', name: 'Celestial Ribbon', cost: 50000, luck: 22, value: 28, lore: 'A graceful reel for collectors with patience.' },
+  { level: 6, icon: '🌌', name: 'Moonwake Rod', cost: 100000, luck: 30, value: 40, lore: 'Leaves a silver wake across the water.' },
+  { level: 7, icon: '🔮', name: 'Aurora Glass Rod', cost: 200000, luck: 40, value: 55, lore: 'Catches color before it becomes a fish.' },
+  { level: 8, icon: '🌠', name: 'Starlight Harpoon', cost: 400000, luck: 52, value: 75, lore: 'Built for the boldest celestial pulls.' },
+  { level: 9, icon: '☾', name: 'Tsukuyomi Thread', cost: 800000, luck: 68, value: 100, lore: 'A forbidden line that hums beneath moonlight.' },
+  { level: 10, icon: '👑', name: 'Yachiyo’s Fateweaver', cost: 1500000, luck: 90, value: 135, lore: 'The final reel: fate bends before the cast.' }
 ];
 
 async function ensureRod(userId) {
