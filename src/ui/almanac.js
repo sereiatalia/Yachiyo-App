@@ -21,40 +21,53 @@ function progressBar(value, size = 12) {
 }
 
 export function buildAlmanacView(rows = [], page = 0, username = 'Your') {
-  const grouped = RARITY_ORDER.flatMap(rarity => rows.filter(row => row.rarity === rarity));
-  const perPage = 8;
-  const pages = Math.max(1, Math.ceil(grouped.length / perPage));
+  // One page per rarity keeps Secret and Tsukuyomi completely separate.
+  const grouped = RARITY_ORDER.map(rarity => ({
+    rarity,
+    rows: rows.filter(row => row.rarity === rarity)
+  })).filter(group => group.rows.length > 0);
+
+  const pages = Math.max(1, grouped.length);
   const currentPage = Math.min(Math.max(Number(page) || 0, 0), pages - 1);
-  const visible = grouped.slice(currentPage * perPage, currentPage * perPage + perPage);
-  const discovered = grouped.filter(row => Number(row.quantity) > 0).length;
-  const totalCaught = grouped.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
-  const percent = grouped.length ? discovered / grouped.length : 0;
-  const currentRarity = visible[0]?.rarity;
-  const rarityRows = currentRarity ? grouped.filter(row => row.rarity === currentRarity) : [];
+  const current = grouped[currentPage] ?? { rarity: 'common', rows: [] };
+  const rarityRows = current.rows;
+  const discovered = rows.filter(row => Number(row.quantity) > 0).length;
+  const totalFish = rows.length;
+  const totalCaught = rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
   const rarityFound = rarityRows.filter(row => Number(row.quantity) > 0).length;
-  const lines = visible.length
-    ? visible.map(row => {
+  const percent = totalFish ? discovered / totalFish : 0;
+
+  const lines = rarityRows.length
+    ? rarityRows.map(row => {
         const owned = Number(row.quantity) > 0;
         const value = Number(row.value).toLocaleString();
-        return (owned ? '♡' : '・') + ' **' + row.name + '**  ' + (owned ? '×' + row.quantity : '— undiscovered') + '  ·  ' + value + ' coins';
+        return (owned ? '♡' : '・') + ' **' + row.name + '**  ' +
+          (owned ? '×' + row.quantity : '— undiscovered') + '  ·  ' + value + ' coins';
       }).join('\n')
     : '*The cosmic tide is waiting for your first discovery.*';
+
   const embed = new EmbedBuilder()
-    .setColor(currentRarity === 'tsukuyomi' ? 0xc77dff : 0xf3a6c7)
+    .setColor(current.rarity === 'tsukuyomi' ? 0xc77dff : current.rarity === 'secret' ? 0xf08a24 : 0xf3a6c7)
     .setTitle('📖  ' + username + '’s Celestial Almanac')
     .setDescription(
       '╭─────────────── 𓆝 ───────────────╮\n' +
-      '✦ **Collection progress**  ' + discovered + '/' + grouped.length + '\n' +
+      '✦ **Collection progress**  ' + discovered + '/' + totalFish + '\n' +
       progressBar(percent) + '  **' + Math.round(percent * 100) + '%**\n' +
       '✦ **Total catches**  ' + totalCaught + '\n' +
       '╰─────────────── 𓆝 ───────────────╯\n\n' +
-      (currentRarity ? '**' + RARITY_LABELS[currentRarity] + '**  ·  ' + rarityFound + '/' + rarityRows.length + ' discovered\n\n' : '') +
+      '**' + (RARITY_LABELS[current.rarity] || current.rarity) + '**  ·  ' +
+      rarityFound + '/' + rarityRows.length + ' discovered\n\n' +
       lines
     )
-    .setFooter({ text: 'Page ' + (currentPage + 1) + '/' + pages + '  •  Secret → Tsukuyomi is the final rarity path.' });
+    .setFooter({
+      text: 'Page ' + (currentPage + 1) + '/' + pages + '  •  ' +
+        (current.rarity === 'tsukuyomi' ? 'Tsukuyomi: Yachiyo, Iroha, Kaguya.' : 'Each rarity has its own collection page.')
+    });
+
   const controls = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('fish_almanac_prev:' + currentPage).setLabel('Previous').setEmoji('🌙').setStyle(ButtonStyle.Secondary).setDisabled(currentPage === 0),
     new ButtonBuilder().setCustomId('fish_almanac_next:' + currentPage).setLabel('Next').setEmoji('✨').setStyle(ButtonStyle.Primary).setDisabled(currentPage >= pages - 1)
   );
+
   return { embed, controls };
 }
