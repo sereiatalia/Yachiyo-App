@@ -7,7 +7,7 @@ import { fishInventory, fishAlmanac, fishCollection } from './services/economySe
 import { buildAlmanacView } from './ui/almanac.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { fishAgain } from './handlers/fishing.js';
-import { buyItem, getRod, upgradeRod } from './services/fishingProgression.js';
+import { buyItem, getRod, upgradeRod, getActiveEffects } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
@@ -154,6 +154,12 @@ client.on('interactionCreate', async interaction => {
       const rows = await fishCollection(interaction.user.id);
       const view = buildAlmanacView(rows, 0, interaction.user.username);
       return interaction.reply({ephemeral:true, embeds:[view.embed], components:[view.controls]});
+    }
+    if (interaction.customId === 'fish_effects') {
+      const effects = await getActiveEffects(interaction.user.id);
+      const labels = { luck_drink: '🍀 Luck Drink • improves rare-catch odds', value_drink: '💎 Value Drink • increases catch value' };
+      const body = effects.length ? effects.map(effect => '**' + (labels[effect.item_id] || effect.item_id) + '** • ' + Math.max(0, effect.seconds_left) + 's remaining').join('\\n') : '*No active buffs. The cosmic tide is calm.*';
+      return interaction.reply({ephemeral:true, embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('🧪 ' + interaction.user.username + '’s Tide Effects').setDescription('╭─────────────── ✦ ───────────────╮\\n' + body + '\\n╰─────────────── ✦ ───────────────╯').setFooter({text:'Your buffs travel with your global fishing profile.'})]});
     }
   }
   if (interaction.isChatInputCommand()) {
