@@ -7,7 +7,7 @@ import { fishInventory, fishAlmanac, fishCollection } from './services/economySe
 import { buildAlmanacView } from './ui/almanac.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { fishAgain } from './handlers/fishing.js';
-import { buyItem, getRod, upgradeRod, getActiveEffects } from './services/fishingProgression.js';
+import { buyItem, getRod, upgradeRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
@@ -147,9 +147,18 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isButton()) {
     if (interaction.customId === 'fish_again') { const fishChannel=await getFishChannel(interaction.guildId); if(fishChannel && interaction.channelId!==fishChannel) return interaction.reply({content:'🎣 Fishing is only available in <#'+fishChannel+'>.',ephemeral:true}); return fishAgain(interaction); }
     if (interaction.customId === 'fish_inventory') {
-      const rows=await fishInventory(interaction.user.id);
-      return interaction.reply({ephemeral:true,embeds:[new EmbedBuilder().setColor(0x4db8e8).setTitle('🎒 '+interaction.user.username+'’s Aquarium').setDescription(rows.length?rows.map(x=>'**'+x.fish_name+'** • ×'+x.quantity).join('\n'):'Your aquarium is empty.')]});
+      const rows = await itemInventory(interaction.user.id);
+      const labels = { luck_drink: '🍀 Luck Drink', value_drink: '💎 Value Drink', speed_drink: '⚡ Speed Drink' };
+      return interaction.reply({
+        ephemeral: true,
+        embeds: [new EmbedBuilder()
+          .setColor(0xf3a6c7)
+          .setTitle('👜 ' + interaction.user.username + '’s Cosmic Pouch')
+          .setDescription(rows.length ? rows.map(x => '**' + (labels[x.item_id] || x.item_id) + '** • ×' + x.quantity).join('\n') : '*Your pouch is empty. Visit /fishshop to collect a drink.*')
+          .setFooter({ text: 'Fish are recorded in your Fish Almanac.' })],
+      });
     }
+
     if (interaction.customId === 'fish_almanac') {
       const rows = await fishCollection(interaction.user.id);
       const view = buildAlmanacView(rows, 0, interaction.user.username);
@@ -157,11 +166,20 @@ client.on('interactionCreate', async interaction => {
     }
     if (interaction.customId === 'fish_effects') {
       const effects = await getActiveEffects(interaction.user.id);
-      const labels = { luck_drink: '🍀 Luck Drink • improves rare-catch odds', value_drink: '💎 Value Drink • increases catch value' };
-      const body = effects.length ? effects.map(effect => '**' + (labels[effect.item_id] || effect.item_id) + '** • ' + Math.max(0, effect.seconds_left) + 's remaining').join('\\n') : '*No active buffs. The cosmic tide is calm.*';
-      return interaction.reply({ephemeral:true, embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('🧪 ' + interaction.user.username + '’s Tide Effects').setDescription('╭─────────────── ✦ ───────────────╮\\n' + body + '\\n╰─────────────── ✦ ───────────────╯').setFooter({text:'Your buffs travel with your global fishing profile.'})]});
+      const labels = { luck_drink: '🍀 Luck Drink', value_drink: '💎 Value Drink', speed_drink: '⚡ Speed Drink' };
+      const body = effects.length
+        ? effects.map(effect => '**' + (labels[effect.item_id] || effect.item_id) + '** • ' + Math.max(0, effect.seconds_left) + 's remaining').join('\n')
+        : '*No active buffs right now.*';
+      return interaction.reply({
+        ephemeral: true,
+        embeds: [new EmbedBuilder()
+          .setColor(0x8e7dff)
+          .setTitle('🧪 Active Tide Effects')
+          .setDescription(body)
+          .setFooter({ text: 'Drink effects are stored in your global fishing profile.' })],
+      });
     }
-  }
+
   if (interaction.isChatInputCommand()) {
     handleCommand(interaction).catch(async error => {
       console.error(error);
