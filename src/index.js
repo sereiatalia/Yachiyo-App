@@ -9,8 +9,11 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilde
 import { fishAgain } from './handlers/fishing.js';
 import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
+import { getCurseSettings, findMatchedCurseWords, recordCurseWarning } from './services/curseService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
+
+const filteredMessageIds = new Set();
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildModeration, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildVoiceStates],
@@ -22,6 +25,7 @@ client.on('guildCreate', guild => ensureGuild(guild.id).catch(console.error));
 client.on('guildMemberAdd', m => sendAuditLog(client,m.guild,{eventType:'member.join',targetId:m.id,data:{summary:`${m.user.tag} joined the server.`}}).catch(console.error));
 client.on('guildMemberRemove', m => sendAuditLog(client,m.guild,{eventType:'member.leave',targetId:m.id,data:{summary:`${m.user.tag} left the server.`}}).catch(console.error));
 client.on('messageDelete', msg => {
+  if (filteredMessageIds.delete(msg.id)) return;
   if (!msg.guild || !msg.author || msg.author.bot || msg.author.id === client.user?.id) return;
   sendAuditLog(client, msg.guild, { eventType:'message.delete', actorId:msg.author.id, targetId:msg.channelId, data:{ channelName:msg.channel?.name, messageId:msg.id, authorId:msg.author.id, createdTimestamp:msg.createdTimestamp, content:msg.content, attachments:msg.attachments?.size, attachmentUrls:[...msg.attachments.values()].map(a => a.url), summary:'A message was deleted.' } }).catch(console.error);
 });
@@ -199,7 +203,59 @@ client.on('interactionCreate', async interaction => {
     });
   }
 });
-client.on('messageCreate', async message => { if (message.author.bot || !message.guild || !message.content.startsWith(process.env.PREFIX || '.')) return; const [name]=message.content.slice((process.env.PREFIX||'.').length).trim().split(/\s+/); if(name==='ping') return message.reply('Yachiyo is watching over this server.'); if(name==='balance') { const { balance }=await import('./services/economyService.js'); const b=await balance(message.author.id); return message.reply(`☾ You have **${b.wallet.toLocaleString()}** global coins.`); } });
+client.on('messageCreate', async message => {
+  if (message.author.bot || !message.guild) return;
+  try {
+    const settings = await getCurseSettings(message.guild.id);
+    const matchedWords = settings.enabled ? findMatchedCurseWords(message.content, settings.words) : [];
+    if (matchedWords.length) {
+      filteredMessageIds.add(message.id);
+      await message.delete().catch(() => null);
+      const warningCounts = [];
+      for (const word of matchedWords) {
+        warningCounts.push({ word, count: await recordCurseWarning({ guildId: message.guild.id, userId: message.author.id, word }) });
+      }
+      const timeoutRequested = warningCounts.some(item => item.count >= 3);
+      let timeoutApplied = false;
+      if (timeoutRequested && message.member?.moderatable) {
+        timeoutApplied = Boolean(await message.member.timeout(60_000, 'Curse filter: ' + matchedWords.join(', ')).then(() => true).catch(() => false));
+      }
+      const lines = warningCounts.map(item => '**' + item.word + '** — warning ' + item.count + '/3').join('\\n');
+      const warning = await message.channel.send({
+        embeds: [new EmbedBuilder()
+          .setColor(0xff6b9d)
+          .setTitle('⚠️ Please watch your words')
+          .setDescription('Your message was removed because it contained: **' + matchedWords.join('**, **') + '**.\\n\\n' + lines + (timeoutApplied ? '\\n\\nThird warning reached — you are timed out for **1 minute**.' : '\\n\\nThree warnings for the same word result in a 1-minute timeout.'))],
+      }).catch(() => null);
+      if (warning) setTimeout(() => warning.delete().catch(() => null), 10_000);
+      await sendAuditLog(client, message.guild, {
+        eventType: 'moderation.curse_warning',
+        actorId: message.author.id,
+        targetId: message.channelId,
+        data: {
+          channelName: message.channel?.name ?? 'unknown-channel',
+          matchedWords,
+          warningCounts,
+          timeoutApplied,
+          content: message.content,
+          summary: message.author.tag + ' used a filtered word.',
+        },
+      });
+      return;
+    }
+  } catch (error) {
+    console.error('[CURSE_FILTER]', error);
+  }
+  const prefix = process.env.PREFIX || '.';
+  if (!message.content.startsWith(prefix)) return;
+  const [name] = message.content.slice(prefix.length).trim().split(/\\s+/);
+  if (name === 'ping') return message.reply('Yachiyo is watching over this server.');
+  if (name === 'balance') {
+    const { balance } = await import('./services/economyService.js');
+    const b = await balance(message.author.id);
+    return message.reply('☾ You have **' + b.wallet.toLocaleString() + '** global coins.');
+  }
+});
 client.on('error', error => console.error('[DISCORD]', error));
 
 client.login(process.env.DISCORD_TOKEN);
