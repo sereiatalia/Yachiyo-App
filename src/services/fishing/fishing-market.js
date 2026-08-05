@@ -1,1 +1,1 @@
-export { getMarketSnapshot, getMarketFish, getMarketHistory, formatMarketLines, recordSupply } from '../../services/fishMarketService.js';
+export { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from '../../services/fishMarketService.js';
