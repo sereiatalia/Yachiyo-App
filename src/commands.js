@@ -8,7 +8,7 @@ import { setLogChannel, setFishChannel, getFishChannel, ensureGuild } from './se
 import { createCase, warn, recentCases } from './services/moderationService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { setConfessionChannel } from './services/confessionService.js';
-import { ROD_TIERS, getRod, upgradeRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
+import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
 const YACHIYO_PURPLE = 0x8e7dff;
 const YACHIYO_BLUE = 0x4db8e8;
 const yEmbed = (title, description, color = YACHIYO_PURPLE) => new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setFooter({ text: 'Yachiyo • Cosmic server manager' });
@@ -46,7 +46,7 @@ export const commands = [
   ,new SlashCommandBuilder().setName('fishprofile').setDescription('View a global fishing profile.').addUserOption(o=>o.setName('user').setDescription('User').setRequired(false))
   ,new SlashCommandBuilder().setName('fishleaderboard').setDescription('View the global fishing leaderboard.')
   ,new SlashCommandBuilder().setName('fishshop').setDescription('Open the cosmic fish shop.')
-  ,new SlashCommandBuilder().setName('fishrod').setDescription('View or upgrade your fishing rod.').addStringOption(o=>o.setName('action').setDescription('Rod action').setRequired(false).addChoices({name:'View rod',value:'view'},{name:'Upgrade rod',value:'upgrade'}))
+  ,new SlashCommandBuilder().setName('fishrod').setDescription('View or upgrade your fishing rod.').addStringOption(o=>o.setName('action').setDescription('Rod action').setRequired(false).addChoices({name:'View rod',value:'view'},{name:'Upgrade rod',value:'upgrade'},{name:'Evolve rod',value:'evolve'}))
   ,new SlashCommandBuilder().setName('fishstatuseffects').setDescription('View active fishing effects.')
   ,new SlashCommandBuilder().setName('fishdrink').setDescription('Drink a fishing buff.').addStringOption(o=>o.setName('item').setDescription('Buff drink').setRequired(true).addChoices({name:'Luck drink • 5 minutes',value:'luck_drink'},{name:'Value drink • 5 minutes',value:'value_drink'}))
   ,new SlashCommandBuilder().setName('fishmarket').setDescription('View the changing fish market.')
@@ -107,58 +107,42 @@ if(name==='fishalmanac') {
   if(name==='fishrod') {
     try {
       const action = interaction.options.getString('action') || 'view';
-      if(action === 'upgrade') {
-        const b = await balance(interaction.user.id);
-        const current = await getRod(interaction.user.id);
-        const upgraded = await upgradeRod(interaction.user.id, Number(b.wallet));
-        const nextTier = ROD_TIERS.find(tier => tier.level === upgraded.level + 1) ?? null;
+      const makeRow = (rod, nextTier) => {
         const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('rod_upgrade')
-            .setLabel(nextTier ? 'Evolve Again' : 'Maximum Tier')
-            .setEmoji(nextTier ? '✨' : '🌙')
-            .setStyle(nextTier ? ButtonStyle.Primary : ButtonStyle.Secondary)
-            .setDisabled(!nextTier)
+          new ButtonBuilder().setCustomId('rod_upgrade').setLabel(rod.upgradeLevel < rod.upgradeMax ? 'Upgrade Rod' : 'Fully Upgraded').setEmoji('⬆️').setStyle(ButtonStyle.Primary).setDisabled(rod.upgradeLevel >= rod.upgradeMax)
         );
+        if (nextTier) row.addComponents(new ButtonBuilder().setCustomId('rod_evolve').setLabel('Evolve Rod').setEmoji('✨').setStyle(ButtonStyle.Success).setDisabled(rod.upgradeLevel < rod.upgradeMax));
+        return row;
+      };
+      if (action === 'upgrade') {
+        const b = await balance(interaction.user.id);
+        const rod = await upgradeRod(interaction.user.id, Number(b.wallet));
+        const nextTier = ROD_TIERS.find(tier => tier.level === rod.level + 1) ?? null;
         return interaction.reply({
-          embeds: [new EmbedBuilder()
-            .setColor(0xf3a6c7)
-            .setTitle('✨ Rod evolved')
-            .setDescription(
-              'Your **' + current.tier.name + '** has become **' + upgraded.name + '**.\n\n' +
-              '🍀 Luck: **+' + upgraded.luck + '%**\n' +
-              '💎 Value: **+' + upgraded.value + '%**\n\n' +
-              (nextTier
-                ? 'The next evolution is **' + nextTier.name + '** for **' + nextTier.cost.toLocaleString() + '** coins.'
-                : 'Your rod has reached its celestial maximum.') +
-              '\n\nThe cosmic tide recognizes your progress.'
-            )],
-          components: [row]
+          embeds: [new EmbedBuilder().setColor(0xf3a6c7).setTitle('⬆️ Rod upgraded').setDescription('**' + rod.tier.name + '** is now stronger.\n\n🍀 Luck: **+' + rod.luck + '%**\n💎 Value: **+' + rod.value + '%**\n\nUpgrade **' + rod.upgradeLevel + '/' + rod.upgradeMax + '**' + (rod.upgradeLevel < rod.upgradeMax ? '\nNext upgrade: **' + rod.nextUpgradeCost.toLocaleString() + '** coins.' : '\n✨ Your rod is ready to evolve.'))],
+          components: [makeRow(rod, nextTier)]
+        });
+      }
+      if (action === 'evolve') {
+        const b = await balance(interaction.user.id);
+        const before = await getRod(interaction.user.id);
+        const rod = await evolveRod(interaction.user.id, Number(b.wallet));
+        return interaction.reply({
+          embeds: [new EmbedBuilder().setColor(0xf3a6c7).setTitle('✨ Rod evolved').setDescription('Your **' + before.tier.name + '** has become **' + rod.tier.name + '**.\n\nThe new rod begins at **1/' + rod.upgradeMax + '**. Upgrade it to unlock stronger luck and value buffs.')],
+          components: [makeRow(rod, ROD_TIERS.find(tier => tier.level === rod.level + 1) ?? null)]
         });
       }
       const rod = await getRod(interaction.user.id);
       const nextTier = ROD_TIERS.find(tier => tier.level === rod.level + 1) ?? null;
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('rod_upgrade')
-          .setLabel(nextTier ? 'Evolve Rod' : 'Maximum Tier')
-          .setEmoji(nextTier ? '✨' : '🌙')
-          .setStyle(nextTier ? ButtonStyle.Primary : ButtonStyle.Secondary)
-          .setDisabled(!nextTier)
-      );
       return interaction.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(0xf3a6c7)
-          .setTitle((rod.tier.icon || '🎣') + ' ' + rod.tier.name)
-          .setDescription(rod.tier.lore || 'Your fishing rod grows with every cosmic catch.')
-          .addFields(
-            {name:'✦ Level', value:'**' + rod.level + ' / ' + ROD_TIERS.length + '**', inline:true},
-            {name:'🍀 Luck', value:'+' + rod.tier.luck + '%', inline:true},
-            {name:'💎 Value', value:'+' + rod.tier.value + '%', inline:true},
-            {name:'Next evolution', value:nextTier ? (nextTier.icon || '✨') + ' **' + nextTier.name + '** • ' + nextTier.cost.toLocaleString() + ' coins' : '**Maximum tier reached**'}
-          )
-          .setFooter({text: nextTier ? 'Evolve your rod when you are ready.' : 'Your rod has reached its celestial maximum.'})],
-        components: [row]
+        embeds: [new EmbedBuilder().setColor(0xf3a6c7).setTitle((rod.tier.icon || '🎣') + ' ' + rod.tier.name).setDescription(rod.tier.lore || 'Your fishing rod grows with every cosmic catch.').addFields(
+          {name:'✦ Upgrade level', value:'**' + rod.upgradeLevel + ' / ' + rod.upgradeMax + '**', inline:true},
+          {name:'🍀 Luck', value:'+' + rod.luck + '%', inline:true},
+          {name:'💎 Value', value:'+' + rod.value + '%', inline:true},
+          {name:'Next upgrade', value:rod.nextUpgradeCost ? '**' + rod.nextUpgradeCost.toLocaleString() + '** coins' : 'Ready to evolve'},
+          {name:'Next rod', value:nextTier ? nextTier.icon + ' **' + nextTier.name + '** • ' + nextTier.cost.toLocaleString() + ' coins' : '**Maximum tier**'}
+        ).setFooter({text: rod.upgradeLevel < rod.upgradeMax ? 'Upgrade your rod to strengthen its buffs.' : 'Your rod is ready to evolve.'})],
+        components: [makeRow(rod, nextTier)]
       });
     } catch(e) {
       return interaction.reply({content:e.message,ephemeral:true});
