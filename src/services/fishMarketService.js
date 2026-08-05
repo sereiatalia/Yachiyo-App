@@ -2,8 +2,8 @@ import { query } from '../database/db.js';
 
 export async function recordSupply(fish) {
   await query(
-    'INSERT INTO fish_market_supply (fish_name, rarity, caught_count, updated_at) VALUES ($1,$2,1,NOW()) ON CONFLICT (fish_name) DO UPDATE SET caught_count=fish_market_supply.caught_count+1, updated_at=NOW()',
-    [fish.name, fish.rarity]
+    'INSERT INTO fish_market_supply (fish_name, rarity, caught_count, updated_at) VALUES ($1,$2,1,$3,NOW()) ON CONFLICT (fish_name) DO UPDATE SET caught_count=fish_market_supply.caught_count+1, updated_at=NOW()',
+    [fish.name, fish.rarity, Number(fish.value || 20)]
   );
 }
 
