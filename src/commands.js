@@ -167,14 +167,14 @@ if(name==='fishalmanac') {
   if(name==='fishmarket') {
     const rows = await getMarketSnapshot();
     const hot = rows[0] ? '\n\n🔥 **Hot tide:** '+rows[0].fish_name+' · '+rows[0].price.toLocaleString()+' coins' : '';
-    return interaction.reply({embeds:[yEmbed('🌊 Celestial Fish Exchange', 'The global tide market shifts with catches from every server.\\n\\n'+formatMarketLines(rows)+hot)]});
+    return interaction.reply({embeds:[yEmbed('🌊 Celestial Fish Exchange', 'The global tide market shifts with catches from every server.\n\n'+formatMarketLines(rows)+hot)]});
   }
   if(name==='fishaquarium') {
     const rows = await fishCollection(interaction.user.id);
     const owned = rows.filter(row => Number(row.quantity)>0);
     const total = rows.reduce((sum,row)=>sum+Number(row.quantity||0),0);
-    const lines = owned.length ? owned.slice(0,20).map(row=>'🐟 **'+row.name+'** · ×'+row.quantity+' · '+row.rarity).join('\\n') : '*Your aquarium is waiting for its first catch.*';
-    return interaction.reply({embeds:[yEmbed('🫧 '+interaction.user.username+'’s Aquarium', '**'+owned.length+'** species discovered · **'+total+'** total catches\\n\\n'+lines+'\\n\\n*Every discovery is preserved in Yachiyo’s celestial archive.*')]});
+    const lines = owned.length ? owned.slice(0,20).map(row=>'🐟 **'+row.name+'** · ×'+row.quantity+' · '+row.rarity).join('\n') : '*Your aquarium is waiting for its first catch.*';
+    return interaction.reply({embeds:[yEmbed('🫧 '+interaction.user.username+'’s Aquarium', '**'+owned.length+'** species discovered · **'+total+'** total catches\n\n'+lines+'\n\n*Every discovery is preserved in Yachiyo’s celestial archive.*')]});
   }
   if(['fishbattle','fishbattlepvp'].includes(name)) return interaction.reply({embeds:[yEmbed('⚔️ Cosmic Tide Arena', 'Battle interfaces are being prepared. Your catches, rods, and global profile are already connected.') ]});
   if(name==='economy-add') { const b=await addMoney(interaction.options.getUser('user').id,interaction.options.getInteger('amount'),'admin'); return interaction.reply(`Added coins. New wallet: **${b.wallet.toLocaleString()}**.`); }
