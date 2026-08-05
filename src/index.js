@@ -220,12 +220,12 @@ client.on('messageCreate', async message => {
       if (timeoutRequested && message.member?.moderatable) {
         timeoutApplied = Boolean(await message.member.timeout(60_000, 'Curse filter: ' + matchedWords.join(', ')).then(() => true).catch(() => false));
       }
-      const lines = warningCounts.map(item => '**' + item.word + '** — warning ' + item.count + '/3').join('\\n');
+      const lines = warningCounts.map(item => '**' + item.word + '** — warning ' + item.count + '/3').join('\n');
       const warning = await message.channel.send({
         embeds: [new EmbedBuilder()
           .setColor(0xff6b9d)
           .setTitle('⚠️ Please watch your words')
-          .setDescription('Your message was removed because it contained: **' + matchedWords.join('**, **') + '**.\\n\\n' + lines + (timeoutApplied ? '\\n\\nThird warning reached — you are timed out for **1 minute**.' : '\\n\\nThree warnings for the same word result in a 1-minute timeout.'))],
+          .setDescription('Your message was removed because it contained: **' + matchedWords.join('**, **') + '**.\n\n' + lines + (timeoutApplied ? '\n\nThird warning reached — you are timed out for **1 minute**.' : '\n\nThree warnings for the same word result in a 1-minute timeout.'))],
       }).catch(() => null);
       if (warning) setTimeout(() => warning.delete().catch(() => null), 10_000);
       await sendAuditLog(client, message.guild, {
@@ -248,7 +248,7 @@ client.on('messageCreate', async message => {
   }
   const prefix = process.env.PREFIX || '.';
   if (!message.content.startsWith(prefix)) return;
-  const [name] = message.content.slice(prefix.length).trim().split(/\\s+/);
+  const [name] = message.content.slice(prefix.length).trim().split(/\s+/);
   if (name === 'ping') return message.reply('Yachiyo is watching over this server.');
   if (name === 'balance') {
     const { balance } = await import('./services/economyService.js');
