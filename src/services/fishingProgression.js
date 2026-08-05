@@ -50,6 +50,13 @@ export async function getActiveEffects(userId) {
   return (await query("SELECT item_id, quantity, EXTRACT(EPOCH FROM (expires_at-NOW()))::int AS seconds_left FROM fish_items WHERE user_id=$1 AND quantity>0 AND expires_at>NOW() ORDER BY expires_at", [userId])).rows;
 }
 
+export async function itemInventory(userId) {
+  return (await query(
+    'SELECT item_id, quantity, EXTRACT(EPOCH FROM (expires_at - NOW()))::int AS seconds_left FROM fish_items WHERE user_id = $1 AND quantity > 0 ORDER BY item_id',
+    [userId],
+  )).rows;
+}
+
 export async function getFishingBonuses(userId) {
   const rod = await getRod(userId);
   const effects = await getActiveEffects(userId);
