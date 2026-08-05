@@ -11,6 +11,8 @@ export const ROD_TIERS = [
   { level: 8, icon: '🌠', name: 'Starlight Harpoon', cost: 400000, luck: 52, value: 75, lore: 'Built for the boldest celestial pulls.' },
   { level: 9, icon: '☾', name: 'Tsukuyomi Thread', cost: 800000, luck: 68, value: 100, lore: 'A forbidden line that hums beneath moonlight.' },
   { level: 10, icon: '👑', name: 'Yachiyo’s Fateweaver', cost: 1500000, luck: 90, value: 135, lore: 'The final reel: fate bends before the cast.' }
+  ,{ level: 11, icon: '🌙', name: 'Lunar Prism Rod', cost: 3000000, luck: 115, value: 175, lore: 'Its crystal line catches reflections from impossible tides.' }
+  ,{ level: 12, icon: '💫', name: 'Eternal Celestial Loom', cost: 6000000, luck: 145, value: 225, lore: 'The legendary final weave, reserved for those who follow every star.' }
 ];
 
 async function ensureRod(userId) {
