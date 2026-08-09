@@ -11,6 +11,7 @@ import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, it
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 import { getCurseSettings, findMatchedCurseWords, recordCurseWarning } from './services/curseService.js';
 import { getIntroductionSettings, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
+import { getGiveaway, getGiveawayByMessage, setGiveawayEmoji, addGiveawayEntry, getGiveawayEntries, finishGiveaway } from './services/giveawayService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -36,6 +37,35 @@ client.once('ready', async () => {
     console.error('[COMMAND_DEPLOY]', error);
   }
   console.log(`Yachiyo is online as ${client.user.tag}`);
+});
+client.on('giveawayEnd', async giveawayId => {
+  const giveaway = await getGiveaway(giveawayId).catch(() => null);
+  if (!giveaway || giveaway.status !== 'active' || !giveaway.emoji) return;
+  const entries = await getGiveawayEntries(giveawayId);
+  const winners = entries.sort(() => Math.random() - 0.5).slice(0, giveaway.winner_count);
+  await finishGiveaway(giveawayId, winners);
+  const channel = await client.channels.fetch(giveaway.channel_id).catch(() => null);
+  if (channel?.isTextBased()) await channel.send('🎉 Giveaway **#' + giveawayId + '** ended! Winner(s): ' + (winners.length ? winners.map(id => '<@' + id + '>').join(', ') : 'No eligible participants.') );
+});
+client.on('messageReactionAdd', async (reaction, user) => {
+  if (user.bot || !reaction.message.guild) return;
+  const giveawayId = client.pendingGiveawayEmoji?.get(reaction.message.id);
+  if (giveawayId) {
+    const giveaway = await getGiveaway(giveawayId).catch(() => null);
+    if (giveaway?.host_user_id === user.id) {
+      await setGiveawayEmoji(giveawayId, reaction.emoji.toString());
+      client.pendingGiveawayEmoji.delete(reaction.message.id);
+      await reaction.message.react(reaction.emoji).catch(() => null);
+      await reaction.users.remove(user.id).catch(() => null);
+      await reaction.message.channel.send('✅ Giveaway reaction set to ' + reaction.emoji.toString() + '. Members with the required role can now enter!');
+      return;
+    }
+  }
+  const giveaway = await getGiveawayByMessage(reaction.message.id);
+  if (!giveaway || giveaway.status !== 'active' || giveaway.emoji !== reaction.emoji.toString()) return;
+  const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
+  if (giveaway.required_role_id && !member?.roles.cache.has(giveaway.required_role_id)) return reaction.users.remove(user.id).catch(() => null);
+  await addGiveawayEntry(giveaway.id, user.id);
 });
 client.on('introductionPanelRefresh', (guildId) => {
   clearTimeout(introductionPanelTimers.get(guildId));

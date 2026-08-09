@@ -13,6 +13,7 @@ import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurs
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
 import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, resetIntroduction, saveIntroductionSettings, clearIntroductionRecords } from './services/introductionService.js';
+import { createGiveaway, setGiveawayMessage, getGiveaway, getGiveawayEntries, finishGiveaway } from './services/giveawayService.js';
 const YACHIYO_PURPLE = 0x8e7dff;
 const YACHIYO_BLUE = 0x4db8e8;
 const yEmbed = (title, description, color = YACHIYO_PURPLE) => new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setFooter({ text: 'Yachiyo • Cosmic server manager' });
@@ -35,6 +36,9 @@ export const commands = [
   ,new SlashCommandBuilder().setName('introduction-reward-role').setDescription('Set or clear the introduction reward role.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addRoleOption(o=>o.setName('role').setDescription('Role to award; leave empty to clear').setRequired(false))
   ,new SlashCommandBuilder().setName('introduction-reward-cleanup').setDescription('Remove legacy introduction rewards and clear old records.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
   ,new SlashCommandBuilder().setName('emoji-upload').setDescription('Upload multiple images as server emojis.').setDefaultMemberPermissions(PermissionFlagsBits.ManageEmojisAndStickers).setDMPermission(false)
+  ,new SlashCommandBuilder().setName('giveaway').setDescription('Create and manage giveaways.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).setDMPermission(false)
+    .addSubcommand(s=>s.setName('start').setDescription('Start a giveaway.').addStringOption(o=>o.setName('prize').setDescription('What is being given away').setRequired(true)).addStringOption(o=>o.setName('duration').setDescription('Duration, e.g. 30m, 1h, 2d').setRequired(true)).addChannelOption(o=>o.setName('channel').setDescription('Giveaway channel').setRequired(true)).addUserOption(o=>o.setName('host').setDescription('Giveaway host').setRequired(false)).addIntegerOption(o=>o.setName('winners').setDescription('Number of winners').setMinValue(1).setMaxValue(20).setRequired(true)).addRoleOption(o=>o.setName('required_role').setDescription('Role required to enter').setRequired(false)))
+    .addSubcommand(s=>s.setName('repick').setDescription('Randomly repick winners.').addIntegerOption(o=>o.setName('giveaway_id').setDescription('Giveaway ID').setRequired(true)))
   ,new SlashCommandBuilder().setName('fish-setup').setDescription('Set the only channel where fishing is allowed.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Fishing channel').setRequired(true))
   ,new SlashCommandBuilder().setName('curse-setup').setDescription('Save curse words and activate the server filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('words').setDescription('Comma or newline separated words, in any language.').setRequired(true))
   ,new SlashCommandBuilder().setName('curse').setDescription('Activate, deactivate, or view the curse filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Filter action').setRequired(true).addChoices({name:'Activate',value:'on'},{name:'Deactivate',value:'off'},{name:'View status',value:'status'}))
@@ -75,6 +79,29 @@ export async function handleCommand(interaction) {
   const adminOnly=['economy-add','logs','confession-setup','introduction-setup','introduction-panel','introduction-reset','introduction-status','fish-setup','curse-setup','curse','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout'];
   if(adminOnly.includes(name) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return interaction.reply({content:'🛡️ Only server administrators can use this command.',ephemeral:true});
   if(name==='ping') return interaction.reply({embeds:[yEmbed('☾ Yachiyo is watching over this server.','✦ The moonlit command center is online and watching this server.',YACHIYO_BLUE)]});
+  if (name === 'giveaway') {
+    const action = interaction.options.getSubcommand();
+    if (action === 'repick') {
+      const giveaway = await getGiveaway(interaction.options.getInteger('giveaway_id'));
+      if (!giveaway) return interaction.reply({content:'Giveaway not found.', ephemeral:true});
+      const entries = await getGiveawayEntries(giveaway.id);
+      const winners = entries.sort(() => Math.random() - 0.5).slice(0, giveaway.winner_count);
+      await finishGiveaway(giveaway.id, winners);
+      return interaction.reply({content: winners.length ? '🎉 New random winner(s): ' + winners.map(id => '<@' + id + '>').join(', ') : 'There are no eligible participants.'});
+    }
+    const duration = interaction.options.getString('duration');
+    const match = duration.match(/^(\d+)\s*(s|m|h|d)$/i);
+    if (!match) return interaction.reply({content:'Duration must look like `30m`, `1h`, or `2d`.', ephemeral:true});
+    const multipliers = {s:1000,m:60000,h:3600000,d:86400000};
+    const endsAt = new Date(Date.now() + Number(match[1]) * multipliers[match[2].toLowerCase()]);
+    const channel = interaction.options.getChannel('channel');
+    const giveaway = await createGiveaway({guildId:interaction.guildId,channelId:channel.id,hostUserId:interaction.options.getUser('host')?.id ?? interaction.user.id,prize:interaction.options.getString('prize'),endsAt,winnerCount:interaction.options.getInteger('winners'),requiredRoleId:interaction.options.getRole('required_role')?.id ?? null});
+    const message = await channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('🎉 Giveaway').setDescription('**Prize:** '+giveaway.prize+'\n**Winners:** '+giveaway.winner_count+'\n**Ends:** <t:'+Math.floor(endsAt.getTime()/1000)+':R>\n\nThe host must react to this message with the emoji members should use to enter.') ]});
+    await setGiveawayMessage(giveaway.id, message.id);
+    (interaction.client.pendingGiveawayEmoji ??= new Map()).set(message.id, giveaway.id);
+    setTimeout(() => interaction.client.emit('giveawayEnd', giveaway.id), Math.max(1000, endsAt.getTime() - Date.now()));
+    return interaction.reply({content:'✅ Giveaway **#'+giveaway.id+'** created in <#'+channel.id+'>. React to the giveaway message with your chosen emoji to activate entries.', ephemeral:true});
+  }
   if (name === 'emoji-upload') {
     if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ManageEmojisAndStickers)) return interaction.reply({content:'Yachiyo needs **Manage Expressions** to create server emojis.', ephemeral:true});
     await interaction.reply({content:'📎 Send all the images you want to convert in your next message in this channel. You have 60 seconds.', ephemeral:true});

@@ -131,6 +131,18 @@ CREATE TABLE IF NOT EXISTS protected_channels (
   guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, enabled BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id, channel_id)
 );
+CREATE TABLE IF NOT EXISTS giveaways (
+  id BIGSERIAL PRIMARY KEY, guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, message_id TEXT,
+  host_user_id TEXT NOT NULL, prize TEXT NOT NULL, ends_at TIMESTAMPTZ NOT NULL,
+  winner_count INTEGER NOT NULL DEFAULT 1, required_role_id TEXT, emoji TEXT,
+  status TEXT NOT NULL DEFAULT 'active', winner_user_ids TEXT[] NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS giveaway_entries (
+  giveaway_id BIGINT NOT NULL REFERENCES giveaways(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL, entered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (giveaway_id, user_id)
+);
 
 `;
 
