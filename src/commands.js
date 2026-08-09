@@ -32,6 +32,7 @@ export const commands = [
   ,new SlashCommandBuilder().setName('introduction-template').setDescription('View or edit the introduction template.').setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Template action').setRequired(false).addChoices({name:'View template',value:'view'},{name:'Edit template',value:'edit'}))
   ,new SlashCommandBuilder().setName('introduction-reset').setDescription('Reset a member introduction limit.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addUserOption(o=>o.setName('user').setDescription('Member to reset').setRequired(true))
   ,new SlashCommandBuilder().setName('introduction-status').setDescription('View introduction system status.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
+  ,new SlashCommandBuilder().setName('introduction-reward-role').setDescription('Set or clear the introduction reward role.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addRoleOption(o=>o.setName('role').setDescription('Role to award; leave empty to clear').setRequired(false))
   ,new SlashCommandBuilder().setName('fish-setup').setDescription('Set the only channel where fishing is allowed.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Fishing channel').setRequired(true))
   ,new SlashCommandBuilder().setName('curse-setup').setDescription('Save curse words and activate the server filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('words').setDescription('Comma or newline separated words, in any language.').setRequired(true))
   ,new SlashCommandBuilder().setName('curse').setDescription('Activate, deactivate, or view the curse filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Filter action').setRequired(true).addChoices({name:'Activate',value:'on'},{name:'Deactivate',value:'off'},{name:'View status',value:'status'}))
@@ -147,6 +148,13 @@ export async function handleCommand(interaction) {
     const settings = await getIntroductionStatus(interaction.guildId);
     if (!settings) return interaction.reply({content:'Introduction is not set up yet.', ephemeral:true});
     return interaction.reply({embeds:[yEmbed('🌷 Introduction status', 'Channel: <#' + settings.channel_id + '>\nAccepted introductions: **' + settings.accepted_count + '**\nMember limit: **1 accepted introduction**\nPanel message: ' + (settings.panel_message_id ? 'connected' : 'not posted'))], ephemeral:true});
+  }
+  if (name === 'introduction-reward-role') {
+    const settings = await getIntroductionStatus(interaction.guildId);
+    if (!settings) return interaction.reply({content:'Introduction is not set up yet. Run `/introduction-setup` first.', ephemeral:true});
+    const role = interaction.options.getRole('role');
+    await saveIntroductionSettings({guildId: interaction.guildId, channelId: settings.channel_id, template: settings.template, panelTitle: settings.panel_title, panelMessage: settings.panel_message, rewardRoleId: role?.id ?? null});
+    return interaction.reply({content: role ? '✅ Introduction reward role set to <@&' + role.id + '>.' : '✅ Introduction reward role cleared.', ephemeral:true});
   }
   if(name==='curse-setup') {
     const words=parseCurseWords(interaction.options.getString('words'));
