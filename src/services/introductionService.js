@@ -18,17 +18,23 @@ export function renderServerEmojis(content, guild) {
   });
 }
 
+const normalizeIntroductionLabel = value => String(value ?? '')
+  .replace(/<a?:[A-Za-z0-9_]{2,32}:\d+>/g, '')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .toLocaleLowerCase();
+
 const templateFields = template => template.split('\n')
-  .map(line => line.match(/^\s*([^:\n]+):\s*(.*)$/))
+  .map(line => line.replace(/<a?:[A-Za-z0-9_]{2,32}:\d+>/g, '').match(/^\s*(.*?)\s*:\s*$/))
   .filter(Boolean)
-  .map(([, label]) => label.trim().toLowerCase());
+  .map(([, label]) => normalizeIntroductionLabel(label));
 
 export function isIntroductionTemplateValid(content, template) {
   const fields = templateFields(template);
   if (!fields.length) return false;
   const lines = new Map(content.split('\n').map(line => {
-    const match = line.match(/^\s*([^:\n]+):\s*(.*)$/);
-    return match ? [match[1].trim().toLowerCase(), match[2].trim()] : null;
+    const match = line.replace(/<a?:[A-Za-z0-9_]{2,32}:\d+>/g, '').match(/^\s*(.*?)\s*:\s*(.*)$/);
+    return match ? [normalizeIntroductionLabel(match[1]), match[2].trim()] : null;
   }).filter(Boolean));
   return fields.every(field => lines.has(field) && lines.get(field).length > 0);
 }
