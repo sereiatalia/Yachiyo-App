@@ -298,13 +298,8 @@ client.on('messageCreate', async message => {
   if (introductionSettings && message.channelId === introductionSettings.channel_id) {
     const isStaff = message.member?.permissions?.has(PermissionFlagsBits.Administrator) || message.member?.permissions?.has(PermissionFlagsBits.ManageGuild) || message.member?.permissions?.has(PermissionFlagsBits.ManageMessages);
     const count = await getIntroductionCount(message.guild.id, message.author.id);
-    if (!isStaff && count >= 1) {
-      filteredMessageIds.add(message.id);
-      await message.delete().catch(() => null);
-      return;
-    }
     if (!isStaff) {
-      await recordIntroduction(message.guild.id, message.author.id, message.id);
+      if (count < 1) await recordIntroduction(message.guild.id, message.author.id, message.id);
       if (introductionSettings.reward_role_id) {
         const role = message.guild.roles.cache.get(introductionSettings.reward_role_id) ?? await message.guild.roles.fetch(introductionSettings.reward_role_id).catch(() => null);
         if (role && message.member && !message.member.roles.cache.has(role.id)) await message.member.roles.add(role, 'Valid introduction submitted').catch(error => console.error('[INTRODUCTION_REWARD]', error));
