@@ -73,6 +73,23 @@ client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.
 client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.create',targetId:channel.id,data:{summary:`Channel **${channel.name}** was created.`}}).catch(console.error); });
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
 client.on('interactionCreate', async interaction => {
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('introduction_setup:')) {
+    try {
+      const channelId = interaction.customId.split(':')[1];
+      const settings = await (await import('./services/introductionService.js')).saveIntroductionSettings({
+        guildId: interaction.guildId,
+        channelId,
+        template: interaction.fields.getTextInputValue('template').trim(),
+        panelTitle: interaction.fields.getTextInputValue('panel_title').trim(),
+        panelMessage: interaction.fields.getTextInputValue('panel_message').trim(),
+      });
+      await interaction.reply({content: '✅ Introduction settings saved. I am refreshing the panel in <#' + channelId + '>.', ephemeral:true});
+      return interaction.client.emit('introductionPanelRefresh', interaction.guildId, settings);
+    } catch (error) {
+      console.error('[INTRODUCTION_SETUP]', error);
+      return interaction.reply({content:'Yachiyo could not save the introduction settings.', ephemeral:true});
+    }
+  }
   if (interaction.isModalSubmit() && interaction.customId === 'confession_submit') {
     try {
       const content=interaction.fields.getTextInputValue('confession_content').trim();

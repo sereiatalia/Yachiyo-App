@@ -27,7 +27,7 @@ export const commands = [
   new SlashCommandBuilder().setName('logs').setDescription('Set the audit-log channel.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addChannelOption(o=>o.setName('channel').setDescription('Text channel').setRequired(true))
   ,new SlashCommandBuilder().setName('confession').setDescription('Submit an anonymous confession.').setDMPermission(false)
   ,new SlashCommandBuilder().setName('confession-setup').setDescription('Set the channel where confessions are published.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Confession channel').setRequired(true))
-  ,new SlashCommandBuilder().setName('introduction-setup').setDescription('Set up the member introduction channel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Introduction channel').setRequired(true)).addStringOption(o=>o.setName('template').setDescription('Custom template; use one Field: line per required field').setRequired(false)).addStringOption(o=>o.setName('panel_title').setDescription('Custom panel title').setRequired(false)).addStringOption(o=>o.setName('panel_message').setDescription('Custom panel instructions').setRequired(false))
+  ,new SlashCommandBuilder().setName('introduction-setup').setDescription('Set up the member introduction channel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Introduction channel').setRequired(true))
   ,new SlashCommandBuilder().setName('introduction-panel').setDescription('Refresh the introduction panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
   ,new SlashCommandBuilder().setName('introduction-template').setDescription('Show the introduction template.').setDMPermission(false)
   ,new SlashCommandBuilder().setName('introduction-reset').setDescription('Reset a member introduction limit.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addUserOption(o=>o.setName('user').setDescription('Member to reset').setRequired(true))
@@ -106,14 +106,12 @@ export async function handleCommand(interaction) {
   }
   if (name === 'introduction-setup') {
     const channel = interaction.options.getChannel('channel');
-    const settings = await saveIntroductionSettings({
-      guildId: interaction.guildId, channelId: channel.id,
-      template: interaction.options.getString('template') || DEFAULT_INTRODUCTION_TEMPLATE,
-      panelTitle: interaction.options.getString('panel_title') || '🌷 Introduction Channel',
-      panelMessage: interaction.options.getString('panel_message') || 'Click the button below to get your introduction template.\n\nPlease fill in every field and send it in this channel.'
-    });
-    await interaction.reply({content: '✅ Introduction settings saved. I am refreshing the panel in <#' + channel.id + '>.', ephemeral:true});
-    return interaction.client.emit('introductionPanelRefresh', interaction.guildId, settings);
+    const modal = new ModalBuilder().setCustomId('introduction_setup:' + channel.id).setTitle('Set up introductions');
+    const template = new TextInputBuilder().setCustomId('template').setLabel('Introduction template').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000).setValue(DEFAULT_INTRODUCTION_TEMPLATE);
+    const title = new TextInputBuilder().setCustomId('panel_title').setLabel('Panel title').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256).setValue('🌷 Introduction Channel');
+    const message = new TextInputBuilder().setCustomId('panel_message').setLabel('Panel description / instructions').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1000).setValue('Click the button below to get your introduction template.\n\nPlease fill in every field and send it in this channel.');
+    modal.addComponents(new ActionRowBuilder().addComponents(template), new ActionRowBuilder().addComponents(title), new ActionRowBuilder().addComponents(message));
+    return interaction.showModal(modal);
   }
   if (name === 'introduction-panel') {
     const settings = await getIntroductionStatus(interaction.guildId);
