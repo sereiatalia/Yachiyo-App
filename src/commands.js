@@ -12,7 +12,7 @@ import { setConfessionChannel } from './services/confessionService.js';
 import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurseSettings } from './services/curseService.js';
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
-import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, resetIntroduction, saveIntroductionSettings, listIntroducedUsers } from './services/introductionService.js';
+import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, resetIntroduction, saveIntroductionSettings, listIntroducedUsers, clearIntroductionRecords } from './services/introductionService.js';
 const YACHIYO_PURPLE = 0x8e7dff;
 const YACHIYO_BLUE = 0x4db8e8;
 const yEmbed = (title, description, color = YACHIYO_PURPLE) => new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setFooter({ text: 'Yachiyo • Cosmic server manager' });
@@ -33,6 +33,7 @@ export const commands = [
   ,new SlashCommandBuilder().setName('introduction-reset').setDescription('Reset a member introduction limit.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addUserOption(o=>o.setName('user').setDescription('Member to reset').setRequired(true))
   ,new SlashCommandBuilder().setName('introduction-status').setDescription('View introduction system status.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
   ,new SlashCommandBuilder().setName('introduction-reward-role').setDescription('Set or clear the introduction reward role.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addRoleOption(o=>o.setName('role').setDescription('Role to award; leave empty to clear').setRequired(false))
+  ,new SlashCommandBuilder().setName('introduction-reward-cleanup').setDescription('Remove legacy introduction rewards and clear old records.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
   ,new SlashCommandBuilder().setName('fish-setup').setDescription('Set the only channel where fishing is allowed.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Fishing channel').setRequired(true))
   ,new SlashCommandBuilder().setName('curse-setup').setDescription('Save curse words and activate the server filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('words').setDescription('Comma or newline separated words, in any language.').setRequired(true))
   ,new SlashCommandBuilder().setName('curse').setDescription('Activate, deactivate, or view the curse filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Filter action').setRequired(true).addChoices({name:'Activate',value:'on'},{name:'Deactivate',value:'off'},{name:'View status',value:'status'}))
@@ -163,6 +164,20 @@ export async function handleCommand(interaction) {
       if (member && !member.roles.cache.has(role.id) && await member.roles.add(role, 'Existing valid introduction').then(() => true).catch(() => false)) assigned++;
     }
     return interaction.reply({content:'✅ Introduction reward role set to <@&' + role.id + '>. Assigned it to **' + assigned + '** existing introduced member(s); future valid introductions will receive it automatically.', ephemeral:true});
+  }
+  if (name === 'introduction-reward-cleanup') {
+    const settings = await getIntroductionStatus(interaction.guildId);
+    if (!settings) return interaction.reply({content:'Introduction is not set up yet.', ephemeral:true});
+    const users = await listIntroducedUsers(interaction.guildId);
+    let removed = 0;
+    if (settings.reward_role_id) {
+      for (const row of users) {
+        const member = await interaction.guild.members.fetch(row.user_id).catch(() => null);
+        if (member?.roles.cache.has(settings.reward_role_id) && await member.roles.remove(settings.reward_role_id, 'Legacy introduction reward cleanup').then(() => true).catch(() => false)) removed++;
+      }
+    }
+    await clearIntroductionRecords(interaction.guildId);
+    return interaction.reply({content:'✅ Cleared legacy introduction records and removed the old reward role from **' + removed + '** member(s). The reward role setting remains active for new messages.', ephemeral:true});
   }
   if(name==='curse-setup') {
     const words=parseCurseWords(interaction.options.getString('words'));

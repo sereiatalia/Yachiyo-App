@@ -88,6 +88,10 @@ export async function listIntroducedUsers(guildId) {
   return rows;
 }
 
+export async function clearIntroductionRecords(guildId) {
+  await query('DELETE FROM introduction_counts WHERE guild_id = $1', [guildId]);
+}
+
 export async function resetIntroduction(guildId, userId) {
   await query('DELETE FROM introduction_counts WHERE guild_id = $1 AND user_id = $2', [guildId, userId]);
 }
