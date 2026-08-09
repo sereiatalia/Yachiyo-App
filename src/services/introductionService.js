@@ -9,6 +9,15 @@ export const DEFAULT_INTRODUCTION_TEMPLATE = [
   '୨୧ ─────────────── ୨୧',
 ].join('\n');
 
+// Discord only renders custom emojis when they are sent as <:name:id> or
+// <a:name:id>; typing :name: in a message remains plain text.
+export function renderServerEmojis(content, guild) {
+  return String(content ?? '').replace(/:([A-Za-z0-9_]{2,32}):/g, (match, name) => {
+    const emoji = guild?.emojis?.cache?.find(item => item.name?.toLowerCase() === name.toLowerCase());
+    return emoji ? emoji.toString() : match;
+  });
+}
+
 const templateFields = template => template.split('\n')
   .map(line => line.match(/^\s*([^:\n]+):\s*(.*)$/))
   .filter(Boolean)

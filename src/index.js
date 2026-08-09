@@ -10,7 +10,7 @@ import { fishAgain } from './handlers/fishing.js';
 import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 import { getCurseSettings, findMatchedCurseWords, recordCurseWarning } from './services/curseService.js';
-import { getIntroductionSettings, getIntroductionCount, isIntroductionTemplateValid, recordIntroduction, setIntroductionPanelMessage } from './services/introductionService.js';
+import { getIntroductionSettings, getIntroductionCount, isIntroductionTemplateValid, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis } from './services/introductionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -50,7 +50,7 @@ async function refreshIntroductionPanel(guildId) {
     const oldPanel = await channel.messages.fetch(settings.panel_message_id).catch(() => null);
     if (oldPanel?.author?.id === client.user?.id) await oldPanel.delete().catch(() => null);
   }
-  const panel = await channel.send({ embeds: [new EmbedBuilder().setColor(0xf3a6c7).setTitle(settings.panel_title).setDescription(settings.panel_message)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('introduction_get_template').setLabel('୨୧ Get template').setStyle(ButtonStyle.Primary))] });
+  const panel = await channel.send({ embeds: [new EmbedBuilder().setColor(0xf3a6c7).setTitle(renderServerEmojis(settings.panel_title, channel.guild)).setDescription(renderServerEmojis(settings.panel_message, channel.guild))], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('introduction_get_template').setLabel('୨୧ Get template').setStyle(ButtonStyle.Primary))] });
   await setIntroductionPanelMessage(guildId, panel.id);
 }
 client.on('guildCreate', guild => ensureGuild(guild.id).catch(console.error));
@@ -158,7 +158,7 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isButton() && interaction.customId === 'introduction_get_template') {
     const settings = await getIntroductionSettings(interaction.guildId);
     if (!settings) return interaction.reply({content:'Introduction is not set up yet.', ephemeral:true});
-    return interaction.reply({content:'Copy this template, fill every field, then send it in <#' + settings.channel_id + '>:\n```\n' + settings.template + '\n```', ephemeral:true});
+    return interaction.reply({content:'Copy this template, fill every field, then send it in <#' + settings.channel_id + '>:\n\n' + renderServerEmojis(settings.template, interaction.guild), ephemeral:true});
   }
   if (interaction.isButton() && interaction.customId.startsWith('confession_reply:')) {
     const confessionId=interaction.customId.split(':')[1];
