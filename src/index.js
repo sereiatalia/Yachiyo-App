@@ -10,7 +10,7 @@ import { fishAgain } from './handlers/fishing.js';
 import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 import { getCurseSettings, findMatchedCurseWords, recordCurseWarning } from './services/curseService.js';
-import { getIntroductionSettings, getIntroductionCount, isIntroductionTemplateValid, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, isProtectedChannel } from './services/introductionService.js';
+import { getIntroductionSettings, getIntroductionCount, isIntroductionTemplateValid, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -58,10 +58,18 @@ client.on('guildMemberAdd', m => sendAuditLog(client,m.guild,{eventType:'member.
 client.on('guildMemberRemove', m => sendAuditLog(client,m.guild,{eventType:'member.leave',targetId:m.id,data:{summary:`${m.user.tag} left the server.`}}).catch(console.error));
 client.on('messageDelete', async msg => {
   if (filteredMessageIds.delete(msg.id)) return;
-  if (!msg.guild || !msg.author || msg.author.bot || msg.author.id === client.user?.id) return;
-  if (await isProtectedChannel(msg.guild.id, msg.channelId).catch(() => false)) {
-    await sendAuditLog(client, msg.guild, { eventType:'moderation.protected_message_delete', actorId:msg.author.id, targetId:msg.channelId, data:{channelName:msg.channel?.name, messageId:msg.id, content:msg.content, summary:'A message was deleted in a protected channel.'} }).catch(console.error);
+  if (!msg.guild) return;
+  const intro = await getIntroductionByMessageId(msg.guild.id, msg.id).catch(() => null);
+  if (intro) {
+    const settings = await getIntroductionSettings(msg.guild.id).catch(() => null);
+    await resetIntroduction(msg.guild.id, intro.user_id).catch(console.error);
+    const member = await msg.guild.members.fetch(intro.user_id).catch(() => null);
+    if (settings?.reward_role_id && member?.roles.cache.has(settings.reward_role_id)) {
+      await member.roles.remove(settings.reward_role_id, 'Introduction message deleted').catch(console.error);
+    }
+    await sendAuditLog(client, msg.guild, { eventType:'moderation.introduction_deleted', actorId:intro.user_id, targetId:msg.channelId, data:{messageId:msg.id, summary:'An introduction was deleted; its reward role was removed.'} }).catch(console.error);
   }
+  if (!msg.author || msg.author.bot || msg.author.id === client.user?.id) return;
   sendAuditLog(client, msg.guild, { eventType:'message.delete', actorId:msg.author.id, targetId:msg.channelId, data:{ channelName:msg.channel?.name, messageId:msg.id, authorId:msg.author.id, createdTimestamp:msg.createdTimestamp, content:msg.content, attachments:msg.attachments?.size, attachmentUrls:[...msg.attachments.values()].map(a => a.url), summary:'A message was deleted.' } }).catch(console.error);
 });
 client.on('messageUpdate', async (oldMsg, newMsg) => {
@@ -297,7 +305,7 @@ client.on('messageCreate', async message => {
       return;
     }
     if (!isStaff && valid) {
-      await recordIntroduction(message.guild.id, message.author.id);
+      await recordIntroduction(message.guild.id, message.author.id, message.id);
       if (introductionSettings.reward_role_id) {
         const role = message.guild.roles.cache.get(introductionSettings.reward_role_id) ?? await message.guild.roles.fetch(introductionSettings.reward_role_id).catch(() => null);
         if (role && message.member && !message.member.roles.cache.has(role.id)) await message.member.roles.add(role, 'Valid introduction submitted').catch(error => console.error('[INTRODUCTION_REWARD]', error));

@@ -124,8 +124,9 @@ CREATE TABLE IF NOT EXISTS introduction_settings (
 ALTER TABLE introduction_settings ADD COLUMN IF NOT EXISTS reward_role_id TEXT;
 CREATE TABLE IF NOT EXISTS introduction_counts (
   guild_id TEXT NOT NULL, user_id TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id, user_id)
+  introduction_message_id TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id, user_id)
 );
+ALTER TABLE introduction_counts ADD COLUMN IF NOT EXISTS introduction_message_id TEXT;
 CREATE TABLE IF NOT EXISTS protected_channels (
   guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, enabled BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id, channel_id)

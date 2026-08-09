@@ -58,12 +58,17 @@ export async function setIntroductionPanelMessage(guildId, messageId) {
   await query('UPDATE introduction_settings SET panel_message_id = $2, updated_at = NOW() WHERE guild_id = $1', [guildId, messageId]);
 }
 
-export async function recordIntroduction(guildId, userId) {
+export async function recordIntroduction(guildId, userId, messageId) {
   const { rows } = await query(`
-    INSERT INTO introduction_counts (guild_id, user_id, count) VALUES ($1, $2, 1)
-    ON CONFLICT (guild_id, user_id) DO UPDATE SET count = introduction_counts.count + 1, updated_at = NOW()
-    RETURNING count`, [guildId, userId]);
+    INSERT INTO introduction_counts (guild_id, user_id, count, introduction_message_id) VALUES ($1, $2, 1, $3)
+    ON CONFLICT (guild_id, user_id) DO UPDATE SET count = introduction_counts.count + 1, introduction_message_id = EXCLUDED.introduction_message_id, updated_at = NOW()
+    RETURNING count`, [guildId, userId, messageId]);
   return Number(rows[0].count);
+}
+
+export async function getIntroductionByMessageId(guildId, messageId) {
+  const { rows } = await query('SELECT user_id FROM introduction_counts WHERE guild_id = $1 AND introduction_message_id = $2', [guildId, messageId]);
+  return rows[0] ?? null;
 }
 
 export async function resetIntroduction(guildId, userId) {
