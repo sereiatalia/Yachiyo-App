@@ -7,11 +7,10 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process
 const sql = `
 CREATE TABLE IF NOT EXISTS guild_settings (
   guild_id TEXT PRIMARY KEY, prefix TEXT NOT NULL DEFAULT '.', timezone TEXT NOT NULL DEFAULT 'UTC',
-  log_channel_id TEXT, moderation_log_channel_id TEXT, confession_channel_id TEXT, fish_channel_id TEXT, economy_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  log_channel_id TEXT, moderation_log_channel_id TEXT, economy_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  curse_filter_enabled BOOLEAN NOT NULL DEFAULT FALSE, curse_words JSONB NOT NULL DEFAULT '[]',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS confession_channel_id TEXT;
-ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS fish_channel_id TEXT;
 CREATE TABLE IF NOT EXISTS economy_users (
   user_id TEXT PRIMARY KEY, wallet BIGINT NOT NULL DEFAULT 0 CHECK (wallet >= 0), bank BIGINT NOT NULL DEFAULT 0 CHECK (bank >= 0),
   bank_capacity BIGINT NOT NULL DEFAULT 10000, last_daily TIMESTAMPTZ, last_work TIMESTAMPTZ, last_fish TIMESTAMPTZ,
@@ -28,95 +27,27 @@ CREATE TABLE IF NOT EXISTS moderation_cases (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS moderation_cases_guild_idx ON moderation_cases(guild_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS curse_warnings (
+  id BIGSERIAL PRIMARY KEY, guild_id TEXT NOT NULL, user_id TEXT NOT NULL, word TEXT NOT NULL,
+  message_id TEXT, channel_id TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS curse_warnings_lookup_idx ON curse_warnings(guild_id, user_id, word, created_at DESC);
 CREATE TABLE IF NOT EXISTS audit_logs (
   id BIGSERIAL PRIMARY KEY, guild_id TEXT NOT NULL, event_type TEXT NOT NULL, actor_user_id TEXT,
   target_id TEXT, data JSONB NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS audit_logs_guild_idx ON audit_logs(guild_id, created_at DESC);
+ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS curse_filter_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS curse_words JSONB NOT NULL DEFAULT '[]';
 CREATE TABLE IF NOT EXISTS fish_catches (
   id BIGSERIAL PRIMARY KEY, user_id TEXT NOT NULL, fish_name TEXT NOT NULL, rarity TEXT NOT NULL,
   value BIGINT NOT NULL, caught_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS fish_catches_user_idx ON fish_catches(user_id, caught_at DESC);
-CREATE TABLE IF NOT EXISTS confessions (
-  id BIGSERIAL PRIMARY KEY, guild_id TEXT NOT NULL, author_user_id TEXT NOT NULL,
-  content TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS confessions_guild_idx ON confessions(guild_id, id DESC);
-ALTER TABLE confessions ADD COLUMN IF NOT EXISTS channel_id TEXT;
-ALTER TABLE confessions ADD COLUMN IF NOT EXISTS message_id TEXT;
-CREATE TABLE IF NOT EXISTS confession_replies (
-  id BIGSERIAL PRIMARY KEY, confession_id BIGINT NOT NULL REFERENCES confessions(id) ON DELETE CASCADE,
-  guild_id TEXT NOT NULL, author_user_id TEXT NOT NULL, mode TEXT NOT NULL, content TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS confession_replies_confession_idx ON confession_replies(confession_id, id DESC);
-ALTER TABLE confessions ADD COLUMN IF NOT EXISTS confession_number INTEGER;
-WITH numbered AS (
-  SELECT id, ROW_NUMBER() OVER (PARTITION BY guild_id ORDER BY id) AS number
-  FROM confessions
-)
-UPDATE confessions c SET confession_number=number FROM numbered n WHERE c.id=n.id AND c.confession_number IS NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS confessions_guild_number_idx ON confessions(guild_id, confession_number);
-CREATE TABLE IF NOT EXISTS confession_counters (
-  guild_id TEXT PRIMARY KEY,
-  next_number INTEGER NOT NULL DEFAULT 1
-);
-INSERT INTO confession_counters (guild_id, next_number)
-SELECT guild_id, MAX(confession_number) + 1
-FROM confessions
-GROUP BY guild_id
-ON CONFLICT (guild_id) DO UPDATE SET next_number=GREATEST(confession_counters.next_number, EXCLUDED.next_number);
 CREATE TABLE IF NOT EXISTS fish_inventory (
   user_id TEXT NOT NULL, fish_name TEXT NOT NULL, rarity TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, fish_name)
 );
-CREATE TABLE IF NOT EXISTS fish_rods (
-  user_id TEXT PRIMARY KEY, level INTEGER NOT NULL DEFAULT 1, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-ALTER TABLE fish_rods ADD COLUMN IF NOT EXISTS upgrade_level INTEGER NOT NULL DEFAULT 1;
-CREATE TABLE IF NOT EXISTS fish_market_supply (
-  fish_name TEXT PRIMARY KEY, rarity TEXT NOT NULL, caught_count INTEGER NOT NULL DEFAULT 0,
-  base_value INTEGER NOT NULL DEFAULT 20, demand_multiplier NUMERIC(5,2) NOT NULL DEFAULT 1.00,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE TABLE IF NOT EXISTS fish_market_history (
-  id BIGSERIAL PRIMARY KEY,
-  fish_name TEXT NOT NULL,
-  rarity TEXT NOT NULL,
-  price NUMERIC(12,2) NOT NULL,
-  demand_multiplier NUMERIC(5,2) NOT NULL,
-  caught_count INTEGER NOT NULL DEFAULT 0,
-  recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS fish_market_history_fish_idx ON fish_market_history(fish_name, recorded_at DESC);
-CREATE TABLE IF NOT EXISTS fish_items (
-  user_id TEXT NOT NULL, item_id TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0,
-  expires_at TIMESTAMPTZ, PRIMARY KEY (user_id, item_id)
-);
-CREATE TABLE IF NOT EXISTS fish_favorites (
-  user_id TEXT NOT NULL,
-  fish_name TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (user_id, fish_name)
-);
-CREATE INDEX IF NOT EXISTS fish_favorites_user_idx ON fish_favorites(user_id, created_at DESC);
-CREATE TABLE IF NOT EXISTS curse_settings (
-  guild_id TEXT PRIMARY KEY,
-  enabled BOOLEAN NOT NULL DEFAULT FALSE,
-  words TEXT[] NOT NULL DEFAULT '{}',
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE TABLE IF NOT EXISTS curse_warnings (
-  guild_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  word TEXT NOT NULL,
-  warning_count INTEGER NOT NULL DEFAULT 0,
-  last_warned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (guild_id, user_id, word)
-);
-CREATE INDEX IF NOT EXISTS curse_warnings_guild_idx ON curse_warnings(guild_id, last_warned_at DESC);
-
 `;
 
 try { await pool.query(sql); console.log('Yachiyo database migration complete.'); }
