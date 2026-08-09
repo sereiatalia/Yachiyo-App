@@ -197,7 +197,15 @@ client.on('interactionCreate', async interaction => {
       const channel = await interaction.client.channels.fetch(settings.channel_id).catch(() => null);
       if (!channel?.isTextBased()) return interaction.reply({content:'The configured introduction channel is unavailable.', ephemeral:true});
       const content = interaction.fields.getTextInputValue('introduction_content').trim();
-      const posted = await channel.send({content: renderServerEmojis(content, interaction.guild)});
+      const posted = await channel.send({
+        content: '<@' + interaction.user.id + '>',
+        embeds: [new EmbedBuilder()
+          .setColor(0xf3a6c7)
+          .setAuthor({name: interaction.user.globalName || interaction.user.username, iconURL: interaction.user.displayAvatarURL({ extension: 'png', size: 128 })})
+          .setTitle('🌷 Introduction')
+          .setDescription(renderServerEmojis(content, interaction.guild))
+          .setFooter({text: 'Yachiyo • member introduction'})]
+      });
       await recordIntroduction(interaction.guildId, interaction.user.id, posted.id);
       const role = settings.reward_role_id ? (interaction.guild.roles.cache.get(settings.reward_role_id) ?? await interaction.guild.roles.fetch(settings.reward_role_id).catch(() => null)) : null;
       if (!role) return interaction.reply({content:'✅ Your introduction was posted, but no reward role is configured. Ask an admin to use `/introduction-reward-role`.', ephemeral:true});
