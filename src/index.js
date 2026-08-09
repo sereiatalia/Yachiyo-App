@@ -302,7 +302,13 @@ client.on('messageCreate', async message => {
       if (count < 1) await recordIntroduction(message.guild.id, message.author.id, message.id);
       if (introductionSettings.reward_role_id) {
         const role = message.guild.roles.cache.get(introductionSettings.reward_role_id) ?? await message.guild.roles.fetch(introductionSettings.reward_role_id).catch(() => null);
-        if (role && message.member && !message.member.roles.cache.has(role.id)) await message.member.roles.add(role, 'Valid introduction submitted').catch(error => console.error('[INTRODUCTION_REWARD]', error));
+        if (role && message.member && !message.member.roles.cache.has(role.id)) {
+          const roleAdded = await message.member.roles.add(role, 'Introduction submitted').then(() => true).catch(error => { console.error('[INTRODUCTION_REWARD]', error); return false; });
+          if (roleAdded) {
+            const confirmation = await message.channel.send('✅ <@' + message.author.id + '> received the introduction reward role <@&' + role.id + '>!').catch(() => null);
+            if (confirmation) setTimeout(() => confirmation.delete().catch(() => null), 8000);
+          }
+        }
       }
     }
     setTimeout(() => client.emit('introductionPanelRefresh', message.guild.id), 3000);
