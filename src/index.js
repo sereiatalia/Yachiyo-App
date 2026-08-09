@@ -1,6 +1,6 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits, Partials, PermissionFlagsBits } from 'discord.js';
-import { handleCommand } from './commands.js';
+import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes } from 'discord.js';
+import { commands, handleCommand } from './commands.js';
 import { ensureGuild, getFishChannel } from './services/guildService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { fishInventory, fishAlmanac, fishCollection } from './services/economyService.js';
@@ -22,7 +22,21 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
-client.once('ready', () => console.log(`Yachiyo is online as ${client.user.tag}`));
+client.once('ready', async () => {
+  try {
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    if (process.env.DISCORD_GUILD_ID) {
+      await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID), { body: commands });
+      console.log(`Registered ${commands.length} guild slash commands.`);
+    } else {
+      await rest.put(Routes.applicationCommands(process.env.DISCORD_CLIENT_ID), { body: commands });
+      console.log(`Registered ${commands.length} global slash commands.`);
+    }
+  } catch (error) {
+    console.error('[COMMAND_DEPLOY]', error);
+  }
+  console.log(`Yachiyo is online as ${client.user.tag}`);
+});
 client.on('introductionPanelRefresh', (guildId) => {
   clearTimeout(introductionPanelTimers.get(guildId));
   introductionPanelTimers.set(guildId, setTimeout(() => refreshIntroductionPanel(guildId).catch(console.error), 1500));
