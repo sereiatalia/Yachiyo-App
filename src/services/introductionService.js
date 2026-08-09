@@ -71,6 +71,11 @@ export async function getIntroductionByMessageId(guildId, messageId) {
   return rows[0] ?? null;
 }
 
+export async function listIntroducedUsers(guildId) {
+  const { rows } = await query('SELECT user_id FROM introduction_counts WHERE guild_id = $1 AND count > 0', [guildId]);
+  return rows;
+}
+
 export async function resetIntroduction(guildId, userId) {
   await query('DELETE FROM introduction_counts WHERE guild_id = $1 AND user_id = $2', [guildId, userId]);
 }

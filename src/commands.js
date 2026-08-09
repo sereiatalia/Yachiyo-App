@@ -12,7 +12,7 @@ import { setConfessionChannel } from './services/confessionService.js';
 import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurseSettings } from './services/curseService.js';
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
-import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, resetIntroduction, saveIntroductionSettings } from './services/introductionService.js';
+import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, resetIntroduction, saveIntroductionSettings, listIntroducedUsers } from './services/introductionService.js';
 const YACHIYO_PURPLE = 0x8e7dff;
 const YACHIYO_BLUE = 0x4db8e8;
 const yEmbed = (title, description, color = YACHIYO_PURPLE) => new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setFooter({ text: 'Yachiyo • Cosmic server manager' });
@@ -154,7 +154,15 @@ export async function handleCommand(interaction) {
     if (!settings) return interaction.reply({content:'Introduction is not set up yet. Run `/introduction-setup` first.', ephemeral:true});
     const role = interaction.options.getRole('role');
     await saveIntroductionSettings({guildId: interaction.guildId, channelId: settings.channel_id, template: settings.template, panelTitle: settings.panel_title, panelMessage: settings.panel_message, rewardRoleId: role?.id ?? null});
-    return interaction.reply({content: role ? '✅ Introduction reward role set to <@&' + role.id + '>.' : '✅ Introduction reward role cleared.', ephemeral:true});
+    if (!role) return interaction.reply({content:'✅ Introduction reward role cleared.', ephemeral:true});
+    if (!role.editable || !interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.reply({content:'⚠️ The role was saved, but Yachiyo cannot assign it. Give Yachiyo **Manage Roles** and move Yachiyo’s bot role above <@&' + role.id + '>.', ephemeral:true});
+    const users = await listIntroducedUsers(interaction.guildId);
+    let assigned = 0;
+    for (const row of users) {
+      const member = await interaction.guild.members.fetch(row.user_id).catch(() => null);
+      if (member && !member.roles.cache.has(role.id) && await member.roles.add(role, 'Existing valid introduction').then(() => true).catch(() => false)) assigned++;
+    }
+    return interaction.reply({content:'✅ Introduction reward role set to <@&' + role.id + '>. Assigned it to **' + assigned + '** existing introduced member(s); future valid introductions will receive it automatically.', ephemeral:true});
   }
   if(name==='curse-setup') {
     const words=parseCurseWords(interaction.options.getString('words'));
