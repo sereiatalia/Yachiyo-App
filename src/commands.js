@@ -9,7 +9,7 @@ import { setLogChannel, setFishChannel, getFishChannel, ensureGuild } from './se
 import { createCase, warn, recentCases } from './services/moderationService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { setConfessionChannel } from './services/confessionService.js';
-import { parseCurseWords, setCurseWords, setCurseEnabled, getCurseSettings } from './services/curseService.js';
+import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurseSettings } from './services/curseService.js';
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
 const YACHIYO_PURPLE = 0x8e7dff;
@@ -101,11 +101,10 @@ export async function handleCommand(interaction) {
   if(name==='curse-setup') {
     const words=parseCurseWords(interaction.options.getString('words'));
     if(!words.length) return interaction.reply({content:'Add at least one word, separated by commas or new lines.',ephemeral:true});
-    const currentSettings=await getCurseSettings(interaction.guildId);
-    const mergedWords=[...new Set([...(currentSettings.words??[]),...words])];
-    await setCurseWords(interaction.guildId,mergedWords);
+    const savedSettings=await addCurseWords(interaction.guildId,words);
+    const savedCount=savedSettings.words?.length??words.length;
     await setCurseEnabled(interaction.guildId,true);
-    return interaction.reply({embeds:[new EmbedBuilder().setColor(0xff6b9d).setTitle('🧼 Curse filter activated').setDescription('Saved **'+words.length+'** filtered word(s) for this server.\n\nMessages containing a match are removed immediately. Warnings are tracked separately for each user and word; the third warning applies a 1-minute timeout.')]});
+    return interaction.reply({embeds:[new EmbedBuilder().setColor(0xff6b9d).setTitle('🧼 Curse filter activated').setDescription('Saved **'+savedCount+'** filtered word(s) for this server.\n\nMessages containing a match are removed immediately. Warnings are tracked separately for each user and word; the third warning applies a 1-minute timeout.')]});
   }
   if(name==='curse-list') {
     const settings=await getCurseSettings(interaction.guildId);
