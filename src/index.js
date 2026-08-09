@@ -294,7 +294,7 @@ client.on('interactionCreate', async interaction => {
 });
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
-  const introductionSettings = await getIntroductionSettings(message.guild.id).catch(() => null);
+  const introductionSettings = await getIntroductionSettings(message.guild.id).catch(error => { console.error('[INTRODUCTION_SETTINGS]', error); return null; });
   if (introductionSettings && message.channelId === introductionSettings.channel_id) {
     const isStaff = message.member?.permissions?.has(PermissionFlagsBits.Administrator) || message.member?.permissions?.has(PermissionFlagsBits.ManageGuild) || message.member?.permissions?.has(PermissionFlagsBits.ManageMessages);
     const count = await getIntroductionCount(message.guild.id, message.author.id);
@@ -302,12 +302,21 @@ client.on('messageCreate', async message => {
       if (count < 1) await recordIntroduction(message.guild.id, message.author.id, message.id);
       if (introductionSettings.reward_role_id) {
         const role = message.guild.roles.cache.get(introductionSettings.reward_role_id) ?? await message.guild.roles.fetch(introductionSettings.reward_role_id).catch(() => null);
-        if (role && message.member && !message.member.roles.cache.has(role.id)) {
+        if (!role) {
+          const warning = await message.channel.send('⚠️ Yachiyo could not find the configured introduction reward role. Please ask an administrator to run `/introduction-reward-role` again.').catch(() => null);
+          if (warning) setTimeout(() => warning.delete().catch(() => null), 10000);
+        } else if (!message.guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles) || !role.editable) {
+          const warning = await message.channel.send('⚠️ Yachiyo cannot assign <@&' + role.id + '>. Give Yachiyo **Manage Roles** and move its bot role above the reward role.').catch(() => null);
+          if (warning) setTimeout(() => warning.delete().catch(() => null), 10000);
+        } else if (message.member && !message.member.roles.cache.has(role.id)) {
           const roleAdded = await message.member.roles.add(role, 'Introduction submitted').then(() => true).catch(error => { console.error('[INTRODUCTION_REWARD]', error); return false; });
           if (roleAdded) {
             const confirmation = await message.channel.send('✅ <@' + message.author.id + '> received the introduction reward role <@&' + role.id + '>!').catch(() => null);
             if (confirmation) setTimeout(() => confirmation.delete().catch(() => null), 8000);
           }
+        } else {
+          const confirmation = await message.channel.send('✅ <@' + message.author.id + '> already has the introduction reward role <@&' + role.id + '>.').catch(() => null);
+          if (confirmation) setTimeout(() => confirmation.delete().catch(() => null), 8000);
         }
       }
     }
