@@ -10,7 +10,7 @@ import { fishAgain } from './handlers/fishing.js';
 import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 import { getCurseSettings, findMatchedCurseWords, recordCurseWarning } from './services/curseService.js';
-import { getIntroductionSettings, getIntroductionCount, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
+import { getIntroductionSettings, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -50,7 +50,7 @@ async function refreshIntroductionPanel(guildId) {
     const oldPanel = await channel.messages.fetch(settings.panel_message_id).catch(() => null);
     if (oldPanel?.author?.id === client.user?.id) await oldPanel.delete().catch(() => null);
   }
-  const panel = await channel.send({ embeds: [new EmbedBuilder().setColor(0xf3a6c7).setTitle(renderServerEmojis(settings.panel_title, channel.guild)).setDescription(renderServerEmojis(settings.panel_message, channel.guild))], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('introduction_get_template').setLabel('୨୧ Get template').setStyle(ButtonStyle.Primary))] });
+  const panel = await channel.send({ embeds: [new EmbedBuilder().setColor(0xf3a6c7).setTitle(renderServerEmojis(settings.panel_title, channel.guild)).setDescription(renderServerEmojis(settings.panel_message, channel.guild))], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('introduction_get_template').setLabel('୨୧ Introduction').setStyle(ButtonStyle.Primary))] });
   await setIntroductionPanelMessage(guildId, panel.id);
 }
 client.on('guildCreate', guild => ensureGuild(guild.id).catch(console.error));
@@ -190,10 +190,31 @@ client.on('interactionCreate', async interaction => {
     modal.addComponents(new ActionRowBuilder().addComponents(input));
     return interaction.showModal(modal);
   }
+  if (interaction.isModalSubmit() && interaction.customId === 'introduction_submit') {
+    try {
+      const settings = await getIntroductionSettings(interaction.guildId);
+      if (!settings) return interaction.reply({content:'Introduction is not set up yet.', ephemeral:true});
+      const channel = await interaction.client.channels.fetch(settings.channel_id).catch(() => null);
+      if (!channel?.isTextBased()) return interaction.reply({content:'The configured introduction channel is unavailable.', ephemeral:true});
+      const content = interaction.fields.getTextInputValue('introduction_content').trim();
+      const posted = await channel.send({content: renderServerEmojis(content, interaction.guild)});
+      await recordIntroduction(interaction.guildId, interaction.user.id, posted.id);
+      const role = settings.reward_role_id ? (interaction.guild.roles.cache.get(settings.reward_role_id) ?? await interaction.guild.roles.fetch(settings.reward_role_id).catch(() => null)) : null;
+      if (!role) return interaction.reply({content:'✅ Your introduction was posted, but no reward role is configured. Ask an admin to use `/introduction-reward-role`.', ephemeral:true});
+      if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles) || !role.editable) return interaction.reply({content:'✅ Your introduction was posted, but Yachiyo cannot assign <@&' + role.id + '>. Give Yachiyo Manage Roles and move its bot role above the reward role.', ephemeral:true});
+      await interaction.member.roles.add(role, 'Introduction submitted');
+      return interaction.reply({content:'✅ Your introduction was posted in <#' + settings.channel_id + '> and you received <@&' + role.id + '>!', ephemeral:true});
+    } catch (error) {
+      console.error('[INTRODUCTION_SUBMIT]', error);
+      return interaction.reply({content:'Yachiyo could not submit your introduction or assign the reward role.', ephemeral:true});
+    }
+  }
   if (interaction.isButton() && interaction.customId === 'introduction_get_template') {
     const settings = await getIntroductionSettings(interaction.guildId);
     if (!settings) return interaction.reply({content:'Introduction is not set up yet.', ephemeral:true});
-    return interaction.reply({content:'Copy this template, fill every field, then send it in <#' + settings.channel_id + '>:\n\n' + renderServerEmojis(settings.template, interaction.guild), ephemeral:true});
+    const modal = new ModalBuilder().setCustomId('introduction_submit').setTitle('Submit your introduction');
+    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('introduction_content').setLabel('Your introduction').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000).setValue(settings.template)));
+    return interaction.showModal(modal);
   }
   if (interaction.isButton() && interaction.customId.startsWith('confession_reply:')) {
     const confessionId=interaction.customId.split(':')[1];
@@ -294,34 +315,6 @@ client.on('interactionCreate', async interaction => {
 });
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
-  const introductionSettings = await getIntroductionSettings(message.guild.id).catch(error => { console.error('[INTRODUCTION_SETTINGS]', error); return null; });
-  if (introductionSettings && message.channelId === introductionSettings.channel_id) {
-    const isStaff = message.member?.permissions?.has(PermissionFlagsBits.Administrator) || message.member?.permissions?.has(PermissionFlagsBits.ManageGuild) || message.member?.permissions?.has(PermissionFlagsBits.ManageMessages);
-    const count = await getIntroductionCount(message.guild.id, message.author.id);
-    if (!isStaff) {
-      if (count < 1) await recordIntroduction(message.guild.id, message.author.id, message.id);
-      if (introductionSettings.reward_role_id) {
-        const role = message.guild.roles.cache.get(introductionSettings.reward_role_id) ?? await message.guild.roles.fetch(introductionSettings.reward_role_id).catch(() => null);
-        if (!role) {
-          const warning = await message.channel.send('⚠️ Yachiyo could not find the configured introduction reward role. Please ask an administrator to run `/introduction-reward-role` again.').catch(() => null);
-          if (warning) setTimeout(() => warning.delete().catch(() => null), 10000);
-        } else if (!message.guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles) || !role.editable) {
-          const warning = await message.channel.send('⚠️ Yachiyo cannot assign <@&' + role.id + '>. Give Yachiyo **Manage Roles** and move its bot role above the reward role.').catch(() => null);
-          if (warning) setTimeout(() => warning.delete().catch(() => null), 10000);
-        } else if (message.member && !message.member.roles.cache.has(role.id)) {
-          const roleAdded = await message.member.roles.add(role, 'Introduction submitted').then(() => true).catch(error => { console.error('[INTRODUCTION_REWARD]', error); return false; });
-          if (roleAdded) {
-            const confirmation = await message.channel.send('✅ <@' + message.author.id + '> received the introduction reward role <@&' + role.id + '>!').catch(() => null);
-            if (confirmation) setTimeout(() => confirmation.delete().catch(() => null), 8000);
-          }
-        } else {
-          const confirmation = await message.channel.send('✅ <@' + message.author.id + '> already has the introduction reward role <@&' + role.id + '>.').catch(() => null);
-          if (confirmation) setTimeout(() => confirmation.delete().catch(() => null), 8000);
-        }
-      }
-    }
-    setTimeout(() => client.emit('introductionPanelRefresh', message.guild.id), 3000);
-  }
   try {
     const settings = await getCurseSettings(message.guild.id);
     const matchedWords = settings.enabled ? findMatchedCurseWords(message.content, settings.words) : [];
