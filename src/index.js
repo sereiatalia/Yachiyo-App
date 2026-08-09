@@ -202,7 +202,6 @@ client.on('interactionCreate', async interaction => {
         embeds: [new EmbedBuilder()
           .setColor(0xf3a6c7)
           .setAuthor({name: interaction.user.globalName || interaction.user.username, iconURL: interaction.user.displayAvatarURL({ extension: 'png', size: 128 })})
-          .setTitle('🌷 Introduction')
           .setDescription(renderServerEmojis(content, interaction.guild))
           .setFooter({text: 'Yachiyo • member introduction'})]
       });
