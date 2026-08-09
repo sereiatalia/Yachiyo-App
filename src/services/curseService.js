@@ -58,10 +58,18 @@ export async function getCurseSettings(guildId) {
 }
 
 export function findMatchedCurseWords(content, words) {
-  const haystack = String(content ?? '').toLocaleLowerCase();
+  const message = String(content ?? '');
   return [...new Set((words ?? [])
     .map(normalizeWord)
-    .filter(word => word && haystack.includes(word)))].sort((a, b) => b.length - a.length);
+    .filter(word => {
+      if (!word) return false;
+      const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      try {
+        return new RegExp(`(?:^|[^\p{L}\p{N}_])${escaped}(?=$|[^\p{L}\p{N}_])`, 'iu').test(message);
+      } catch {
+        return false;
+      }
+    }))].sort((a, b) => b.length - a.length);
 }
 
 export async function recordCurseWarning({ guildId, userId, word }) {
