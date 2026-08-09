@@ -10,7 +10,7 @@ import { fishAgain } from './handlers/fishing.js';
 import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 import { getCurseSettings, findMatchedCurseWords, recordCurseWarning } from './services/curseService.js';
-import { getIntroductionSettings, getIntroductionCount, isIntroductionTemplateValid, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis } from './services/introductionService.js';
+import { getIntroductionSettings, getIntroductionCount, isIntroductionTemplateValid, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, isProtectedChannel } from './services/introductionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -56,9 +56,12 @@ async function refreshIntroductionPanel(guildId) {
 client.on('guildCreate', guild => ensureGuild(guild.id).catch(console.error));
 client.on('guildMemberAdd', m => sendAuditLog(client,m.guild,{eventType:'member.join',targetId:m.id,data:{summary:`${m.user.tag} joined the server.`}}).catch(console.error));
 client.on('guildMemberRemove', m => sendAuditLog(client,m.guild,{eventType:'member.leave',targetId:m.id,data:{summary:`${m.user.tag} left the server.`}}).catch(console.error));
-client.on('messageDelete', msg => {
+client.on('messageDelete', async msg => {
   if (filteredMessageIds.delete(msg.id)) return;
   if (!msg.guild || !msg.author || msg.author.bot || msg.author.id === client.user?.id) return;
+  if (await isProtectedChannel(msg.guild.id, msg.channelId).catch(() => false)) {
+    await sendAuditLog(client, msg.guild, { eventType:'moderation.protected_message_delete', actorId:msg.author.id, targetId:msg.channelId, data:{channelName:msg.channel?.name, messageId:msg.id, content:msg.content, summary:'A message was deleted in a protected channel.'} }).catch(console.error);
+  }
   sendAuditLog(client, msg.guild, { eventType:'message.delete', actorId:msg.author.id, targetId:msg.channelId, data:{ channelName:msg.channel?.name, messageId:msg.id, authorId:msg.author.id, createdTimestamp:msg.createdTimestamp, content:msg.content, attachments:msg.attachments?.size, attachmentUrls:[...msg.attachments.values()].map(a => a.url), summary:'A message was deleted.' } }).catch(console.error);
 });
 client.on('messageUpdate', async (oldMsg, newMsg) => {
@@ -87,7 +90,7 @@ client.on('interactionCreate', async interaction => {
       const panelMessage = interaction.customId === 'introduction_edit_panel'
         ? interaction.fields.getTextInputValue('panel_message').trim()
         : current.panel_message;
-      await saveIntroductionSettings({guildId: interaction.guildId, channelId: current.channel_id, template, panelTitle, panelMessage});
+      await saveIntroductionSettings({guildId: interaction.guildId, channelId: current.channel_id, template, panelTitle, panelMessage, rewardRoleId: current.reward_role_id});
       await interaction.reply({content:'✅ Introduction ' + (interaction.customId.endsWith('template') ? 'template' : 'panel') + ' updated.', ephemeral:true});
       if (interaction.customId === 'introduction_edit_panel') interaction.client.emit('introductionPanelRefresh', interaction.guildId);
       return;
@@ -98,13 +101,14 @@ client.on('interactionCreate', async interaction => {
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('introduction_setup:')) {
     try {
-      const channelId = interaction.customId.split(':')[1];
+      const [, channelId, rewardRoleId] = interaction.customId.split(':');
       const settings = await (await import('./services/introductionService.js')).saveIntroductionSettings({
         guildId: interaction.guildId,
         channelId,
         template: interaction.fields.getTextInputValue('template').trim(),
         panelTitle: interaction.fields.getTextInputValue('panel_title').trim(),
         panelMessage: interaction.fields.getTextInputValue('panel_message').trim(),
+        rewardRoleId: rewardRoleId || null,
       });
       await interaction.reply({content: '✅ Introduction settings saved. I am refreshing the panel in <#' + channelId + '>.', ephemeral:true});
       return interaction.client.emit('introductionPanelRefresh', interaction.guildId, settings);
@@ -292,7 +296,13 @@ client.on('messageCreate', async message => {
       await message.delete().catch(() => null);
       return;
     }
-    if (!isStaff && valid) await recordIntroduction(message.guild.id, message.author.id);
+    if (!isStaff && valid) {
+      await recordIntroduction(message.guild.id, message.author.id);
+      if (introductionSettings.reward_role_id) {
+        const role = message.guild.roles.cache.get(introductionSettings.reward_role_id) ?? await message.guild.roles.fetch(introductionSettings.reward_role_id).catch(() => null);
+        if (role && message.member && !message.member.roles.cache.has(role.id)) await message.member.roles.add(role, 'Valid introduction submitted').catch(error => console.error('[INTRODUCTION_REWARD]', error));
+      }
+    }
     setTimeout(() => client.emit('introductionPanelRefresh', message.guild.id), 3000);
   }
   try {

@@ -38,14 +38,14 @@ export async function getIntroductionSettings(guildId) {
   return rows[0] ?? null;
 }
 
-export async function saveIntroductionSettings({ guildId, channelId, template, panelTitle, panelMessage }) {
+export async function saveIntroductionSettings({ guildId, channelId, template, panelTitle, panelMessage, rewardRoleId = null }) {
   const { rows } = await query(`
-    INSERT INTO introduction_settings (guild_id, channel_id, template, panel_title, panel_message)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO introduction_settings (guild_id, channel_id, template, panel_title, panel_message, reward_role_id)
+    VALUES ($1, $2, $3, $4, $5, $6)
     ON CONFLICT (guild_id) DO UPDATE SET channel_id = EXCLUDED.channel_id,
       template = EXCLUDED.template, panel_title = EXCLUDED.panel_title,
-      panel_message = EXCLUDED.panel_message, updated_at = NOW()
-    RETURNING *`, [guildId, channelId, template, panelTitle, panelMessage]);
+      panel_message = EXCLUDED.panel_message, reward_role_id = EXCLUDED.reward_role_id, updated_at = NOW()
+    RETURNING *`, [guildId, channelId, template, panelTitle, panelMessage, rewardRoleId]);
   return rows[0];
 }
 
@@ -75,4 +75,20 @@ export async function getIntroductionStatus(guildId) {
     FROM introduction_settings s LEFT JOIN introduction_counts c ON c.guild_id = s.guild_id
     WHERE s.guild_id = $1 GROUP BY s.guild_id`, [guildId]);
   return rows[0] ?? null;
+}
+
+export async function setProtectedChannel(guildId, channelId, enabled = true) {
+  if (enabled) await query(`INSERT INTO protected_channels (guild_id, channel_id) VALUES ($1, $2)
+    ON CONFLICT (guild_id, channel_id) DO UPDATE SET enabled = TRUE`, [guildId, channelId]);
+  else await query('DELETE FROM protected_channels WHERE guild_id = $1 AND channel_id = $2', [guildId, channelId]);
+}
+
+export async function isProtectedChannel(guildId, channelId) {
+  const { rows } = await query('SELECT 1 FROM protected_channels WHERE guild_id = $1 AND channel_id = $2 AND enabled = TRUE', [guildId, channelId]);
+  return rows.length > 0;
+}
+
+export async function listProtectedChannels(guildId) {
+  const { rows } = await query('SELECT channel_id FROM protected_channels WHERE guild_id = $1 AND enabled = TRUE ORDER BY channel_id', [guildId]);
+  return rows;
 }

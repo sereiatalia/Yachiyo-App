@@ -118,12 +118,17 @@ CREATE TABLE IF NOT EXISTS curse_warnings (
 CREATE INDEX IF NOT EXISTS curse_warnings_guild_idx ON curse_warnings(guild_id, last_warned_at DESC);
 CREATE TABLE IF NOT EXISTS introduction_settings (
   guild_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, panel_message_id TEXT,
-  template TEXT NOT NULL, panel_title TEXT NOT NULL, panel_message TEXT NOT NULL,
+  template TEXT NOT NULL, panel_title TEXT NOT NULL, panel_message TEXT NOT NULL, reward_role_id TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE introduction_settings ADD COLUMN IF NOT EXISTS reward_role_id TEXT;
 CREATE TABLE IF NOT EXISTS introduction_counts (
   guild_id TEXT NOT NULL, user_id TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS protected_channels (
+  guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id, channel_id)
 );
 
 `;

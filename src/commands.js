@@ -12,7 +12,7 @@ import { setConfessionChannel } from './services/confessionService.js';
 import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurseSettings } from './services/curseService.js';
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
-import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, resetIntroduction, saveIntroductionSettings } from './services/introductionService.js';
+import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, resetIntroduction, saveIntroductionSettings, setProtectedChannel, listProtectedChannels } from './services/introductionService.js';
 const YACHIYO_PURPLE = 0x8e7dff;
 const YACHIYO_BLUE = 0x4db8e8;
 const yEmbed = (title, description, color = YACHIYO_PURPLE) => new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setFooter({ text: 'Yachiyo • Cosmic server manager' });
@@ -27,11 +27,13 @@ export const commands = [
   new SlashCommandBuilder().setName('logs').setDescription('Set the audit-log channel.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addChannelOption(o=>o.setName('channel').setDescription('Text channel').setRequired(true))
   ,new SlashCommandBuilder().setName('confession').setDescription('Submit an anonymous confession.').setDMPermission(false)
   ,new SlashCommandBuilder().setName('confession-setup').setDescription('Set the channel where confessions are published.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Confession channel').setRequired(true))
-  ,new SlashCommandBuilder().setName('introduction-setup').setDescription('Set up the member introduction channel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Introduction channel').setRequired(true))
+  ,new SlashCommandBuilder().setName('introduction-setup').setDescription('Set up the member introduction channel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Introduction channel').setRequired(true)).addRoleOption(o=>o.setName('reward_role').setDescription('Role awarded after a valid introduction').setRequired(false))
   ,new SlashCommandBuilder().setName('introduction-panel').setDescription('Refresh or edit the introduction panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Panel action').setRequired(false).addChoices({name:'Refresh panel',value:'refresh'},{name:'Edit panel',value:'edit'}))
   ,new SlashCommandBuilder().setName('introduction-template').setDescription('View or edit the introduction template.').setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Template action').setRequired(false).addChoices({name:'View template',value:'view'},{name:'Edit template',value:'edit'}))
   ,new SlashCommandBuilder().setName('introduction-reset').setDescription('Reset a member introduction limit.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addUserOption(o=>o.setName('user').setDescription('Member to reset').setRequired(true))
   ,new SlashCommandBuilder().setName('introduction-status').setDescription('View introduction system status.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
+  ,new SlashCommandBuilder().setName('protected-channel').setDescription('Prevent bot moderation from deleting messages in a channel and monitor deletions.').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Channel to protect').setRequired(true)).addBooleanOption(o=>o.setName('enabled').setDescription('Enable protection').setRequired(true))
+  ,new SlashCommandBuilder().setName('protected-channels').setDescription('List protected moderation channels.').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).setDMPermission(false)
   ,new SlashCommandBuilder().setName('fish-setup').setDescription('Set the only channel where fishing is allowed.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Fishing channel').setRequired(true))
   ,new SlashCommandBuilder().setName('curse-setup').setDescription('Save curse words and activate the server filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('words').setDescription('Comma or newline separated words, in any language.').setRequired(true))
   ,new SlashCommandBuilder().setName('curse').setDescription('Activate, deactivate, or view the curse filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Filter action').setRequired(true).addChoices({name:'Activate',value:'on'},{name:'Deactivate',value:'off'},{name:'View status',value:'status'}))
@@ -106,7 +108,8 @@ export async function handleCommand(interaction) {
   }
   if (name === 'introduction-setup') {
     const channel = interaction.options.getChannel('channel');
-    const modal = new ModalBuilder().setCustomId('introduction_setup:' + channel.id).setTitle('Set up introductions');
+    const rewardRole = interaction.options.getRole('reward_role');
+    const modal = new ModalBuilder().setCustomId('introduction_setup:' + channel.id + ':' + (rewardRole?.id ?? '')).setTitle('Set up introductions');
     const template = new TextInputBuilder().setCustomId('template').setLabel('Introduction template').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000).setValue(DEFAULT_INTRODUCTION_TEMPLATE);
     const title = new TextInputBuilder().setCustomId('panel_title').setLabel('Panel title').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256).setValue('🌷 Introduction Channel');
     const message = new TextInputBuilder().setCustomId('panel_message').setLabel('Panel description / instructions').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1000).setValue('Click the button below to get your introduction template.\n\nPlease fill in every field and send it in this channel.');
@@ -146,6 +149,16 @@ export async function handleCommand(interaction) {
     const settings = await getIntroductionStatus(interaction.guildId);
     if (!settings) return interaction.reply({content:'Introduction is not set up yet.', ephemeral:true});
     return interaction.reply({embeds:[yEmbed('🌷 Introduction status', 'Channel: <#' + settings.channel_id + '>\nAccepted introductions: **' + settings.accepted_count + '**\nMember limit: **1 accepted introduction**\nPanel message: ' + (settings.panel_message_id ? 'connected' : 'not posted'))], ephemeral:true});
+  }
+  if (name === 'protected-channel') {
+    const channel = interaction.options.getChannel('channel');
+    const enabled = interaction.options.getBoolean('enabled');
+    await setProtectedChannel(interaction.guildId, channel.id, enabled);
+    return interaction.reply({content: (enabled ? '🛡️ Protected ' : '✅ Unprotected ') + '<#' + channel.id + '>. Yachiyo will monitor message deletions there.', ephemeral:true});
+  }
+  if (name === 'protected-channels') {
+    const rows = await listProtectedChannels(interaction.guildId);
+    return interaction.reply({content: rows.length ? '🛡️ Protected channels:\n' + rows.map(row => '<#' + row.channel_id + '>').join('\n') : 'No protected channels are configured.', ephemeral:true});
   }
   if(name==='curse-setup') {
     const words=parseCurseWords(interaction.options.getString('words'));
