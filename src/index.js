@@ -73,6 +73,29 @@ client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.
 client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.create',targetId:channel.id,data:{summary:`Channel **${channel.name}** was created.`}}).catch(console.error); });
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
 client.on('interactionCreate', async interaction => {
+  if (interaction.isModalSubmit() && (interaction.customId === 'introduction_edit_template' || interaction.customId === 'introduction_edit_panel')) {
+    try {
+      const { getIntroductionSettings, saveIntroductionSettings } = await import('./services/introductionService.js');
+      const current = await getIntroductionSettings(interaction.guildId);
+      if (!current) return interaction.reply({content:'Introduction is not set up yet.', ephemeral:true});
+      const template = interaction.customId === 'introduction_edit_template'
+        ? interaction.fields.getTextInputValue('template').trim()
+        : current.template;
+      const panelTitle = interaction.customId === 'introduction_edit_panel'
+        ? interaction.fields.getTextInputValue('panel_title').trim()
+        : current.panel_title;
+      const panelMessage = interaction.customId === 'introduction_edit_panel'
+        ? interaction.fields.getTextInputValue('panel_message').trim()
+        : current.panel_message;
+      await saveIntroductionSettings({guildId: interaction.guildId, channelId: current.channel_id, template, panelTitle, panelMessage});
+      await interaction.reply({content:'✅ Introduction ' + (interaction.customId.endsWith('template') ? 'template' : 'panel') + ' updated.', ephemeral:true});
+      if (interaction.customId === 'introduction_edit_panel') interaction.client.emit('introductionPanelRefresh', interaction.guildId);
+      return;
+    } catch (error) {
+      console.error('[INTRODUCTION_EDIT]', error);
+      return interaction.reply({content:'Yachiyo could not save that introduction edit.', ephemeral:true});
+    }
+  }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('introduction_setup:')) {
     try {
       const channelId = interaction.customId.split(':')[1];

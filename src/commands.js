@@ -28,8 +28,8 @@ export const commands = [
   ,new SlashCommandBuilder().setName('confession').setDescription('Submit an anonymous confession.').setDMPermission(false)
   ,new SlashCommandBuilder().setName('confession-setup').setDescription('Set the channel where confessions are published.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Confession channel').setRequired(true))
   ,new SlashCommandBuilder().setName('introduction-setup').setDescription('Set up the member introduction channel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Introduction channel').setRequired(true))
-  ,new SlashCommandBuilder().setName('introduction-panel').setDescription('Refresh the introduction panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
-  ,new SlashCommandBuilder().setName('introduction-template').setDescription('Show the introduction template.').setDMPermission(false)
+  ,new SlashCommandBuilder().setName('introduction-panel').setDescription('Refresh or edit the introduction panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Panel action').setRequired(false).addChoices({name:'Refresh panel',value:'refresh'},{name:'Edit panel',value:'edit'}))
+  ,new SlashCommandBuilder().setName('introduction-template').setDescription('View or edit the introduction template.').setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Template action').setRequired(false).addChoices({name:'View template',value:'view'},{name:'Edit template',value:'edit'}))
   ,new SlashCommandBuilder().setName('introduction-reset').setDescription('Reset a member introduction limit.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addUserOption(o=>o.setName('user').setDescription('Member to reset').setRequired(true))
   ,new SlashCommandBuilder().setName('introduction-status').setDescription('View introduction system status.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
   ,new SlashCommandBuilder().setName('fish-setup').setDescription('Set the only channel where fishing is allowed.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Fishing channel').setRequired(true))
@@ -116,11 +116,25 @@ export async function handleCommand(interaction) {
   if (name === 'introduction-panel') {
     const settings = await getIntroductionStatus(interaction.guildId);
     if (!settings) return interaction.reply({content:'Introduction is not set up yet. Run `/introduction-setup` first.', ephemeral:true});
+    if (interaction.options.getString('action') === 'edit') {
+      const modal = new ModalBuilder().setCustomId('introduction_edit_panel').setTitle('Edit introduction panel');
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_title').setLabel('Panel title').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256).setValue(settings.panel_title)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_message').setLabel('Panel description / instructions').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1000).setValue(settings.panel_message))
+      );
+      return interaction.showModal(modal);
+    }
     await interaction.reply({content:'🌷 Refreshing the introduction panel…', ephemeral:true});
     return interaction.client.emit('introductionPanelRefresh', interaction.guildId, settings);
   }
   if (name === 'introduction-template') {
+    if (interaction.options.getString('action') === 'edit' && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return interaction.reply({content:'🛡️ Only server administrators can edit the introduction template.',ephemeral:true});
     const settings = await getIntroductionStatus(interaction.guildId);
+    if (settings && interaction.options.getString('action') === 'edit') {
+      const modal = new ModalBuilder().setCustomId('introduction_edit_template').setTitle('Edit introduction template');
+      modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('template').setLabel('Introduction template').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000).setValue(settings.template)));
+      return interaction.showModal(modal);
+    }
     return interaction.reply({content: settings ? '```\n' + settings.template + '\n```' : 'Introduction is not set up yet.', ephemeral:true});
   }
   if (name === 'introduction-reset') {
