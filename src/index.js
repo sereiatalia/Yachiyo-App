@@ -10,7 +10,7 @@ import { fishAgain } from './handlers/fishing.js';
 import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 import { getCurseSettings, findMatchedCurseWords, recordCurseWarning } from './services/curseService.js';
-import { getIntroductionSettings, getIntroductionCount, isIntroductionTemplateValid, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
+import { getIntroductionSettings, getIntroductionCount, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -297,14 +297,13 @@ client.on('messageCreate', async message => {
   const introductionSettings = await getIntroductionSettings(message.guild.id).catch(() => null);
   if (introductionSettings && message.channelId === introductionSettings.channel_id) {
     const isStaff = message.member?.permissions?.has(PermissionFlagsBits.Administrator) || message.member?.permissions?.has(PermissionFlagsBits.ManageGuild) || message.member?.permissions?.has(PermissionFlagsBits.ManageMessages);
-    const valid = isIntroductionTemplateValid(message.content, introductionSettings.template);
     const count = await getIntroductionCount(message.guild.id, message.author.id);
-    if (!isStaff && (!valid || count >= 1)) {
+    if (!isStaff && count >= 1) {
       filteredMessageIds.add(message.id);
       await message.delete().catch(() => null);
       return;
     }
-    if (!isStaff && valid) {
+    if (!isStaff) {
       await recordIntroduction(message.guild.id, message.author.id, message.id);
       if (introductionSettings.reward_role_id) {
         const role = message.guild.roles.cache.get(introductionSettings.reward_role_id) ?? await message.guild.roles.fetch(introductionSettings.reward_role_id).catch(() => null);
