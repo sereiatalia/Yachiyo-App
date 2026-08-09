@@ -1,22 +1,7 @@
 import 'dotenv/config';
 import { REST, Routes } from 'discord.js';
 import { commands } from './commands.js';
-
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-const applicationId = process.env.DISCORD_CLIENT_ID;
-const guildId = process.env.DISCORD_GUILD_ID;
-const deployGlobally = process.env.DEPLOY_GLOBAL === 'true' || !guildId;
-
-if (deployGlobally) {
-  await rest.put(Routes.applicationCommands(applicationId), { body: commands });
-  console.log(`Deployed ${commands.length} global commands.`);
-
-  // Remove stale guild-scoped copies so Discord does not show duplicate commands.
-  if (guildId) {
-    await rest.put(Routes.applicationGuildCommands(applicationId, guildId), { body: [] });
-    console.log(`Cleared guild-scoped commands for ${guildId}.`);
-  }
-} else {
-  await rest.put(Routes.applicationGuildCommands(applicationId, guildId), { body: commands });
-  console.log(`Deployed ${commands.length} guild commands.`);
-}
+const rest=new REST({version:'10'}).setToken(process.env.DISCORD_TOKEN);
+const route=process.env.DISCORD_GUILD_ID?Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID,process.env.DISCORD_GUILD_ID):Routes.applicationCommands(process.env.DISCORD_CLIENT_ID);
+await rest.put(route,{body:commands});
+console.log(`Deployed ${commands.length} commands.`);
