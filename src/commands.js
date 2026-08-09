@@ -109,7 +109,7 @@ export async function handleCommand(interaction) {
   if(name==='curse-list') {
     const settings=await getCurseSettings(interaction.guildId);
     const words=settings.words??[];
-    const description=words.length ? words.map((word,index)=>'**'+(index+1)+'.** '+word).join('\\n') : '*No curse words have been saved for this server.*';
+    const description=words.length ? words.map((word,index)=>'**'+(index+1)+'.** '+word).join('\n') : '*No curse words have been saved for this server.*';
     return interaction.reply({embeds:[new EmbedBuilder().setColor(0xff6b9d).setTitle('🧼 Saved curse words').setDescription(description).setFooter({text:'Administrators manage the saved words with /curse-setup.'})],ephemeral:true});
   }
   if(name==='curse') {
