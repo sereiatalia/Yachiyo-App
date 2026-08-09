@@ -206,6 +206,7 @@ client.on('interactionCreate', async interaction => {
           .setFooter({text: 'Yachiyo • member introduction'})]
       });
       await recordIntroduction(interaction.guildId, interaction.user.id, posted.id);
+      setTimeout(() => interaction.client.emit('introductionPanelRefresh', interaction.guildId), 3000);
       const role = settings.reward_role_id ? (interaction.guild.roles.cache.get(settings.reward_role_id) ?? await interaction.guild.roles.fetch(settings.reward_role_id).catch(() => null)) : null;
       if (!role) return interaction.reply({content:'✅ Your introduction was posted, but no reward role is configured. Ask an admin to use `/introduction-reward-role`.', ephemeral:true});
       if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles) || !role.editable) return interaction.reply({content:'✅ Your introduction was posted, but Yachiyo cannot assign <@&' + role.id + '>. Give Yachiyo Manage Roles and move its bot role above the reward role.', ephemeral:true});
