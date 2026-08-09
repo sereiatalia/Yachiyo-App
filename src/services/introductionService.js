@@ -32,7 +32,12 @@ const templateFields = template => template.split('\n')
 
 export function isIntroductionTemplateValid(content, template) {
   const fields = templateFields(template);
-  if (!fields.length) return false;
+  if (!fields.length) {
+    const configuredKeywords = String(template ?? '').replace(/<a?:[A-Za-z0-9_]{2,32}:\d+>/g, '').replace(/:[A-Za-z0-9_]{2,32}:/g, '')
+      .split(/\s+/).map(word => word.replace(/[^\p{L}\p{N}_-]/gu, '')).filter(word => word.length >= 2);
+    const message = String(content ?? '');
+    return configuredKeywords.length > 0 && configuredKeywords.some(keyword => new RegExp(`(?:^|[^\\p{L}\\p{N}_])${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[^\\p{L}\\p{N}_])`, 'iu').test(message));
+  }
   const lines = new Map(content.split('\n').map(line => {
     const match = line.replace(/<a?:[A-Za-z0-9_]{2,32}:\d+>/g, '').replace(/:[A-Za-z0-9_]{2,32}:/g, '').match(/^\s*(.*?)\s*:\s*(.*)$/);
     return match ? [normalizeIntroductionLabel(match[1]), match[2].trim()] : null;
