@@ -12,6 +12,7 @@ import { setConfessionChannel } from './services/confessionService.js';
 import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurseSettings } from './services/curseService.js';
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
+import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, resetIntroduction, saveIntroductionSettings } from './services/introductionService.js';
 const YACHIYO_PURPLE = 0x8e7dff;
 const YACHIYO_BLUE = 0x4db8e8;
 const yEmbed = (title, description, color = YACHIYO_PURPLE) => new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setFooter({ text: 'Yachiyo • Cosmic server manager' });
@@ -26,6 +27,11 @@ export const commands = [
   new SlashCommandBuilder().setName('logs').setDescription('Set the audit-log channel.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addChannelOption(o=>o.setName('channel').setDescription('Text channel').setRequired(true))
   ,new SlashCommandBuilder().setName('confession').setDescription('Submit an anonymous confession.').setDMPermission(false)
   ,new SlashCommandBuilder().setName('confession-setup').setDescription('Set the channel where confessions are published.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Confession channel').setRequired(true))
+  ,new SlashCommandBuilder().setName('introduction-setup').setDescription('Set up the member introduction channel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Introduction channel').setRequired(true)).addStringOption(o=>o.setName('template').setDescription('Custom template; use one Field: line per required field').setRequired(false)).addStringOption(o=>o.setName('panel_title').setDescription('Custom panel title').setRequired(false)).addStringOption(o=>o.setName('panel_message').setDescription('Custom panel instructions').setRequired(false))
+  ,new SlashCommandBuilder().setName('introduction-panel').setDescription('Refresh the introduction panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
+  ,new SlashCommandBuilder().setName('introduction-template').setDescription('Show the introduction template.').setDMPermission(false)
+  ,new SlashCommandBuilder().setName('introduction-reset').setDescription('Reset a member introduction limit.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addUserOption(o=>o.setName('user').setDescription('Member to reset').setRequired(true))
+  ,new SlashCommandBuilder().setName('introduction-status').setDescription('View introduction system status.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
   ,new SlashCommandBuilder().setName('fish-setup').setDescription('Set the only channel where fishing is allowed.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Fishing channel').setRequired(true))
   ,new SlashCommandBuilder().setName('curse-setup').setDescription('Save curse words and activate the server filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('words').setDescription('Comma or newline separated words, in any language.').setRequired(true))
   ,new SlashCommandBuilder().setName('curse').setDescription('Activate, deactivate, or view the curse filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Filter action').setRequired(true).addChoices({name:'Activate',value:'on'},{name:'Deactivate',value:'off'},{name:'View status',value:'status'}))
@@ -63,7 +69,7 @@ export const commands = [
 export async function handleCommand(interaction) {
   await ensureGuild(interaction.guildId);
   const name=interaction.commandName;
-  const adminOnly=['economy-add','logs','confession-setup','fish-setup','curse-setup','curse','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout'];
+  const adminOnly=['economy-add','logs','confession-setup','introduction-setup','introduction-panel','introduction-reset','introduction-status','fish-setup','curse-setup','curse','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout'];
   if(adminOnly.includes(name) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return interaction.reply({content:'🛡️ Only server administrators can use this command.',ephemeral:true});
   if(name==='ping') return interaction.reply({embeds:[yEmbed('☾ Yachiyo is watching over this server.','✦ The moonlit command center is online and watching this server.',YACHIYO_BLUE)]});
   if(name==='help') return interaction.reply({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('☾ YACHIYO COMMAND CENTER').setDescription('*The moonlit server manager is ready to assist.*').addFields({name:'✦ Economy',value:'`/balance`  `/daily`  `/work`  `/fish`\n`/pay`  `/deposit`  `/withdraw`  `/leaderboard`'},{name:'✦ Fishing',value:'`/fishinventory`  `/fishalmanac`\nUse the buttons on a catch card to explore your collection.'},{name:'✦ Moderation',value:'`/warn`  `/warnings`  `/kick`  `/ban`  `/timeout`\n`/untimeout`  `/unban`  `/purge`  `/lock`  `/unlock`  `/logs`\n`/curse-setup`  `/curse`  `/curse-list`'}).setFooter({text:'Yachiyo • Cosmic server manager'})]});
@@ -97,6 +103,37 @@ export async function handleCommand(interaction) {
     const channel=interaction.options.getChannel('channel');
     await setConfessionChannel(interaction.guildId,channel.id);
     return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('💌 Confession chamber prepared').setDescription('Confessions will now be published in <#'+channel.id+'>.')]});
+  }
+  if (name === 'introduction-setup') {
+    const channel = interaction.options.getChannel('channel');
+    const settings = await saveIntroductionSettings({
+      guildId: interaction.guildId, channelId: channel.id,
+      template: interaction.options.getString('template') || DEFAULT_INTRODUCTION_TEMPLATE,
+      panelTitle: interaction.options.getString('panel_title') || '🌷 Introduction Channel',
+      panelMessage: interaction.options.getString('panel_message') || 'Click the button below to get your introduction template.\n\nPlease fill in every field and send it in this channel.'
+    });
+    await interaction.reply({content: '✅ Introduction settings saved. I am refreshing the panel in <#' + channel.id + '>.', ephemeral:true});
+    return interaction.client.emit('introductionPanelRefresh', interaction.guildId, settings);
+  }
+  if (name === 'introduction-panel') {
+    const settings = await getIntroductionStatus(interaction.guildId);
+    if (!settings) return interaction.reply({content:'Introduction is not set up yet. Run `/introduction-setup` first.', ephemeral:true});
+    await interaction.reply({content:'🌷 Refreshing the introduction panel…', ephemeral:true});
+    return interaction.client.emit('introductionPanelRefresh', interaction.guildId, settings);
+  }
+  if (name === 'introduction-template') {
+    const settings = await getIntroductionStatus(interaction.guildId);
+    return interaction.reply({content: settings ? '```\n' + settings.template + '\n```' : 'Introduction is not set up yet.', ephemeral:true});
+  }
+  if (name === 'introduction-reset') {
+    const user = interaction.options.getUser('user');
+    await resetIntroduction(interaction.guildId, user.id);
+    return interaction.reply({content:'✅ Reset the introduction limit for <@' + user.id + '>.', ephemeral:true});
+  }
+  if (name === 'introduction-status') {
+    const settings = await getIntroductionStatus(interaction.guildId);
+    if (!settings) return interaction.reply({content:'Introduction is not set up yet.', ephemeral:true});
+    return interaction.reply({embeds:[yEmbed('🌷 Introduction status', 'Channel: <#' + settings.channel_id + '>\nAccepted introductions: **' + settings.accepted_count + '**\nMember limit: **1 accepted introduction**\nPanel message: ' + (settings.panel_message_id ? 'connected' : 'not posted'))], ephemeral:true});
   }
   if(name==='curse-setup') {
     const words=parseCurseWords(interaction.options.getString('words'));

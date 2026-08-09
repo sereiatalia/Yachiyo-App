@@ -116,6 +116,15 @@ CREATE TABLE IF NOT EXISTS curse_warnings (
   PRIMARY KEY (guild_id, user_id, word)
 );
 CREATE INDEX IF NOT EXISTS curse_warnings_guild_idx ON curse_warnings(guild_id, last_warned_at DESC);
+CREATE TABLE IF NOT EXISTS introduction_settings (
+  guild_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, panel_message_id TEXT,
+  template TEXT NOT NULL, panel_title TEXT NOT NULL, panel_message TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS introduction_counts (
+  guild_id TEXT NOT NULL, user_id TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id, user_id)
+);
 
 `;
 

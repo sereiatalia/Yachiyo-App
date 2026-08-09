@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits, Partials } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, PermissionFlagsBits } from 'discord.js';
 import { handleCommand } from './commands.js';
 import { ensureGuild, getFishChannel } from './services/guildService.js';
 import { sendAuditLog } from './services/auditService.js';
@@ -10,10 +10,12 @@ import { fishAgain } from './handlers/fishing.js';
 import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 import { getCurseSettings, findMatchedCurseWords, recordCurseWarning } from './services/curseService.js';
+import { getIntroductionSettings, getIntroductionCount, isIntroductionTemplateValid, recordIntroduction, setIntroductionPanelMessage } from './services/introductionService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
 const filteredMessageIds = new Set();
+const introductionPanelTimers = new Map();
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildModeration, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildVoiceStates],
@@ -21,6 +23,22 @@ const client = new Client({
 });
 
 client.once('ready', () => console.log(`Yachiyo is online as ${client.user.tag}`));
+client.on('introductionPanelRefresh', (guildId) => {
+  clearTimeout(introductionPanelTimers.get(guildId));
+  introductionPanelTimers.set(guildId, setTimeout(() => refreshIntroductionPanel(guildId).catch(console.error), 1500));
+});
+async function refreshIntroductionPanel(guildId) {
+  const settings = await getIntroductionSettings(guildId);
+  if (!settings) return;
+  const channel = await client.channels.fetch(settings.channel_id).catch(() => null);
+  if (!channel?.isTextBased()) return;
+  if (settings.panel_message_id) {
+    const oldPanel = await channel.messages.fetch(settings.panel_message_id).catch(() => null);
+    if (oldPanel?.author?.id === client.user?.id) await oldPanel.delete().catch(() => null);
+  }
+  const panel = await channel.send({ embeds: [new EmbedBuilder().setColor(0xf3a6c7).setTitle(settings.panel_title).setDescription(settings.panel_message)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('introduction_get_template').setLabel('୨୧ Get template').setStyle(ButtonStyle.Primary))] });
+  await setIntroductionPanelMessage(guildId, panel.id);
+}
 client.on('guildCreate', guild => ensureGuild(guild.id).catch(console.error));
 client.on('guildMemberAdd', m => sendAuditLog(client,m.guild,{eventType:'member.join',targetId:m.id,data:{summary:`${m.user.tag} joined the server.`}}).catch(console.error));
 client.on('guildMemberRemove', m => sendAuditLog(client,m.guild,{eventType:'member.leave',targetId:m.id,data:{summary:`${m.user.tag} left the server.`}}).catch(console.error));
@@ -105,6 +123,11 @@ client.on('interactionCreate', async interaction => {
     const input=new TextInputBuilder().setCustomId('confession_content').setLabel('What would you like to confess?').setStyle(TextInputStyle.Paragraph).setPlaceholder('Write your confession here...').setRequired(true).setMaxLength(1000);
     modal.addComponents(new ActionRowBuilder().addComponents(input));
     return interaction.showModal(modal);
+  }
+  if (interaction.isButton() && interaction.customId === 'introduction_get_template') {
+    const settings = await getIntroductionSettings(interaction.guildId);
+    if (!settings) return interaction.reply({content:'Introduction is not set up yet.', ephemeral:true});
+    return interaction.reply({content:'Copy this template, fill every field, then send it in <#' + settings.channel_id + '>:\n```\n' + settings.template + '\n```', ephemeral:true});
   }
   if (interaction.isButton() && interaction.customId.startsWith('confession_reply:')) {
     const confessionId=interaction.customId.split(':')[1];
@@ -205,6 +228,19 @@ client.on('interactionCreate', async interaction => {
 });
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
+  const introductionSettings = await getIntroductionSettings(message.guild.id).catch(() => null);
+  if (introductionSettings && message.channelId === introductionSettings.channel_id) {
+    const isStaff = message.member?.permissions?.has(PermissionFlagsBits.Administrator) || message.member?.permissions?.has(PermissionFlagsBits.ManageGuild) || message.member?.permissions?.has(PermissionFlagsBits.ManageMessages);
+    const valid = isIntroductionTemplateValid(message.content, introductionSettings.template);
+    const count = await getIntroductionCount(message.guild.id, message.author.id);
+    if (!isStaff && (!valid || count >= 1)) {
+      filteredMessageIds.add(message.id);
+      await message.delete().catch(() => null);
+      return;
+    }
+    if (!isStaff && valid) await recordIntroduction(message.guild.id, message.author.id);
+    setTimeout(() => client.emit('introductionPanelRefresh', message.guild.id), 3000);
+  }
   try {
     const settings = await getCurseSettings(message.guild.id);
     const matchedWords = settings.enabled ? findMatchedCurseWords(message.content, settings.words) : [];
