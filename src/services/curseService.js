@@ -65,7 +65,9 @@ export function findMatchedCurseWords(content, words) {
       if (!word) return false;
       const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       try {
-        return new RegExp(`(?:^|[^\p{L}\p{N}_])${escaped}(?=$|[^\p{L}\p{N}_])`, 'iu').test(message);
+        // Keep curse words as standalone terms. The doubled slashes are
+        // required here because this pattern is built from a JavaScript string.
+        return new RegExp(`(?:^|[^\\p{L}\\p{N}_])${escaped}(?=$|[^\\p{L}\\p{N}_])`, 'iu').test(message);
       } catch {
         return false;
       }
