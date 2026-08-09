@@ -34,17 +34,7 @@ export const commands = [
   ,new SlashCommandBuilder().setName('introduction-status').setDescription('View introduction system status.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
   ,new SlashCommandBuilder().setName('introduction-reward-role').setDescription('Set or clear the introduction reward role.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addRoleOption(o=>o.setName('role').setDescription('Role to award; leave empty to clear').setRequired(false))
   ,new SlashCommandBuilder().setName('introduction-reward-cleanup').setDescription('Remove legacy introduction rewards and clear old records.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
-  ,new SlashCommandBuilder().setName('emoji-upload').setDescription('Upload one or more images as server emojis.').setDefaultMemberPermissions(PermissionFlagsBits.ManageEmojisAndStickers).setDMPermission(false)
-    .addAttachmentOption(o=>o.setName('image1').setDescription('First image').setRequired(true))
-    .addAttachmentOption(o=>o.setName('image2').setDescription('Second image').setRequired(false))
-    .addAttachmentOption(o=>o.setName('image3').setDescription('Third image').setRequired(false))
-    .addAttachmentOption(o=>o.setName('image4').setDescription('Fourth image').setRequired(false))
-    .addAttachmentOption(o=>o.setName('image5').setDescription('Fifth image').setRequired(false))
-    .addAttachmentOption(o=>o.setName('image6').setDescription('Sixth image').setRequired(false))
-    .addAttachmentOption(o=>o.setName('image7').setDescription('Seventh image').setRequired(false))
-    .addAttachmentOption(o=>o.setName('image8').setDescription('Eighth image').setRequired(false))
-    .addAttachmentOption(o=>o.setName('image9').setDescription('Ninth image').setRequired(false))
-    .addAttachmentOption(o=>o.setName('image10').setDescription('Tenth image').setRequired(false))
+  ,new SlashCommandBuilder().setName('emoji-upload').setDescription('Upload multiple images as server emojis.').setDefaultMemberPermissions(PermissionFlagsBits.ManageEmojisAndStickers).setDMPermission(false)
   ,new SlashCommandBuilder().setName('fish-setup').setDescription('Set the only channel where fishing is allowed.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Fishing channel').setRequired(true))
   ,new SlashCommandBuilder().setName('curse-setup').setDescription('Save curse words and activate the server filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('words').setDescription('Comma or newline separated words, in any language.').setRequired(true))
   ,new SlashCommandBuilder().setName('curse').setDescription('Activate, deactivate, or view the curse filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Filter action').setRequired(true).addChoices({name:'Activate',value:'on'},{name:'Deactivate',value:'off'},{name:'View status',value:'status'}))
@@ -87,8 +77,11 @@ export async function handleCommand(interaction) {
   if(name==='ping') return interaction.reply({embeds:[yEmbed('☾ Yachiyo is watching over this server.','✦ The moonlit command center is online and watching this server.',YACHIYO_BLUE)]});
   if (name === 'emoji-upload') {
     if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ManageEmojisAndStickers)) return interaction.reply({content:'Yachiyo needs **Manage Expressions** to create server emojis.', ephemeral:true});
-    const attachments = Array.from({length:10}, (_, index) => interaction.options.getAttachment('image' + (index + 1))).filter(Boolean);
-    await interaction.deferReply({ephemeral:true});
+    await interaction.reply({content:'📎 Send all the images you want to convert in your next message in this channel. You have 60 seconds.', ephemeral:true});
+    const collected = await interaction.channel.awaitMessages({filter: message => message.author.id === interaction.user.id && message.attachments.size > 0, max: 1, time: 60000}).catch(() => null);
+    const upload = collected?.first();
+    if (!upload) return;
+    const attachments = [...upload.attachments.values()];
     const created = [], failed = [];
     for (const attachment of attachments) {
       if (!attachment.contentType?.startsWith('image/')) { failed.push(attachment.name + ' (not an image)'); continue; }
@@ -99,7 +92,8 @@ export async function handleCommand(interaction) {
         created.push(emoji.toString() + ' `' + emoji.name + '`');
       } catch (error) { console.error('[EMOJI_UPLOAD]', error); failed.push(attachment.name || 'image'); }
     }
-    return interaction.editReply('✅ Created **' + created.length + '** emoji(s):\n' + (created.join('\n') || 'None') + (failed.length ? '\n\n⚠️ Failed: ' + failed.join(', ') : ''));
+    await upload.delete().catch(() => null);
+    return interaction.followUp({content:'✅ Created **' + created.length + '** emoji(s):\n' + (created.join('\n') || 'None') + (failed.length ? '\n\n⚠️ Failed: ' + failed.join(', ') : ''), ephemeral:true});
   }
   if(name==='help') return interaction.reply({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('☾ YACHIYO COMMAND CENTER').setDescription('*The moonlit server manager is ready to assist.*').addFields({name:'✦ Economy',value:'`/balance`  `/daily`  `/work`  `/fish`\n`/pay`  `/deposit`  `/withdraw`  `/leaderboard`'},{name:'✦ Fishing',value:'`/fishinventory`  `/fishalmanac`\nUse the buttons on a catch card to explore your collection.'},{name:'✦ Moderation',value:'`/warn`  `/warnings`  `/kick`  `/ban`  `/timeout`\n`/untimeout`  `/unban`  `/purge`  `/lock`  `/unlock`  `/logs`\n`/curse-setup`  `/curse`  `/curse-list`'}).setFooter({text:'Yachiyo • Cosmic server manager'})]});
   if(name==='balance') {
