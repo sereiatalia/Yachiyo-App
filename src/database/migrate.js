@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS guild_settings (
 ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS confession_channel_id TEXT;
 ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS fish_channel_id TEXT;
 ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS audit_channels JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS voice_channel_id TEXT;
 CREATE TABLE IF NOT EXISTS economy_users (
   user_id TEXT PRIMARY KEY, wallet BIGINT NOT NULL DEFAULT 0 CHECK (wallet >= 0), bank BIGINT NOT NULL DEFAULT 0 CHECK (bank >= 0),
   bank_capacity BIGINT NOT NULL DEFAULT 10000, last_daily TIMESTAMPTZ, last_work TIMESTAMPTZ, last_fish TIMESTAMPTZ,

@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes, ChannelType } from 'discord.js';
 import { commands, handleCommand } from './commands.js';
-import { ensureGuild, getFishChannel } from './services/guildService.js';
+import { ensureGuild, getFishChannel, getVoiceChannels } from './services/guildService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { fishInventory, fishAlmanac, fishCollection } from './services/economyService.js';
 import { buildAlmanacView } from './ui/almanac.js';
@@ -55,6 +55,12 @@ client.once('ready', async () => {
     console.error('[COMMAND_DEPLOY]', error);
   }
   console.log(`Yachiyo is online as ${client.user.tag}`);
+  for (const voice of await getVoiceChannels().catch(() => [])) keepVoiceConnection(voice.guild_id, voice.voice_channel_id).catch(console.error);
+});
+client.on('voiceStateUpdate', (oldState, newState) => {
+  if (newState.id !== client.user?.id || newState.channelId) return;
+  const voice = voiceConnections.get(newState.guild.id);
+  if (voice) setTimeout(() => keepVoiceConnection(newState.guild.id, voice.joinConfig.channelId).catch(console.error), 2000);
 });
 client.on('voiceJoinRequest', (guildId, channelId) => keepVoiceConnection(guildId, channelId).catch(console.error));
 client.on('giveawayEnd', async giveawayId => {

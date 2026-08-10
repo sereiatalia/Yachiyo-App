@@ -5,7 +5,7 @@ import { FISH_RARITIES } from './config/fishRarities.js';
 import { createFishCard } from './ui/fishCard.js';
 import { handleFishCommand } from './commands/fishing/fish.js';
 import { runPullSequence } from './services/fishingPresentation.js';
-import { setLogChannel, setAuditCategoryChannel, setFishChannel, getFishChannel, ensureGuild } from './services/guildService.js';
+import { setLogChannel, setAuditCategoryChannel, setFishChannel, getFishChannel, ensureGuild, setVoiceChannel } from './services/guildService.js';
 import { createCase, warn, recentCases } from './services/moderationService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { setConfessionChannel } from './services/confessionService.js';
@@ -91,6 +91,7 @@ export async function handleCommand(interaction) {
   if (name === 'vc-join') {
     const channel=interaction.options.getChannel('channel');
     if (!channel.isVoiceBased()) return interaction.reply({content:'Choose a voice channel.',ephemeral:true});
+    await setVoiceChannel(interaction.guildId, channel.id);
     interaction.client.emit('voiceJoinRequest', interaction.guildId, channel.id);
     return interaction.reply({content:'🔊 Yachiyo is joining <#'+channel.id+'> and will remain connected while the bot is online.',ephemeral:true});
   }
