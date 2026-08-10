@@ -35,7 +35,8 @@ export async function updateServerInfoBanner(guildId, bannerUrl) {
 export async function addServerInfoStaffRole(guildId, roleId) {
   await query(`INSERT INTO server_info_staff_roles (guild_id, role_id, sort_order)
     VALUES ($1,$2,COALESCE((SELECT MAX(sort_order)+1 FROM server_info_staff_roles WHERE guild_id=$1),1))
-    ON CONFLICT DO NOTHING`, [guildId, roleId]);
+    ON CONFLICT (guild_id, role_id) DO UPDATE SET
+      sort_order=(SELECT COALESCE(MAX(existing_roles.sort_order)+1,1) FROM server_info_staff_roles existing_roles WHERE existing_roles.guild_id=$1)`, [guildId, roleId]);
 }
 
 export async function removeServerInfoStaffRole(guildId, roleId) {
