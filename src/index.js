@@ -539,7 +539,7 @@ client.on('messageCreate', async message => {
   }
   if (message.author.bot) return;
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
-  if (client.user && message.mentions.has(client.user) && !message.content.startsWith(process.env.PREFIX || '.')) {
+  if (client.user && message.mentions.has(client.user) && !message.mentions.everyone && !message.content.startsWith(process.env.PREFIX || '.')) {
     const clean=message.content.replace(new RegExp('<@!?' + client.user.id + '>', 'g'), '').trim();
     const reply=await getOfflineBrainReply({text:clean,guild:message.guild,user:message.author.username});
     await message.reply({content:reply,allowedMentions:{repliedUser:false}}).catch(console.error);
