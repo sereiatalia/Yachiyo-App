@@ -13,7 +13,7 @@ import { getCurseSettings, findMatchedCurseWords, recordCurseWarning } from './s
 import { getIntroductionSettings, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
 import { getGiveaway, getGiveawayByMessage, setGiveawayEmoji, addGiveawayEntry, getGiveawayEntries, finishGiveaway } from './services/giveawayService.js';
 import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js';
-import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket } from './services/ticketService.js';
+import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket, getTicketAccessRoles } from './services/ticketService.js';
 import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
 import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpReminder, markBumpReminderNotified, pendingBumpReminders } from './services/bumpService.js';
 
@@ -195,7 +195,9 @@ client.on('interactionCreate', async interaction => {
     const settings=await getTicketSettings(interaction.guildId); if(!settings) return interaction.reply({content:'Tickets are not set up yet.',ephemeral:true});
     const category=interaction.customId.split(':')[1], subject=interaction.fields.getTextInputValue('ticket_subject'), details=interaction.fields.getTextInputValue('ticket_details');
     const safe=interaction.user.username.toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,18)||'member';
-    const channel=await interaction.guild.channels.create({name:'ticket-'+safe,type:ChannelType.GuildText,permissionOverwrites:[{id:interaction.guild.roles.everyone.id,deny:[PermissionFlagsBits.ViewChannel]},{id:interaction.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]}]});
+    const staffRoles=await getTicketAccessRoles(interaction.guildId);
+    const permissions=[{id:interaction.guild.roles.everyone.id,deny:[PermissionFlagsBits.ViewChannel]},{id:interaction.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]},...staffRoles.map(item=>({id:item.role_id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]}))];
+    const channel=await interaction.guild.channels.create({name:'ticket-'+safe,type:ChannelType.GuildText,parent:settings.ticket_category_id ?? undefined,permissionOverwrites:permissions});
     await createTicket({guildId:interaction.guildId,channelId:channel.id,userId:interaction.user.id,category,subject});
     const closeRow=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ticket_close').setLabel('Close ticket').setStyle(ButtonStyle.Danger));
     const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0xd9b8e8).setAuthor({name:interaction.user.globalName||interaction.user.username,iconURL:interaction.user.displayAvatarURL()}).setTitle('₊˚⊹ᰔ '+category[0].toUpperCase()+category.slice(1)+' ticket').setDescription('**'+subject+'**\n\n'+details+'\n\nStaff will be with you shortly.')],components:[closeRow]}); ticketPanelMessages.set(channel.id,panel.id);

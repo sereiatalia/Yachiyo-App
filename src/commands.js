@@ -15,7 +15,7 @@ import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingB
 import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, resetIntroduction, saveIntroductionSettings, clearIntroductionRecords } from './services/introductionService.js';
 import { createGiveaway, setGiveawayMessage, getGiveaway, getGiveawayEntries, finishGiveaway } from './services/giveawayService.js';
 import { setupRules, getRules, updateRule, updateRulesBanner } from './services/rulesService.js';
-import { saveTicketSettings } from './services/ticketService.js';
+import { saveTicketSettings, addTicketAccessRole, removeTicketAccessRole, getTicketAccessRoles } from './services/ticketService.js';
 import { getBumpTimer, saveBumpPanel } from './services/bumpService.js';
 const YACHIYO_PURPLE = 0x8e7dff;
 const YACHIYO_BLUE = 0x4db8e8;
@@ -47,7 +47,8 @@ export const commands = [
   ,new SlashCommandBuilder().setName('rules-panel').setDescription('Refresh the rulebook panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
   ,new SlashCommandBuilder().setName('rules-edit').setDescription('Edit a rulebook section.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addIntegerOption(o=>o.setName('section').setDescription('Section number 1-6').setMinValue(1).setMaxValue(6).setRequired(true))
   ,new SlashCommandBuilder().setName('rules-banner').setDescription('Replace the rulebook banner.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addAttachmentOption(o=>o.setName('banner').setDescription('New banner image').setRequired(true))
-  ,new SlashCommandBuilder().setName('ticket-setup').setDescription('Set up the private support ticket panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Ticket panel channel').setRequired(true))
+  ,new SlashCommandBuilder().setName('ticket-setup').setDescription('Set up the private support ticket panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Ticket panel channel').setRequired(true)).addChannelOption(o=>o.setName('ticket_category').setDescription('Category for new ticket channels').setRequired(false))
+  ,new SlashCommandBuilder().setName('ticket-role').setDescription('Manage staff roles that can access tickets.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Role action').setRequired(true).addChoices({name:'Add role',value:'add'},{name:'Remove role',value:'remove'},{name:'List roles',value:'list'})).addRoleOption(o=>o.setName('role').setDescription('Staff role').setRequired(false))
   ,new SlashCommandBuilder().setName('vc-join').setDescription('Keep Yachiyo connected to a voice channel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Voice channel').setRequired(true))
   ,new SlashCommandBuilder().setName('bump-status').setDescription('Check your Carl-bot bump cooldown.').setDMPermission(false)
   ,new SlashCommandBuilder().setName('bump-panel').setDescription('Set up the aesthetic Carl-bot bump reminder panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Panel channel').setRequired(true))
@@ -88,7 +89,7 @@ export const commands = [
 export async function handleCommand(interaction) {
   await ensureGuild(interaction.guildId);
   const name=interaction.commandName;
-  const adminOnly=['economy-add','logs','confession-setup','introduction-setup','introduction-panel','introduction-reset','introduction-status','fish-setup','curse-setup','curse','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout','vc-join','bump-panel'];
+  const adminOnly=['economy-add','logs','confession-setup','introduction-setup','introduction-panel','introduction-reset','introduction-status','fish-setup','curse-setup','curse','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout','vc-join','bump-panel','ticket-role'];
   if(adminOnly.includes(name) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return interaction.reply({content:'🛡️ Only server administrators can use this command.',ephemeral:true});
   if(name==='ping') return interaction.reply({embeds:[yEmbed('☾ Yachiyo is watching over this server.','✦ The moonlit command center is online and watching this server.',YACHIYO_BLUE)]});
   if (name === 'bump-status') { const next=await getBumpTimer(interaction.guildId,interaction.user.id); if(!next || new Date(next)<=new Date()) return interaction.reply({content:'🌷 You can bump the server now.',ephemeral:true}); return interaction.reply({content:'⏳ Your next bump is available <t:'+Math.floor(new Date(next).getTime()/1000)+':R> (<t:'+Math.floor(new Date(next).getTime()/1000)+':T>).',ephemeral:true}); }
@@ -100,7 +101,8 @@ export async function handleCommand(interaction) {
     interaction.client.emit('voiceJoinRequest', interaction.guildId, channel.id);
     return interaction.reply({content:'🔊 Yachiyo is joining <#'+channel.id+'> and will remain connected while the bot is online.',ephemeral:true});
   }
-  if (name === 'ticket-setup') { await saveTicketSettings(interaction.guildId, interaction.options.getChannel('channel').id); await interaction.reply({content:'✅ Ticket panel configured.',ephemeral:true}); return interaction.client.emit('ticketPanelRefresh',interaction.guildId); }
+  if (name === 'ticket-setup') { await saveTicketSettings(interaction.guildId, interaction.options.getChannel('channel').id,interaction.options.getChannel('ticket_category')?.id); await interaction.reply({content:'✅ Ticket panel configured.',ephemeral:true}); return interaction.client.emit('ticketPanelRefresh',interaction.guildId); }
+  if (name === 'ticket-role') { const action=interaction.options.getString('action'); const role=interaction.options.getRole('role'); if(action==='list') { const roles=await getTicketAccessRoles(interaction.guildId); return interaction.reply({content:roles.length?'🎫 Ticket staff roles:\n'+roles.map(x=>'<@&'+x.role_id+'>').join('\n'):'No extra ticket staff roles configured.',ephemeral:true}); } if(!role) return interaction.reply({content:'Choose a role for this action.',ephemeral:true}); if(action==='add') await addTicketAccessRole(interaction.guildId,role.id); else await removeTicketAccessRole(interaction.guildId,role.id); return interaction.reply({content:action==='add'?'✅ '+role.name+' can now access tickets.':'✅ '+role.name+' no longer has ticket access.',ephemeral:true}); }
   if (name === 'rules-setup' || name === 'rules-panel' || name === 'rules-banner' || name === 'rules-edit') {
     if (name === 'rules-setup') { const r=await setupRules(interaction.guildId,interaction.options.getChannel('channel').id,interaction.options.getAttachment('banner')?.url); await interaction.reply({content:'✅ Rulebook saved. Refreshing the panel.',ephemeral:true}); return interaction.client.emit('rulesPanelRefresh',interaction.guildId); }
     const rules=await getRules(interaction.guildId); if(!rules) return interaction.reply({content:'Run `/rules-setup` first.',ephemeral:true});

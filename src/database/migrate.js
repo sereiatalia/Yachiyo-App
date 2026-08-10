@@ -155,7 +155,11 @@ CREATE TABLE IF NOT EXISTS rules_sections (
 );
 CREATE TABLE IF NOT EXISTS ticket_settings (
   guild_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, panel_message_id TEXT,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  ticket_category_id TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS ticket_category_id TEXT;
+CREATE TABLE IF NOT EXISTS ticket_access_roles (
+  guild_id TEXT NOT NULL, role_id TEXT NOT NULL, PRIMARY KEY (guild_id, role_id)
 );
 CREATE TABLE IF NOT EXISTS tickets (
   id BIGSERIAL PRIMARY KEY, guild_id TEXT NOT NULL, channel_id TEXT NOT NULL UNIQUE,
