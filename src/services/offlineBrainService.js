@@ -1,4 +1,7 @@
 const has = (text, ...terms) => terms.some(term => text.includes(term));
+import { findBrainFaq, findRoleGuide } from './brainMemoryService.js';
+import { getTicketSettings } from './ticketService.js';
+import { getActiveGiveaways } from './giveawayService.js';
 
 const COUNTRY_TIME_ZONES = [
   ['philippines','Asia/Manila','Philippines'], ['ph','Asia/Manila','Philippines'], ['japan','Asia/Tokyo','Japan'], ['korea','Asia/Seoul','South Korea'],
@@ -69,8 +72,12 @@ export async function getOfflineBrainReply({ text, guild, user, member }) {
   const owner=await guild.fetchOwner().catch(()=>null);
   const channelAnswer=findChannelAnswer(message,guild);
   const directTime=findCountryTime(text);
+  const savedAnswer=await findBrainFaq(guild.id,text).catch(()=>null);
+  const roleGuide=await findRoleGuide(guild,text).catch(()=>null);
 
   if (!message || has(message,'hello','hi ','hii','kumusta','kamusta','hola','bonjour','こんにちは','안녕')) return `₊˚⊹ᰔ ${say.hello}, ${user}! ${say.intro} ♡`;
+  if (savedAnswer) return `₊˚⊹ᰔ ${savedAnswer.answer}`;
+  if (roleGuide) return `♡ **${roleGuide.role.name}:** ${roleGuide.description}`;
   if (has(message,'prettiest','most beautiful','pinakamaganda','maganda ba')) return 'Me, obviously. I have the moonlit glow and the receipts. ✦';
   if (has(message,'who are you','sino ka','about you','eres','qui es','誰','누구')) return say.intro+' I am offline, quick, and always ready to help with this server. ♡';
   if (has(message,'server name','name of the server','pangalan ng server','anong pangalan','nombre del servidor')) return `₊˚⊹ᰔ The server is called **${guild.name}**.`;
@@ -80,9 +87,14 @@ export async function getOfflineBrainReply({ text, guild, user, member }) {
   if (channelAnswer) return channelAnswer;
   if (has(message,'how many member','member count','members are','ilang member','members')) return `₊˚⊹ᰔ **${guild.name}** currently has **${guild.memberCount.toLocaleString()} members**.`;
   if (has(message,'how many channel','channel count','ilang channel')) return `₊˚⊹ᰔ There are **${publicTextChannels(guild).length} public text channels** I can see.`;
+  if (has(message,'active giveaway','current giveaway','giveaway active','may giveaway')) { const giveaways=await getActiveGiveaways(guild.id).catch(()=>[]); return giveaways.length ? '🎁 **Active giveaway'+(giveaways.length>1?'s':'')+':**\n'+giveaways.map(giveaway=>'• **'+giveaway.prize+'** in <#'+giveaway.channel_id+'> • ends <t:'+Math.floor(new Date(giveaway.ends_at).getTime()/1000)+':R>').join('\n') : 'There are no active giveaways right now. Keep an eye on the server for the next one. ♡'; }
+  if (has(message,'ticket','report','suggestion','feedback','staff help','contact staff','appeal','warning','warned','ban appeal')) { const ticket=await getTicketSettings(guild.id).catch(()=>null); return ticket ? '₊˚⊹ᰔ You can contact staff privately through the ticket panel in <#'+ticket.channel_id+'>. Choose **Reports**, **Suggestions**, or **Feedback** and Yachiyo will create a private channel for you.' : 'Please contact a staff member privately. The ticket system is not set up yet.'; }
   if (has(message,'when did i join','when i joined','join date','kailan ako sumali') && member?.joinedTimestamp) return `˚. ᵎᵎ You joined this server on <t:${Math.floor(member.joinedTimestamp/1000)}:D>.`;
   if (has(message,'owner','may-ari','may ari')) return owner ? `⭑.ᐟ The server owner is **${owner.user.tag}**.` : 'I could not find the server owner right now.';
   if (has(message,'server info','server information','info ng server')) return '˚. ᵎᵎ Use `/server-info` to view the current server information panel.';
+  if (has(message,'what can you do','what do you do','abilities','features','kaya mo','ano ginagawa mo')) return '✦ I can guide members, find public channels, answer saved server FAQs, explain role guides, show server/member information, and help with introductions, tickets, reminders, giveaways, and moderation tools.';
+  if (has(message,'fortune','fortune cookie','kapalaran')) { const fortunes=['A kind message will brighten someone’s day.','A small idea is about to become something lovely.','Your next good memory is closer than you think.','The moon says: drink water and trust yourself.']; return '✦ **Yachiyo’s fortune:** '+fortunes[Math.floor(Math.random()*fortunes.length)]; }
+  if (has(message,'quote','daily quote','inspiration')) { const quotes=['Soft hearts can still be strong.','You do not need to rush a beautiful life.','Being kind is always in style.','A little progress is still progress.']; return '˚. ᵎᵎ **Yachiyo’s quote:** '+quotes[Math.floor(Math.random()*quotes.length)]; }
   if (has(message,'command','commands','tulong','help','paano','ayuda','aide')) return '⊹ ࣪ ˖ '+say.help;
   if (has(message,'thank','salamat','thanks','gracias','merci','ありがとう','고마')) return say.thanks+' ♡';
   return language==='tl' ? 'Hindi pa ako full AI chat bot, pero maaasahan mo ako sa server questions, `/help`, at `/server-info`. Subukan mong magtanong nang mas simple. ♡' : `${say.intro} I can reliably answer server questions, help you find public channels, and guide you to `/help` or `/server-info`. ♡`;

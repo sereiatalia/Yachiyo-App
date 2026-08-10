@@ -199,6 +199,15 @@ CREATE TABLE IF NOT EXISTS member_profile_stats (
   guild_id TEXT NOT NULL, user_id TEXT NOT NULL, message_count BIGINT NOT NULL DEFAULT 0,
   last_message_at TIMESTAMPTZ, PRIMARY KEY (guild_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS brain_faqs (
+  id BIGSERIAL PRIMARY KEY, guild_id TEXT NOT NULL, question TEXT NOT NULL, answer TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS brain_faqs_guild_idx ON brain_faqs(guild_id,id);
+CREATE TABLE IF NOT EXISTS brain_role_guides (
+  guild_id TEXT NOT NULL, role_id TEXT NOT NULL, description TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id,role_id)
+);
 
 `;
 
