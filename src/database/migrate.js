@@ -184,6 +184,13 @@ CREATE TABLE IF NOT EXISTS server_info_settings (
   description TEXT NOT NULL DEFAULT '', extra_info TEXT NOT NULL DEFAULT '',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS server_info_staff_roles (
+  guild_id TEXT NOT NULL, role_id TEXT NOT NULL, PRIMARY KEY (guild_id, role_id)
+);
+CREATE TABLE IF NOT EXISTS member_profile_stats (
+  guild_id TEXT NOT NULL, user_id TEXT NOT NULL, message_count BIGINT NOT NULL DEFAULT 0,
+  last_message_at TIMESTAMPTZ, PRIMARY KEY (guild_id, user_id)
+);
 
 `;
 

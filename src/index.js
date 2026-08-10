@@ -16,7 +16,7 @@ import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js
 import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket, getTicketAccessRoles } from './services/ticketService.js';
 import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
 import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpReminder, markBumpReminderNotified, pendingBumpReminders } from './services/bumpService.js';
-import { getServerInfo, saveServerInfoPanel, updateServerInfo } from './services/serverInfoService.js';
+import { getServerInfo, saveServerInfoPanel, updateServerInfo, getServerInfoStaffRoles, getProfileStats, recordProfileMessage } from './services/serverInfoService.js';
 import { getOfflineBrainReply } from './services/offlineBrainService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
@@ -106,7 +106,8 @@ client.on('serverInfoPanelRefresh', async guildId => {
   const info=await getServerInfo(guildId).catch(()=>null); if(!info) return;
   const channel=await client.channels.fetch(info.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
   if(info.panel_message_id) { const old=await channel.messages.fetch(info.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
-  const panel=await channel.send({embeds:[await createServerInfoEmbed(channel.guild,info)]});
+  const buttons=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('server_info_staffs').setLabel('STAFFS').setStyle(ButtonStyle.Secondary).setEmoji('🌷'),new ButtonBuilder().setCustomId('server_info_profile').setLabel('YOUR PROFILE').setStyle(ButtonStyle.Primary).setEmoji('♡'),new ButtonBuilder().setCustomId('server_info_bot').setLabel('SERVER BOT').setStyle(ButtonStyle.Secondary).setEmoji('⭑'));
+  const panel=await channel.send({embeds:[await createServerInfoEmbed(channel.guild,info)],components:[buttons]});
   await saveServerInfoPanel(guildId,panel.id);
 });
 async function refreshTicketPanel(guildId) {
@@ -193,6 +194,28 @@ client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.
 client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.create',targetId:channel.id,data:{summary:`Channel **${channel.name}** was created.`}}).catch(console.error); });
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
 client.on('interactionCreate', async interaction => {
+  if (interaction.isButton() && interaction.customId === 'server_info_staffs') {
+    const configured=await getServerInfoStaffRoles(interaction.guildId);
+    if(!configured.length) return interaction.reply({content:'No staff roles have been added yet.',ephemeral:true});
+    await interaction.guild.members.fetch().catch(()=>null);
+    const groups=[];
+    for(const item of configured) {
+      const role=interaction.guild.roles.cache.get(item.role_id) ?? await interaction.guild.roles.fetch(item.role_id).catch(()=>null);
+      if(!role) continue;
+      const members=[...role.members.values()].filter(member=>!member.user.bot).map(member=>'<@'+member.id+'>');
+      const visible=members.slice(0,40);
+      groups.push('₊˚⊹ᰔ **'+role.name+'**\n'+(visible.length?visible.join(' • ')+(members.length>visible.length?'\n*+'+(members.length-visible.length)+' more members*':''):'*No members currently hold this role.*'));
+    }
+    return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('°❀⋆.ೃ࿔*:･  STAFFS  °❀⋆.ೃ࿔*:･').setDescription(groups.join('\n\n')||'*No available staff roles.*').setFooter({text:'♡ This list updates automatically when roles change.'})],ephemeral:true});
+  }
+  if (interaction.isButton() && interaction.customId === 'server_info_profile') {
+    const member=await interaction.guild.members.fetch(interaction.user.id).catch(()=>null); const stats=await getProfileStats(interaction.guildId,interaction.user.id);
+    if(!member) return interaction.reply({content:'I could not load your server profile.',ephemeral:true});
+    const roles=[...member.roles.cache.values()].filter(role=>role.id!==interaction.guild.id);
+    const joined=Math.floor(member.joinedTimestamp/1000), created=Math.floor(member.user.createdTimestamp/1000);
+    return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setAuthor({name:member.displayName,iconURL:member.user.displayAvatarURL({extension:'png',size:128})}).setTitle('₊˚⊹ᰔ Your Profile').setDescription(`♡ **Name:** ${member.user.username}\n⭑.ᐟ **Display Name:** ${member.displayName}\n˚. ᵎᵎ **Joined Server:** <t:${joined}:D>\n⊹ ࣪ ˖ **Discord Account:** <t:${created}:D>\n₊˚⊹ᰔ **Messages Sent:** ${Number(stats.message_count).toLocaleString()}\n♡ **Roles:** ${roles.length}\n⸝⸝ **Highest Role:** ${member.roles.highest.id===interaction.guild.id?'None':member.roles.highest}\n⋆.˚ **User ID:** ${member.id}`).setFooter({text:'‎ꫂ᭪݁ Your profile is visible only to you.'})],ephemeral:true});
+  }
+  if (interaction.isButton() && interaction.customId === 'server_info_bot') return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('⭑.ᐟ Meet Yachiyo').setDescription('₊˚⊹ᰔ **Yachiyo** is this server’s cozy little guardian.\n\nShe helps with introductions, tickets, rulebooks, moderation logs, giveaways, reminders, server panels, and more.\n\n♡ Mention me for a small offline English/Filipino helper reply, or use `/help` to explore my commands.').setFooter({text:'Yachiyo • made with care for your community'})],ephemeral:true});
   if (interaction.isButton() && (interaction.customId === 'bump_remind' || interaction.customId === 'bump_my_status')) {
     const next=await getBumpTimer(interaction.guildId,interaction.user.id);
     if(!next || new Date(next)<=new Date()) return interaction.reply({content:'Use Carl-bot’s `/bump` first, then click this after Carla confirms the successful bump.',ephemeral:true});
@@ -493,6 +516,7 @@ client.on('messageCreate', async message => {
     return;
   }
   if (message.author.bot) return;
+  await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   if (client.user && message.mentions.has(client.user) && !message.content.startsWith(process.env.PREFIX || '.')) {
     const clean=message.content.replace(new RegExp('<@!?' + client.user.id + '>', 'g'), '').trim();
     const reply=await getOfflineBrainReply({text:clean,guild:message.guild,user:message.author.username});

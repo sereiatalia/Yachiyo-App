@@ -31,3 +31,24 @@ export async function updateServerInfo(guildId, { title, description, extraInfo 
 export async function updateServerInfoBanner(guildId, bannerUrl) {
   await query('UPDATE server_info_settings SET banner_url=$2, updated_at=NOW() WHERE guild_id=$1', [guildId, bannerUrl]);
 }
+
+export async function addServerInfoStaffRole(guildId, roleId) {
+  await query('INSERT INTO server_info_staff_roles (guild_id, role_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [guildId, roleId]);
+}
+
+export async function removeServerInfoStaffRole(guildId, roleId) {
+  await query('DELETE FROM server_info_staff_roles WHERE guild_id=$1 AND role_id=$2', [guildId, roleId]);
+}
+
+export async function getServerInfoStaffRoles(guildId) {
+  return (await query('SELECT role_id FROM server_info_staff_roles WHERE guild_id=$1 ORDER BY role_id', [guildId])).rows;
+}
+
+export async function recordProfileMessage(guildId, userId) {
+  await query(`INSERT INTO member_profile_stats (guild_id,user_id,message_count,last_message_at) VALUES ($1,$2,1,NOW())
+    ON CONFLICT (guild_id,user_id) DO UPDATE SET message_count=member_profile_stats.message_count+1,last_message_at=NOW()`, [guildId, userId]);
+}
+
+export async function getProfileStats(guildId, userId) {
+  return (await query('SELECT message_count,last_message_at FROM member_profile_stats WHERE guild_id=$1 AND user_id=$2', [guildId,userId])).rows[0] ?? {message_count:0,last_message_at:null};
+}
