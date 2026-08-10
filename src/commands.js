@@ -16,7 +16,7 @@ import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, resetIntroduction
 import { createGiveaway, setGiveawayMessage, getGiveaway, getGiveawayEntries, finishGiveaway } from './services/giveawayService.js';
 import { setupRules, getRules, updateRule, updateRulesBanner } from './services/rulesService.js';
 import { saveTicketSettings } from './services/ticketService.js';
-import { getBumpTimer } from './services/bumpService.js';
+import { getBumpTimer, saveBumpPanel } from './services/bumpService.js';
 const YACHIYO_PURPLE = 0x8e7dff;
 const YACHIYO_BLUE = 0x4db8e8;
 const yEmbed = (title, description, color = YACHIYO_PURPLE) => new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setFooter({ text: 'Yachiyo • Cosmic server manager' });
@@ -50,6 +50,7 @@ export const commands = [
   ,new SlashCommandBuilder().setName('ticket-setup').setDescription('Set up the private support ticket panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Ticket panel channel').setRequired(true))
   ,new SlashCommandBuilder().setName('vc-join').setDescription('Keep Yachiyo connected to a voice channel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Voice channel').setRequired(true))
   ,new SlashCommandBuilder().setName('bump-status').setDescription('Check your Carl-bot bump cooldown.').setDMPermission(false)
+  ,new SlashCommandBuilder().setName('bump-panel').setDescription('Set up the aesthetic Carl-bot bump reminder panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Panel channel').setRequired(true))
   ,new SlashCommandBuilder().setName('fish-setup').setDescription('Set the only channel where fishing is allowed.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Fishing channel').setRequired(true))
   ,new SlashCommandBuilder().setName('curse-setup').setDescription('Save curse words and activate the server filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('words').setDescription('Comma or newline separated words, in any language.').setRequired(true))
   ,new SlashCommandBuilder().setName('curse').setDescription('Activate, deactivate, or view the curse filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Filter action').setRequired(true).addChoices({name:'Activate',value:'on'},{name:'Deactivate',value:'off'},{name:'View status',value:'status'}))
@@ -87,10 +88,11 @@ export const commands = [
 export async function handleCommand(interaction) {
   await ensureGuild(interaction.guildId);
   const name=interaction.commandName;
-  const adminOnly=['economy-add','logs','confession-setup','introduction-setup','introduction-panel','introduction-reset','introduction-status','fish-setup','curse-setup','curse','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout','vc-join'];
+  const adminOnly=['economy-add','logs','confession-setup','introduction-setup','introduction-panel','introduction-reset','introduction-status','fish-setup','curse-setup','curse','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout','vc-join','bump-panel'];
   if(adminOnly.includes(name) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return interaction.reply({content:'🛡️ Only server administrators can use this command.',ephemeral:true});
   if(name==='ping') return interaction.reply({embeds:[yEmbed('☾ Yachiyo is watching over this server.','✦ The moonlit command center is online and watching this server.',YACHIYO_BLUE)]});
   if (name === 'bump-status') { const next=await getBumpTimer(interaction.guildId,interaction.user.id); if(!next || new Date(next)<=new Date()) return interaction.reply({content:'🌷 You can bump the server now.',ephemeral:true}); return interaction.reply({content:'⏳ Your next bump is available <t:'+Math.floor(new Date(next).getTime()/1000)+':R> (<t:'+Math.floor(new Date(next).getTime()/1000)+':T>).',ephemeral:true}); }
+  if (name === 'bump-panel') { await saveBumpPanel(interaction.guildId,interaction.options.getChannel('channel').id); await interaction.reply({content:'✅ Bump panel configured.',ephemeral:true}); return interaction.client.emit('bumpPanelRefresh',interaction.guildId); }
   if (name === 'vc-join') {
     const channel=interaction.options.getChannel('channel');
     if (!channel.isVoiceBased()) return interaction.reply({content:'Choose a voice channel.',ephemeral:true});

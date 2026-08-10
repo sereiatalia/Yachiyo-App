@@ -15,7 +15,7 @@ import { getGiveaway, getGiveawayByMessage, setGiveawayEmoji, addGiveawayEntry, 
 import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js';
 import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket } from './services/ticketService.js';
 import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
-import { recordBump } from './services/bumpService.js';
+import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpReminder, markBumpReminderNotified, pendingBumpReminders } from './services/bumpService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -26,6 +26,13 @@ const ticketPanelMessages = new Map();
 const voiceConnections = new Map();
 const CARL_BOT_ID = '235148962103951360';
 const pendingBumps = new Map();
+const bumpReminderTimers = new Map();
+
+function scheduleBumpReminder(guildId, userId, remindAt) {
+  const key=guildId+':'+userId; clearTimeout(bumpReminderTimers.get(key));
+  const delay=Math.max(0,new Date(remindAt).getTime()-Date.now());
+  bumpReminderTimers.set(key,setTimeout(async()=>{ const user=await client.users.fetch(userId).catch(()=>null); if(user) await user.send('₊˚⊹ᰔ Your Carl-bot bump cooldown is over. You can use `/bump` again now!').catch(()=>null); await markBumpReminderNotified(guildId,userId).catch(console.error); },delay));
+}
 
 async function keepVoiceConnection(guildId, channelId) {
   const guild=client.guilds.cache.get(guildId); const channel=await client.channels.fetch(channelId).catch(()=>null);
@@ -59,6 +66,7 @@ client.once('ready', async () => {
   }
   console.log(`Yachiyo is online as ${client.user.tag}`);
   for (const voice of await getVoiceChannels().catch(() => [])) keepVoiceConnection(voice.guild_id, voice.voice_channel_id).catch(console.error);
+  for (const reminder of await pendingBumpReminders().catch(() => [])) scheduleBumpReminder(reminder.guild_id,reminder.user_id,reminder.remind_at);
 });
 client.on('voiceStateUpdate', (oldState, newState) => {
   if (newState.id !== client.user?.id || newState.channelId) return;
@@ -91,6 +99,13 @@ client.on('ticketPanelRefresh', async guildId => {
   const menu=new StringSelectMenuBuilder().setCustomId('ticket_category_select').setPlaceholder('୨୧ Choose a ticket category').addOptions({label:'Reports',value:'reports',description:'Report a concern to staff'},{label:'Suggestions',value:'suggestions',description:'Share an idea for the server'},{label:'Feedback',value:'feedback',description:'Send feedback to staff'});
   const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0xd9b8e8).setTitle('₊˚⊹ᰔ  Contact Yachiyo’s staff').setDescription('Choose a category below to privately share a report, suggestion, or feedback. A temporary private channel will be created for you.')],components:[new ActionRowBuilder().addComponents(menu)]});
   await setTicketPanel(guildId,panel.id);
+});
+client.on('bumpPanelRefresh', async guildId => {
+  const settings=await getBumpPanel(guildId).catch(()=>null); if(!settings) return;
+  const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
+  if(settings.panel_message_id) { const old=await channel.messages.fetch(settings.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
+  const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0xd9b8e8).setTitle('°❀⋆.ೃ࿔*:･ BUMP CORNER °❀⋆.ೃ࿔*:･').setDescription('₊˚⊹ᰔ Help the server grow and keep your personal bump streak glowing.\n\nBefore clicking **Remind me to bump**, please use Carl-bot’s `/bump` command first.\n\nYachiyo starts your reminder only after Carl confirms a successful bump. ♡')],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('bump_remind').setLabel('🔔 Remind me to bump').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('bump_my_status').setLabel('⏳ My timer').setStyle(ButtonStyle.Secondary))]});
+  await setBumpPanelMessage(guildId,panel.id);
 });
 client.on('messageReactionAdd', async (reaction, user) => {
   if (user.bot || !reaction.message.guild) return;
@@ -159,6 +174,14 @@ client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.
 client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.create',targetId:channel.id,data:{summary:`Channel **${channel.name}** was created.`}}).catch(console.error); });
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
 client.on('interactionCreate', async interaction => {
+  if (interaction.isButton() && (interaction.customId === 'bump_remind' || interaction.customId === 'bump_my_status')) {
+    const next=await getBumpTimer(interaction.guildId,interaction.user.id);
+    if(!next || new Date(next)<=new Date()) return interaction.reply({content:'Use Carl-bot’s `/bump` first, then click this after Carla confirms the successful bump.',ephemeral:true});
+    const timestamp=Math.floor(new Date(next).getTime()/1000);
+    if(interaction.customId === 'bump_my_status') return interaction.reply({content:'⏳ Your next bump is available <t:'+timestamp+':R>.',ephemeral:true});
+    await saveBumpReminder(interaction.guildId,interaction.user.id,next); scheduleBumpReminder(interaction.guildId,interaction.user.id,next);
+    return interaction.reply({content:'🔔 Reminder saved! I’ll DM you <t:'+timestamp+':R> when it is time to bump again.',ephemeral:true});
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_category_select') {
     const modal=new ModalBuilder().setCustomId('ticket_form:'+interaction.values[0]).setTitle('Submit '+interaction.values[0]+' ticket');
     modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ticket_subject').setLabel('Short subject').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)),new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ticket_details').setLabel('Tell us what happened').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000)));

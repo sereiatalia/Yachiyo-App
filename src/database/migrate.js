@@ -166,6 +166,14 @@ CREATE TABLE IF NOT EXISTS bump_timers (
   guild_id TEXT NOT NULL, user_id TEXT NOT NULL, next_bump_at TIMESTAMPTZ NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS bump_panel_settings (
+  guild_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, panel_message_id TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS bump_reminders (
+  guild_id TEXT NOT NULL, user_id TEXT NOT NULL, remind_at TIMESTAMPTZ NOT NULL,
+  notified BOOLEAN NOT NULL DEFAULT FALSE, PRIMARY KEY (guild_id, user_id)
+);
 
 `;
 
