@@ -1,7 +1,7 @@
 const OPERATORS = new Set(['+','-','*','/','%','^','(',')']);
 
 function tokensFor(expression) {
-  const source=expression.replace(/[×x]/gi,'*').replace(/÷/g,'/').replace(/,/g,'').trim();
+  const source=expression.replace(/[\u00d7x]/gi,'*').replace(/\u00f7/g,'/').replace(/,/g,'').trim();
   if(!source || source.length>100 || /[^0-9.+\-*/%^()\s]/.test(source)) return null;
   const tokens=[];
   for(let index=0;index<source.length;) {
@@ -33,9 +33,9 @@ function calculate(tokens) {
 }
 
 export function solveSimpleMath(text) {
-  if(!/[0-9]/.test(text) || !/[+\-*/%^×÷()]/.test(text)) return null;
+  if(!/[0-9]/.test(text) || !/[+\-*/%^\u00d7\u00f7x()]/i.test(text)) return null;
   const cleaned=text.replace(/^(?:what\s+is|calculate|compute|solve|how\s+much\s+is|magkano\s+ang|kalkulahin|kwentahin|ano\s+ang)\s*/i,'').trim();
-  const expression=cleaned.match(/[0-9.\s+\-*/%^×x÷()]+/)?.[0]?.trim();
+  const expression=cleaned.match(/[0-9.\s+\-*/%^\u00d7x\u00f7()]+/i)?.[0]?.trim();
   const tokens=tokensFor(expression ?? ''); if(!tokens) return null;
   try { const value=calculate(tokens); return {expression,value}; } catch { return {expression,error:true}; }
 }
