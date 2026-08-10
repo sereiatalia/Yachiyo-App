@@ -162,6 +162,10 @@ CREATE TABLE IF NOT EXISTS tickets (
   user_id TEXT NOT NULL, category TEXT NOT NULL, subject TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS bump_timers (
+  guild_id TEXT NOT NULL, user_id TEXT NOT NULL, next_bump_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id, user_id)
+);
 
 `;
 

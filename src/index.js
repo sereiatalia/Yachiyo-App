@@ -15,6 +15,7 @@ import { getGiveaway, getGiveawayByMessage, setGiveawayEmoji, addGiveawayEntry, 
 import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js';
 import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket } from './services/ticketService.js';
 import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
+import { recordBump } from './services/bumpService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -23,6 +24,7 @@ const introductionPanelTimers = new Map();
 const ticketPanelTimers = new Map();
 const ticketPanelMessages = new Map();
 const voiceConnections = new Map();
+const CARL_BOT_ID = '235148962103951360';
 
 async function keepVoiceConnection(guildId, channelId) {
   const guild=client.guilds.cache.get(guildId); const channel=await client.channels.fetch(channelId).catch(()=>null);
@@ -421,7 +423,15 @@ client.on('interactionCreate', async interaction => {
   }
 });
 client.on('messageCreate', async message => {
-  if (message.author.bot || !message.guild) return;
+  if (!message.guild) return;
+  if (message.author.bot && (message.author.id === CARL_BOT_ID || /carl/i.test(message.author.username || message.author.tag || ''))) {
+    if (/you'?ve successfully bumped this server/i.test(message.content || '')) {
+      const userId = message.interactionMetadata?.user?.id ?? message.interaction?.user?.id;
+      if (userId) await recordBump(message.guild.id, userId, 6).catch(console.error);
+    }
+    return;
+  }
+  if (message.author.bot) return;
   const ticket=await getTicketByChannel(message.channelId).catch(()=>null);
   if (ticket) {
     clearTimeout(ticketPanelTimers.get(message.channelId));
