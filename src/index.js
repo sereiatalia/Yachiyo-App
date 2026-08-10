@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes, ChannelType } from 'discord.js';
-import { commands, handleCommand } from './commands.js';
+import { commands, handleCommand, buildHelpView } from './commands.js';
 import { ensureGuild, getFishChannel, getVoiceChannels } from './services/guildService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { fishInventory, fishAlmanac, fishCollection } from './services/economyService.js';
@@ -217,6 +217,7 @@ client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.
 client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.create',targetId:channel.id,data:{summary:`Channel **${channel.name}** was created.`}}).catch(console.error); });
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
 client.on('interactionCreate', async interaction => {
+  if (interaction.isStringSelectMenu() && interaction.customId === 'yachiyo_help_category') return interaction.update(buildHelpView(interaction.values[0]));
   if (interaction.isButton() && interaction.customId === 'server_info_staffs') {
     const configured=await getServerInfoStaffRoles(interaction.guildId);
     if(!configured.length) return interaction.reply({content:'No staff roles have been added yet.',ephemeral:true});
