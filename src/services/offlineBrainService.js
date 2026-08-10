@@ -4,6 +4,7 @@ import { getTicketSettings } from './ticketService.js';
 import { getActiveGiveaways } from './giveawayService.js';
 import { solveSimpleMath } from './simpleMathService.js';
 import { getBrainUtilityReply } from './brainUtilityService.js';
+import { getHandbookBrainReply } from './handbookBrainService.js';
 
 const COUNTRY_TIME_ZONES = [
   ['philippines','Asia/Manila','Philippines'], ['ph','Asia/Manila','Philippines'], ['japan','Asia/Tokyo','Japan'], ['korea','Asia/Seoul','South Korea'],
@@ -76,15 +77,18 @@ export async function getOfflineBrainReply({ text, guild, user, member }) {
   const directTime=findCountryTime(text,language);
   const math=solveSimpleMath(text);
   const utilityReply=getBrainUtilityReply(text,language);
+  const handbookReply=getHandbookBrainReply(text,language);
   const savedAnswer=await findBrainFaq(guild.id,text).catch(()=>null);
   const roleGuide=await findRoleGuide(guild,text).catch(()=>null);
 
+  if (/(kill myself|suicide|self harm|saktan ang sarili|magpakamatay)/i.test(message) && handbookReply) return handbookReply;
   if (!message || has(message,'hello','hi ','hii','kumusta','kamusta','hola','bonjour','こんにちは','안녕')) return `₊˚⊹ᰔ ${say.hello}, ${user}! ${say.intro} ♡`;
   if (math?.error) return language==='tl' ? 'Hindi ko ma-solve ang expression na iyon. Subukan ang simpleng format tulad ng `12 * (3 + 2)`.' : 'I could not solve that expression. Try a simple format such as `12 * (3 + 2)`.';
   if (math) return `✦ ${math.expression} = **${Number.isInteger(math.value) ? math.value : Number(math.value.toFixed(10))}**`;
   if (utilityReply) return utilityReply;
   if (savedAnswer) return `₊˚⊹ᰔ ${savedAnswer.answer}`;
   if (roleGuide) return `♡ **${roleGuide.role.name}:** ${roleGuide.description}`;
+  if (handbookReply) return handbookReply;
   if (has(message,'prettiest','most beautiful','pinakamaganda','pinaka maganda','pinaka magandang','maganda ba','sinong maganda')) return language==='tl' ? 'Ako, siyempre. May moonlit glow ako at may resibo rin. ✦' : 'Me, obviously. I have the moonlit glow and the receipts. ✦';
   if (has(message,'who are you','sino ka','about you','eres','qui es','誰','누구')) return say.intro+' I am offline, quick, and always ready to help with this server. ♡';
   if (has(message,'server name','name of the server','pangalan ng server','anong pangalan','ano pangalan','nombre del servidor')) return language==='tl' ? `₊˚⊹ᰔ Ang pangalan ng server ay **${guild.name}**.` : `₊˚⊹ᰔ The server is called **${guild.name}**.`;
