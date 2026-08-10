@@ -185,8 +185,16 @@ CREATE TABLE IF NOT EXISTS server_info_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE TABLE IF NOT EXISTS server_info_staff_roles (
-  guild_id TEXT NOT NULL, role_id TEXT NOT NULL, PRIMARY KEY (guild_id, role_id)
+  guild_id TEXT NOT NULL, role_id TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (guild_id, role_id)
 );
+ALTER TABLE server_info_staff_roles ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
+WITH staff_role_order AS (
+  SELECT guild_id, role_id, ROW_NUMBER() OVER (PARTITION BY guild_id ORDER BY role_id) AS position
+  FROM server_info_staff_roles
+)
+UPDATE server_info_staff_roles roles SET sort_order=ordered.position
+FROM staff_role_order ordered
+WHERE roles.guild_id=ordered.guild_id AND roles.role_id=ordered.role_id AND roles.sort_order=0;
 CREATE TABLE IF NOT EXISTS member_profile_stats (
   guild_id TEXT NOT NULL, user_id TEXT NOT NULL, message_count BIGINT NOT NULL DEFAULT 0,
   last_message_at TIMESTAMPTZ, PRIMARY KEY (guild_id, user_id)

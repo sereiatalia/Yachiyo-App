@@ -33,7 +33,9 @@ export async function updateServerInfoBanner(guildId, bannerUrl) {
 }
 
 export async function addServerInfoStaffRole(guildId, roleId) {
-  await query('INSERT INTO server_info_staff_roles (guild_id, role_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [guildId, roleId]);
+  await query(`INSERT INTO server_info_staff_roles (guild_id, role_id, sort_order)
+    VALUES ($1,$2,COALESCE((SELECT MAX(sort_order)+1 FROM server_info_staff_roles WHERE guild_id=$1),1))
+    ON CONFLICT DO NOTHING`, [guildId, roleId]);
 }
 
 export async function removeServerInfoStaffRole(guildId, roleId) {
@@ -41,7 +43,7 @@ export async function removeServerInfoStaffRole(guildId, roleId) {
 }
 
 export async function getServerInfoStaffRoles(guildId) {
-  return (await query('SELECT role_id FROM server_info_staff_roles WHERE guild_id=$1 ORDER BY role_id', [guildId])).rows;
+  return (await query('SELECT role_id FROM server_info_staff_roles WHERE guild_id=$1 ORDER BY sort_order ASC, role_id ASC', [guildId])).rows;
 }
 
 export async function recordProfileMessage(guildId, userId) {
