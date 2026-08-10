@@ -9,7 +9,7 @@ import { setLogChannel, setAuditCategoryChannel, setFishChannel, getFishChannel,
 import { createCase, warn, recentCases } from './services/moderationService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { setConfessionChannel } from './services/confessionService.js';
-import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurseSettings } from './services/curseService.js';
+import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurseSettings, addCurseExemptRole, removeCurseExemptRole, getCurseExemptRoles } from './services/curseService.js';
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
 import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, resetIntroduction, saveIntroductionSettings, clearIntroductionRecords } from './services/introductionService.js';
@@ -83,6 +83,7 @@ export const commands = [
   ,new SlashCommandBuilder().setName('curse-setup').setDescription('Save curse words and activate the server filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('words').setDescription('Comma or newline separated words, in any language.').setRequired(true))
   ,new SlashCommandBuilder().setName('curse').setDescription('Activate, deactivate, or view the curse filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Filter action').setRequired(true).addChoices({name:'Activate',value:'on'},{name:'Deactivate',value:'off'},{name:'View status',value:'status'}))
   ,new SlashCommandBuilder().setName('curse-list').setDescription('View the saved curse words.').setDMPermission(false)
+  ,new SlashCommandBuilder().setName('curse-exempt-role').setDescription('Manage roles exempt from the curse filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Exemption action').setRequired(true).addChoices({name:'Add exempt role',value:'add'},{name:'Remove exempt role',value:'remove'},{name:'List exempt roles',value:'list'})).addRoleOption(o=>o.setName('role').setDescription('Role to exempt or remove').setRequired(false))
   ,new SlashCommandBuilder().setName('warn').setDescription('Warn a member.').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Reason').setRequired(false))
   ,new SlashCommandBuilder().setName('warnings').setDescription('View recent warnings and cases.').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true))
   ,new SlashCommandBuilder().setName('kick').setDescription('Kick a member.').setDefaultMemberPermissions(PermissionFlagsBits.KickMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Reason').setRequired(false))
@@ -116,7 +117,7 @@ export const commands = [
 export async function handleCommand(interaction) {
   await ensureGuild(interaction.guildId);
   const name=interaction.commandName;
-  const adminOnly=['economy-add','logs','confession-setup','introduction-setup','introduction-panel','introduction-reset','introduction-status','fish-setup','curse-setup','curse','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout','vc-join','bump-panel','ticket-role','server-info-setup','server-info-edit','server-info-banner','server-info-staff','server-info-recount','brain-faq','role-guide'];
+  const adminOnly=['economy-add','logs','confession-setup','introduction-setup','introduction-panel','introduction-reset','introduction-status','fish-setup','curse-setup','curse','curse-exempt-role','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout','vc-join','bump-panel','ticket-role','server-info-setup','server-info-edit','server-info-banner','server-info-staff','server-info-recount','brain-faq','role-guide'];
   if(name==='help') return interaction.reply(buildHelpView());
   if(adminOnly.includes(name) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return interaction.reply({content:'🛡️ Only server administrators can use this command.',ephemeral:true});
   if(name==='ping') return interaction.reply({embeds:[yEmbed('☾ Yachiyo is watching over this server.','✦ The moonlit command center is online and watching this server.',YACHIYO_BLUE)]});
@@ -303,6 +304,13 @@ export async function handleCommand(interaction) {
     const words=settings.words??[];
     const description=words.length ? words.map((word,index)=>'**'+(index+1)+'.** '+word).join('\n') : '*No curse words have been saved for this server.*';
     return interaction.reply({embeds:[new EmbedBuilder().setColor(0xff6b9d).setTitle('🧼 Saved curse words').setDescription(description).setFooter({text:'Administrators manage the saved words with /curse-setup.'})],ephemeral:true});
+  }
+  if(name==='curse-exempt-role') {
+    const action=interaction.options.getString('action');
+    if(action==='list') { const roles=await getCurseExemptRoles(interaction.guildId); return interaction.reply({content:roles.length?'🛡️ Curse-filter exempt roles:\n'+roles.map(item=>'<@&'+item.role_id+'>').join('\n'):'No roles are exempt from the curse filter.',ephemeral:true}); }
+    const role=interaction.options.getRole('role'); if(!role) return interaction.reply({content:'Choose a role for this action.',ephemeral:true});
+    if(action==='add') await addCurseExemptRole(interaction.guildId,role.id); else await removeCurseExemptRole(interaction.guildId,role.id);
+    return interaction.reply({content:action==='add'?'✅ '+role.name+' is now exempt from the curse filter.':'✅ '+role.name+' is no longer exempt from the curse filter.',ephemeral:true});
   }
   if(name==='curse') {
     const action=interaction.options.getString('action');

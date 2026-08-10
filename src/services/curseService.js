@@ -57,6 +57,19 @@ export async function getCurseSettings(guildId) {
   return result.rows[0] ?? { enabled: false, words: [] };
 }
 
+async function ensureCurseExemptRolesTable() {
+  await query(`CREATE TABLE IF NOT EXISTS curse_exempt_roles (
+    guild_id TEXT NOT NULL, role_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (guild_id, role_id)
+  )`);
+}
+export async function addCurseExemptRole(guildId, roleId) {
+  await ensureCurseExemptRolesTable();
+  await query('INSERT INTO curse_exempt_roles (guild_id,role_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',[guildId,roleId]);
+}
+export async function removeCurseExemptRole(guildId, roleId) { await ensureCurseExemptRolesTable(); await query('DELETE FROM curse_exempt_roles WHERE guild_id=$1 AND role_id=$2',[guildId,roleId]); }
+export async function getCurseExemptRoles(guildId) { await ensureCurseExemptRolesTable(); return (await query('SELECT role_id FROM curse_exempt_roles WHERE guild_id=$1 ORDER BY created_at ASC',[guildId])).rows; }
+
 export function findMatchedCurseWords(content, words) {
   const message = String(content ?? '');
   return [...new Set((words ?? [])

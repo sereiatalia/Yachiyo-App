@@ -117,6 +117,10 @@ CREATE TABLE IF NOT EXISTS curse_warnings (
   last_warned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (guild_id, user_id, word)
 );
+CREATE TABLE IF NOT EXISTS curse_exempt_roles (
+  guild_id TEXT NOT NULL, role_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (guild_id, role_id)
+);
 CREATE INDEX IF NOT EXISTS curse_warnings_guild_idx ON curse_warnings(guild_id, last_warned_at DESC);
 CREATE TABLE IF NOT EXISTS introduction_settings (
   guild_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, panel_message_id TEXT,

@@ -9,7 +9,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilde
 import { fishAgain } from './handlers/fishing.js';
 import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
-import { getCurseSettings, findMatchedCurseWords, recordCurseWarning } from './services/curseService.js';
+import { getCurseSettings, findMatchedCurseWords, recordCurseWarning, getCurseExemptRoles } from './services/curseService.js';
 import { getIntroductionSettings, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
 import { getGiveaway, getGiveawayByMessage, setGiveawayEmoji, addGiveawayEntry, getGiveawayEntries, finishGiveaway } from './services/giveawayService.js';
 import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js';
@@ -563,7 +563,9 @@ client.on('messageCreate', async message => {
   }
   try {
     const settings = await getCurseSettings(message.guild.id);
-    const matchedWords = settings.enabled ? findMatchedCurseWords(message.content, settings.words) : [];
+    const exemptRoles=await getCurseExemptRoles(message.guild.id).catch(()=>[]);
+    const isExempt=exemptRoles.some(item=>message.member?.roles.cache.has(item.role_id));
+    const matchedWords = settings.enabled && !isExempt ? findMatchedCurseWords(message.content, settings.words) : [];
     if (matchedWords.length) {
       filteredMessageIds.add(message.id);
       await message.delete().catch(() => null);
