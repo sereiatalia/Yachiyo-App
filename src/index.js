@@ -25,6 +25,7 @@ const ticketPanelTimers = new Map();
 const ticketPanelMessages = new Map();
 const voiceConnections = new Map();
 const CARL_BOT_ID = '235148962103951360';
+const pendingBumps = new Map();
 
 async function keepVoiceConnection(guildId, channelId) {
   const guild=client.guilds.cache.get(guildId); const channel=await client.channels.fetch(channelId).catch(()=>null);
@@ -424,9 +425,18 @@ client.on('interactionCreate', async interaction => {
 });
 client.on('messageCreate', async message => {
   if (!message.guild) return;
+  const interactionName = message.interactionMetadata?.name ?? message.interaction?.commandName;
+  if (interactionName === 'bump') {
+    const userId = message.interactionMetadata?.user?.id ?? message.interaction?.user?.id ?? (!message.author.bot ? message.author.id : null);
+    if (userId) {
+      const key = message.guild.id + ':' + message.channelId;
+      pendingBumps.set(key, userId);
+      setTimeout(() => pendingBumps.delete(key), 30_000);
+    }
+  }
   if (message.author.bot && (message.author.id === CARL_BOT_ID || /carl/i.test(message.author.username || message.author.tag || ''))) {
     if (/you'?ve successfully bumped this server/i.test(message.content || '')) {
-      const userId = message.interactionMetadata?.user?.id ?? message.interaction?.user?.id;
+      const userId = message.interactionMetadata?.user?.id ?? message.interaction?.user?.id ?? pendingBumps.get(message.guild.id + ':' + message.channelId);
       if (userId) await recordBump(message.guild.id, userId, 6).catch(console.error);
     }
     return;
