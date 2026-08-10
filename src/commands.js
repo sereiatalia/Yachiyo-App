@@ -47,6 +47,7 @@ export const commands = [
   ,new SlashCommandBuilder().setName('rules-edit').setDescription('Edit a rulebook section.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addIntegerOption(o=>o.setName('section').setDescription('Section number 1-6').setMinValue(1).setMaxValue(6).setRequired(true))
   ,new SlashCommandBuilder().setName('rules-banner').setDescription('Replace the rulebook banner.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addAttachmentOption(o=>o.setName('banner').setDescription('New banner image').setRequired(true))
   ,new SlashCommandBuilder().setName('ticket-setup').setDescription('Set up the private support ticket panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Ticket panel channel').setRequired(true))
+  ,new SlashCommandBuilder().setName('vc-join').setDescription('Keep Yachiyo connected to a voice channel.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Voice channel').setRequired(true))
   ,new SlashCommandBuilder().setName('fish-setup').setDescription('Set the only channel where fishing is allowed.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Fishing channel').setRequired(true))
   ,new SlashCommandBuilder().setName('curse-setup').setDescription('Save curse words and activate the server filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('words').setDescription('Comma or newline separated words, in any language.').setRequired(true))
   ,new SlashCommandBuilder().setName('curse').setDescription('Activate, deactivate, or view the curse filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Filter action').setRequired(true).addChoices({name:'Activate',value:'on'},{name:'Deactivate',value:'off'},{name:'View status',value:'status'}))
@@ -87,6 +88,12 @@ export async function handleCommand(interaction) {
   const adminOnly=['economy-add','logs','confession-setup','introduction-setup','introduction-panel','introduction-reset','introduction-status','fish-setup','curse-setup','curse','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout'];
   if(adminOnly.includes(name) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return interaction.reply({content:'🛡️ Only server administrators can use this command.',ephemeral:true});
   if(name==='ping') return interaction.reply({embeds:[yEmbed('☾ Yachiyo is watching over this server.','✦ The moonlit command center is online and watching this server.',YACHIYO_BLUE)]});
+  if (name === 'vc-join') {
+    const channel=interaction.options.getChannel('channel');
+    if (!channel.isVoiceBased()) return interaction.reply({content:'Choose a voice channel.',ephemeral:true});
+    interaction.client.emit('voiceJoinRequest', interaction.guildId, channel.id);
+    return interaction.reply({content:'🔊 Yachiyo is joining <#'+channel.id+'> and will remain connected while the bot is online.',ephemeral:true});
+  }
   if (name === 'ticket-setup') { await saveTicketSettings(interaction.guildId, interaction.options.getChannel('channel').id); await interaction.reply({content:'✅ Ticket panel configured.',ephemeral:true}); return interaction.client.emit('ticketPanelRefresh',interaction.guildId); }
   if (name === 'rules-setup' || name === 'rules-panel' || name === 'rules-banner' || name === 'rules-edit') {
     if (name === 'rules-setup') { const r=await setupRules(interaction.guildId,interaction.options.getChannel('channel').id,interaction.options.getAttachment('banner')?.url); await interaction.reply({content:'✅ Rulebook saved. Refreshing the panel.',ephemeral:true}); return interaction.client.emit('rulesPanelRefresh',interaction.guildId); }

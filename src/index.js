@@ -14,6 +14,7 @@ import { getIntroductionSettings, recordIntroduction, setIntroductionPanelMessag
 import { getGiveaway, getGiveawayByMessage, setGiveawayEmoji, addGiveawayEntry, getGiveawayEntries, finishGiveaway } from './services/giveawayService.js';
 import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js';
 import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket } from './services/ticketService.js';
+import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -21,6 +22,21 @@ const filteredMessageIds = new Set();
 const introductionPanelTimers = new Map();
 const ticketPanelTimers = new Map();
 const ticketPanelMessages = new Map();
+const voiceConnections = new Map();
+
+async function keepVoiceConnection(guildId, channelId) {
+  const guild=client.guilds.cache.get(guildId); const channel=await client.channels.fetch(channelId).catch(()=>null);
+  if(!guild || !channel?.isVoiceBased()) throw new Error('Voice channel unavailable.');
+  const old=voiceConnections.get(guildId); old?.destroy();
+  const connection=joinVoiceChannel({channelId:channel.id,guildId:guild.id,adapterCreator:guild.voiceAdapterCreator,selfDeaf:false,selfMute:true});
+  voiceConnections.set(guildId,connection);
+  connection.on(VoiceConnectionStatus.Disconnected, async () => {
+    try { await entersState(connection, VoiceConnectionStatus.Ready, 5_000); }
+    catch { if (voiceConnections.get(guildId)===connection) { connection.destroy(); setTimeout(()=>keepVoiceConnection(guildId,channelId).catch(console.error),2_000); } }
+  });
+  connection.on('error', error => console.error('[VOICE]', error));
+}
+client.on('voiceJoinRequest', (guildId, channelId) => keepVoiceConnection(guildId, channelId).catch(console.error));
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildModeration, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildVoiceStates],
