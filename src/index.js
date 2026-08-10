@@ -16,6 +16,8 @@ import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js
 import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket, getTicketAccessRoles } from './services/ticketService.js';
 import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
 import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpReminder, markBumpReminderNotified, pendingBumpReminders } from './services/bumpService.js';
+import { getServerInfo, saveServerInfoPanel, updateServerInfo } from './services/serverInfoService.js';
+import { getOfflineBrainReply } from './services/offlineBrainService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -91,6 +93,21 @@ client.on('rulesPanelRefresh', async guildId => {
   const panelEmbed=new EmbedBuilder().setColor(0xd9b8e8).setTitle('°❀⋆.ೃ࿔*:･°❀⋆.ೃ࿔*:･\n📖  RULE BOOK').setDescription('₊˚⊹ᰔ  Welcome to our little corner of the server.\n\nBy remaining in this server, you agree to follow all rules listed below. These guidelines help keep our community safe, comfortable, and welcoming.\n\n°❀⋆.ೃ࿔*:･°❀⋆.ೃ࿔*:･').setFooter({text:'♡ please help keep the server warm and safe ♡'}); if(rules.banner_url) panelEmbed.setImage(rules.banner_url);
   const panel=await channel.send({embeds:[panelEmbed],components:[new ActionRowBuilder().addComponents(menu)]});
   await saveRulesPanel(guildId,panel.id);
+});
+async function createServerInfoEmbed(guild, info) {
+  const owner=await guild.fetchOwner().catch(()=>null);
+  const created=Math.floor(guild.createdTimestamp/1000);
+  const embed=new EmbedBuilder().setColor(0xf3a6c7).setTitle('°❀⋆.ೃ࿔*:･  '+info.title+'  °❀⋆.ೃ࿔*:･').setDescription(`${info.description}\n\n₊˚⊹ᰔ **Server Name:** ${guild.name}\n˚. ᵎᵎ **Date Created:** <t:${created}:D>\n⭑.ᐟ **Server Owner:** ${owner ? owner.user.tag : 'Unavailable'}\n⊹ ࣪ ˖ **Members:** ${guild.memberCount.toLocaleString()}\n\n♡ ${info.extra_info}`).setFooter({text:'‎ꫂ᭪݁ Yachiyo • server information'});
+  if(info.banner_url) embed.setImage(info.banner_url);
+  return embed;
+}
+client.createServerInfoEmbed=createServerInfoEmbed;
+client.on('serverInfoPanelRefresh', async guildId => {
+  const info=await getServerInfo(guildId).catch(()=>null); if(!info) return;
+  const channel=await client.channels.fetch(info.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
+  if(info.panel_message_id) { const old=await channel.messages.fetch(info.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
+  const panel=await channel.send({embeds:[await createServerInfoEmbed(channel.guild,info)]});
+  await saveServerInfoPanel(guildId,panel.id);
 });
 async function refreshTicketPanel(guildId) {
   const settings=await getTicketSettings(guildId); if(!settings) throw new Error('Ticket setup was not found.');
@@ -214,6 +231,11 @@ client.on('interactionCreate', async interaction => {
   }
   if (interaction.isModalSubmit() && interaction.customId.startsWith('rules_edit:')) {
     const section=Number(interaction.customId.split(':')[1]); await updateRule(interaction.guildId,section,interaction.fields.getTextInputValue('title').trim(),interaction.fields.getTextInputValue('content').trim()); await interaction.reply({content:'✅ Rule section updated.',ephemeral:true}); return interaction.client.emit('rulesPanelRefresh',interaction.guildId);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'server_info_edit') {
+    await updateServerInfo(interaction.guildId,{title:interaction.fields.getTextInputValue('title').trim(),description:interaction.fields.getTextInputValue('description').trim(),extraInfo:interaction.fields.getTextInputValue('extra_info').trim()});
+    await interaction.reply({content:'✅ Server information panel updated.',ephemeral:true});
+    return interaction.client.emit('serverInfoPanelRefresh',interaction.guildId);
   }
   if (interaction.isModalSubmit() && (interaction.customId === 'introduction_edit_template' || interaction.customId === 'introduction_edit_panel')) {
     try {
@@ -471,6 +493,11 @@ client.on('messageCreate', async message => {
     return;
   }
   if (message.author.bot) return;
+  if (client.user && message.mentions.has(client.user) && !message.content.startsWith(process.env.PREFIX || '.')) {
+    const clean=message.content.replace(new RegExp('<@!?' + client.user.id + '>', 'g'), '').trim();
+    const reply=await getOfflineBrainReply({text:clean,guild:message.guild,user:message.author.username});
+    await message.reply({content:reply,allowedMentions:{repliedUser:false}}).catch(console.error);
+  }
   const ticket=await getTicketByChannel(message.channelId).catch(()=>null);
   if (ticket) {
     clearTimeout(ticketPanelTimers.get(message.channelId));

@@ -178,6 +178,12 @@ CREATE TABLE IF NOT EXISTS bump_reminders (
   guild_id TEXT NOT NULL, user_id TEXT NOT NULL, remind_at TIMESTAMPTZ NOT NULL,
   notified BOOLEAN NOT NULL DEFAULT FALSE, PRIMARY KEY (guild_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS server_info_settings (
+  guild_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, panel_message_id TEXT,
+  banner_url TEXT, title TEXT NOT NULL DEFAULT 'SERVER INFO',
+  description TEXT NOT NULL DEFAULT '', extra_info TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 `;
 
