@@ -106,7 +106,7 @@ client.on('serverInfoPanelRefresh', async guildId => {
   const info=await getServerInfo(guildId).catch(()=>null); if(!info) return;
   const channel=await client.channels.fetch(info.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
   if(info.panel_message_id) { const old=await channel.messages.fetch(info.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
-  const buttons=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('server_info_staffs').setLabel('STAFFS').setStyle(ButtonStyle.Secondary).setEmoji('🌷'),new ButtonBuilder().setCustomId('server_info_profile').setLabel('YOUR PROFILE').setStyle(ButtonStyle.Primary).setEmoji('♡'),new ButtonBuilder().setCustomId('server_info_bot').setLabel('SERVER BOT').setStyle(ButtonStyle.Secondary).setEmoji('⭑'));
+  const buttons=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('server_info_staffs').setLabel('STAFFS ୨୧').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('server_info_profile').setLabel('YOUR PROFILE ♡').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('server_info_bot').setLabel('SERVER BOT ˚').setStyle(ButtonStyle.Secondary));
   const panel=await channel.send({embeds:[await createServerInfoEmbed(channel.guild,info)],components:[buttons]});
   await saveServerInfoPanel(guildId,panel.id);
 });
