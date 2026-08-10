@@ -54,7 +54,7 @@ export async function sendAuditLog(client, guild, payload) {
   if (payload.data?.isBotEvent) return;
   await recordAudit({ guildId: guild.id, ...payload });
   const settings = (await query('SELECT log_channel_id, audit_channels FROM guild_settings WHERE guild_id=$1', [guild.id])).rows[0] ?? {};
-  const category = payload.eventType.startsWith('message.') ? 'messages' : payload.eventType.startsWith('member.') ? 'members' : payload.eventType.startsWith('moderation.') ? 'moderation' : payload.eventType.startsWith('confession.') ? 'confessions' : ['role.create','role.delete','channel.create','channel.delete'].includes(payload.eventType) ? 'server' : null;
+  const category = payload.eventType === 'moderation.curse_warning' ? 'curse' : payload.eventType.startsWith('message.') ? 'messages' : payload.eventType.startsWith('member.') ? 'members' : payload.eventType.startsWith('moderation.') ? 'moderation' : payload.eventType.startsWith('confession.') ? 'confessions' : ['role.create','role.delete','channel.create','channel.delete'].includes(payload.eventType) ? 'server' : null;
   const channelId = payload.channelId ?? settings.audit_channels?.[category] ?? settings.log_channel_id;
   if (!channelId) return;
   const channel = await client.channels.fetch(channelId).catch(() => null);
