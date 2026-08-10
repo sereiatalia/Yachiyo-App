@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes, ChannelType } from 'discord.js';
 import { commands, handleCommand } from './commands.js';
 import { ensureGuild, getFishChannel } from './services/guildService.js';
 import { sendAuditLog } from './services/auditService.js';
@@ -13,11 +13,14 @@ import { getCurseSettings, findMatchedCurseWords, recordCurseWarning } from './s
 import { getIntroductionSettings, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
 import { getGiveaway, getGiveawayByMessage, setGiveawayEmoji, addGiveawayEntry, getGiveawayEntries, finishGiveaway } from './services/giveawayService.js';
 import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js';
+import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket } from './services/ticketService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
 const filteredMessageIds = new Set();
 const introductionPanelTimers = new Map();
+const ticketPanelTimers = new Map();
+const ticketPanelMessages = new Map();
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildModeration, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildVoiceStates],
@@ -56,6 +59,14 @@ client.on('rulesPanelRefresh', async guildId => {
   const panelEmbed=new EmbedBuilder().setColor(0xd9b8e8).setTitle('°❀⋆.ೃ࿔*:･°❀⋆.ೃ࿔*:･\n📖  RULE BOOK').setDescription('₊˚⊹ᰔ  Welcome to our little corner of the server.\n\nBy remaining in this server, you agree to follow all rules listed below. These guidelines help keep our community safe, comfortable, and welcoming.\n\n°❀⋆.ೃ࿔*:･°❀⋆.ೃ࿔*:･').setFooter({text:'♡ please help keep the server warm and safe ♡'}); if(rules.banner_url) panelEmbed.setImage(rules.banner_url);
   const panel=await channel.send({embeds:[panelEmbed],components:[new ActionRowBuilder().addComponents(menu)]});
   await saveRulesPanel(guildId,panel.id);
+});
+client.on('ticketPanelRefresh', async guildId => {
+  const settings=await getTicketSettings(guildId).catch(()=>null); if(!settings) return;
+  const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
+  if(settings.panel_message_id) { const old=await channel.messages.fetch(settings.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
+  const menu=new StringSelectMenuBuilder().setCustomId('ticket_category_select').setPlaceholder('୨୧ Choose a ticket category').addOptions({label:'Reports',value:'reports',description:'Report a concern to staff'},{label:'Suggestions',value:'suggestions',description:'Share an idea for the server'},{label:'Feedback',value:'feedback',description:'Send feedback to staff'});
+  const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0xd9b8e8).setTitle('₊˚⊹ᰔ  Contact Yachiyo’s staff').setDescription('Choose a category below to privately share a report, suggestion, or feedback. A temporary private channel will be created for you.')],components:[new ActionRowBuilder().addComponents(menu)]});
+  await setTicketPanel(guildId,panel.id);
 });
 client.on('messageReactionAdd', async (reaction, user) => {
   if (user.bot || !reaction.message.guild) return;
@@ -124,6 +135,25 @@ client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.
 client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.create',targetId:channel.id,data:{summary:`Channel **${channel.name}** was created.`}}).catch(console.error); });
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
 client.on('interactionCreate', async interaction => {
+  if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_category_select') {
+    const modal=new ModalBuilder().setCustomId('ticket_form:'+interaction.values[0]).setTitle('Submit '+interaction.values[0]+' ticket');
+    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ticket_subject').setLabel('Short subject').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)),new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ticket_details').setLabel('Tell us what happened').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000)));
+    return interaction.showModal(modal);
+  }
+  if (interaction.isButton() && interaction.customId === 'ticket_close') {
+    const ticket=await getTicketByChannel(interaction.channelId).catch(()=>null); if(!ticket) return interaction.reply({content:'This ticket is already closed.',ephemeral:true});
+    await interaction.reply({content:'🕊️ This ticket will close shortly.',ephemeral:true}); await deleteTicket(interaction.channelId).catch(()=>null); return setTimeout(()=>interaction.channel.delete('Ticket closed').catch(()=>null),1500);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_form:')) {
+    const settings=await getTicketSettings(interaction.guildId); if(!settings) return interaction.reply({content:'Tickets are not set up yet.',ephemeral:true});
+    const category=interaction.customId.split(':')[1], subject=interaction.fields.getTextInputValue('ticket_subject'), details=interaction.fields.getTextInputValue('ticket_details');
+    const safe=interaction.user.username.toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,18)||'member';
+    const channel=await interaction.guild.channels.create({name:'ticket-'+safe,type:ChannelType.GuildText,permissionOverwrites:[{id:interaction.guild.roles.everyone.id,deny:[PermissionFlagsBits.ViewChannel]},{id:interaction.user.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]}]});
+    await createTicket({guildId:interaction.guildId,channelId:channel.id,userId:interaction.user.id,category,subject});
+    const closeRow=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ticket_close').setLabel('Close ticket').setStyle(ButtonStyle.Danger));
+    const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0xd9b8e8).setAuthor({name:interaction.user.globalName||interaction.user.username,iconURL:interaction.user.displayAvatarURL()}).setTitle('₊˚⊹ᰔ '+category[0].toUpperCase()+category.slice(1)+' ticket').setDescription('**'+subject+'**\n\n'+details+'\n\nStaff will be with you shortly.')],components:[closeRow]}); ticketPanelMessages.set(channel.id,panel.id);
+    return interaction.reply({content:'✅ Your private ticket has been created: <#'+channel.id+'>',ephemeral:true});
+  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'rules_section_select') {
     const rules=await getRules(interaction.guildId); const section=rules?.sections.find(s=>String(s.section_number)===interaction.values[0]);
     if(!section) return interaction.reply({content:'That rule section is unavailable.',ephemeral:true});
@@ -371,6 +401,14 @@ client.on('interactionCreate', async interaction => {
 });
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
+  const ticket=await getTicketByChannel(message.channelId).catch(()=>null);
+  if (ticket) {
+    clearTimeout(ticketPanelTimers.get(message.channelId));
+    ticketPanelTimers.set(message.channelId,setTimeout(async()=>{
+      const oldId=ticketPanelMessages.get(message.channelId); const old=oldId?await message.channel.messages.fetch(oldId).catch(()=>null):null; if(old) await old.delete().catch(()=>null);
+      const panel=await message.channel.send({embeds:[new EmbedBuilder().setColor(0xd9b8e8).setDescription('♡ When you are finished, use the button below to close this ticket. Staff may also close it when your concern has been resolved.')],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ticket_close').setLabel('Close ticket').setStyle(ButtonStyle.Danger))]}).catch(()=>null); if(panel) ticketPanelMessages.set(message.channelId,panel.id);
+    },2000));
+  }
   try {
     const settings = await getCurseSettings(message.guild.id);
     const matchedWords = settings.enabled ? findMatchedCurseWords(message.content, settings.words) : [];
