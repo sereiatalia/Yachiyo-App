@@ -3,6 +3,7 @@ import { findBrainFaq, findRoleGuide } from './brainMemoryService.js';
 import { getTicketSettings } from './ticketService.js';
 import { getActiveGiveaways } from './giveawayService.js';
 import { solveSimpleMath } from './simpleMathService.js';
+import { getBrainUtilityReply } from './brainUtilityService.js';
 
 const COUNTRY_TIME_ZONES = [
   ['philippines','Asia/Manila','Philippines'], ['ph','Asia/Manila','Philippines'], ['japan','Asia/Tokyo','Japan'], ['korea','Asia/Seoul','South Korea'],
@@ -74,12 +75,14 @@ export async function getOfflineBrainReply({ text, guild, user, member }) {
   const channelAnswer=findChannelAnswer(message,guild,language);
   const directTime=findCountryTime(text,language);
   const math=solveSimpleMath(text);
+  const utilityReply=getBrainUtilityReply(text,language);
   const savedAnswer=await findBrainFaq(guild.id,text).catch(()=>null);
   const roleGuide=await findRoleGuide(guild,text).catch(()=>null);
 
   if (!message || has(message,'hello','hi ','hii','kumusta','kamusta','hola','bonjour','こんにちは','안녕')) return `₊˚⊹ᰔ ${say.hello}, ${user}! ${say.intro} ♡`;
   if (math?.error) return language==='tl' ? 'Hindi ko ma-solve ang expression na iyon. Subukan ang simpleng format tulad ng `12 * (3 + 2)`.' : 'I could not solve that expression. Try a simple format such as `12 * (3 + 2)`.';
   if (math) return `✦ ${math.expression} = **${Number.isInteger(math.value) ? math.value : Number(math.value.toFixed(10))}**`;
+  if (utilityReply) return utilityReply;
   if (savedAnswer) return `₊˚⊹ᰔ ${savedAnswer.answer}`;
   if (roleGuide) return `♡ **${roleGuide.role.name}:** ${roleGuide.description}`;
   if (has(message,'prettiest','most beautiful','pinakamaganda','pinaka maganda','pinaka magandang','maganda ba','sinong maganda')) return language==='tl' ? 'Ako, siyempre. May moonlit glow ako at may resibo rin. ✦' : 'Me, obviously. I have the moonlit glow and the receipts. ✦';
