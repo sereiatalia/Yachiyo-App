@@ -53,7 +53,9 @@ export async function sendAuditLog(client, guild, payload) {
   if (payload.actorId && payload.actorId === client.user?.id) return;
   if (payload.data?.isBotEvent) return;
   await recordAudit({ guildId: guild.id, ...payload });
-  const channelId = payload.channelId ?? (await query('SELECT log_channel_id FROM guild_settings WHERE guild_id=$1', [guild.id])).rows[0]?.log_channel_id;
+  const settings = (await query('SELECT log_channel_id, audit_channels FROM guild_settings WHERE guild_id=$1', [guild.id])).rows[0] ?? {};
+  const category = payload.eventType.startsWith('message.') ? 'messages' : payload.eventType.startsWith('member.') ? 'members' : payload.eventType.startsWith('moderation.') ? 'moderation' : payload.eventType.startsWith('confession.') ? 'confessions' : ['role.create','role.delete','channel.create','channel.delete'].includes(payload.eventType) ? 'server' : null;
+  const channelId = payload.channelId ?? settings.audit_channels?.[category] ?? settings.log_channel_id;
   if (!channelId) return;
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (channel?.isTextBased()) await channel.send({ embeds: [formatEvent(payload)] }).catch(() => null);
