@@ -200,7 +200,8 @@ client.on('interactionCreate', async interaction => {
     const channel=await interaction.guild.channels.create({name:'ticket-'+safe,type:ChannelType.GuildText,parent:settings.ticket_category_id ?? undefined,permissionOverwrites:permissions});
     await createTicket({guildId:interaction.guildId,channelId:channel.id,userId:interaction.user.id,category,subject});
     const closeRow=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ticket_close').setLabel('Close ticket').setStyle(ButtonStyle.Danger));
-    const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0xd9b8e8).setAuthor({name:interaction.user.globalName||interaction.user.username,iconURL:interaction.user.displayAvatarURL()}).setTitle('₊˚⊹ᰔ '+category[0].toUpperCase()+category.slice(1)+' ticket').setDescription('**'+subject+'**\n\n'+details+'\n\nStaff will be with you shortly.')],components:[closeRow]}); ticketPanelMessages.set(channel.id,panel.id);
+    const staffMentions=staffRoles.map(item=>'<@&'+item.role_id+'>').join(' ');
+    const panel=await channel.send({content:staffMentions||undefined,allowedMentions:{roles:staffRoles.map(item=>item.role_id)},embeds:[new EmbedBuilder().setColor(0xd9b8e8).setAuthor({name:interaction.user.globalName||interaction.user.username,iconURL:interaction.user.displayAvatarURL()}).setTitle('₊˚⊹ᰔ New '+category[0].toUpperCase()+category.slice(1)+' ticket').setDescription('♡ **From:** <@'+interaction.user.id+'>\n⭑ **Subject:** '+subject+'\n\n'+details+'\n\n₊˚⊹ᰔ Staff will be with you shortly.')],components:[closeRow]}); ticketPanelMessages.set(channel.id,panel.id);
     return interaction.reply({content:'✅ Your private ticket has been created: <#'+channel.id+'>',ephemeral:true});
   }
   if (interaction.isStringSelectMenu() && interaction.customId === 'rules_section_select') {
