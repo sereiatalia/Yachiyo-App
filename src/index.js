@@ -36,8 +36,6 @@ async function keepVoiceConnection(guildId, channelId) {
   });
   connection.on('error', error => console.error('[VOICE]', error));
 }
-client.on('voiceJoinRequest', (guildId, channelId) => keepVoiceConnection(guildId, channelId).catch(console.error));
-
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildModeration, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildVoiceStates],
   partials: [Partials.Message, Partials.Channel, Partials.Reaction]
@@ -58,6 +56,7 @@ client.once('ready', async () => {
   }
   console.log(`Yachiyo is online as ${client.user.tag}`);
 });
+client.on('voiceJoinRequest', (guildId, channelId) => keepVoiceConnection(guildId, channelId).catch(console.error));
 client.on('giveawayEnd', async giveawayId => {
   const giveaway = await getGiveaway(giveawayId).catch(() => null);
   if (!giveaway || giveaway.status !== 'active' || !giveaway.emoji) return;
