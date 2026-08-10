@@ -92,14 +92,16 @@ client.on('rulesPanelRefresh', async guildId => {
   const panel=await channel.send({embeds:[panelEmbed],components:[new ActionRowBuilder().addComponents(menu)]});
   await saveRulesPanel(guildId,panel.id);
 });
-client.on('ticketPanelRefresh', async guildId => {
-  const settings=await getTicketSettings(guildId).catch(()=>null); if(!settings) return;
-  const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
+async function refreshTicketPanel(guildId) {
+  const settings=await getTicketSettings(guildId); if(!settings) throw new Error('Ticket setup was not found.');
+  const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) throw new Error('Yachiyo cannot access the selected ticket channel.');
   if(settings.panel_message_id) { const old=await channel.messages.fetch(settings.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
   const menu=new StringSelectMenuBuilder().setCustomId('ticket_category_select').setPlaceholder('୨୧ Choose a ticket category').addOptions({label:'Reports',value:'reports',description:'Report a concern to staff'},{label:'Suggestions',value:'suggestions',description:'Share an idea for the server'},{label:'Feedback',value:'feedback',description:'Send feedback to staff'});
   const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0xd9b8e8).setTitle('₊˚⊹ᰔ  Contact Yachiyo’s staff').setDescription('Choose a category below to privately share a report, suggestion, or feedback. A temporary private channel will be created for you.')],components:[new ActionRowBuilder().addComponents(menu)]});
   await setTicketPanel(guildId,panel.id);
-});
+}
+client.refreshTicketPanel = refreshTicketPanel;
+client.on('ticketPanelRefresh', guildId => refreshTicketPanel(guildId).catch(console.error));
 client.on('bumpPanelRefresh', async guildId => {
   const settings=await getBumpPanel(guildId).catch(()=>null); if(!settings) return;
   const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
