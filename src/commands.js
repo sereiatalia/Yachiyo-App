@@ -1,5 +1,5 @@
 import { buildAlmanacView } from './ui/almanac.js';
-import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } from 'discord.js';
 import { balance, claim, castFish, addMoney, transfer, bankMove, leaderboard, rollFish, saveFish, fishInventory, fishAlmanac, fishCollection, cooldownRemaining } from './services/economyService.js';
 import { FISH_RARITIES } from './config/fishRarities.js';
 import { createFishCard } from './ui/fishCard.js';
@@ -14,6 +14,7 @@ import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } fro
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
 import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, resetIntroduction, saveIntroductionSettings, clearIntroductionRecords } from './services/introductionService.js';
 import { createGiveaway, setGiveawayMessage, getGiveaway, getGiveawayEntries, finishGiveaway } from './services/giveawayService.js';
+import { setupRules, getRules, updateRule, updateRulesBanner } from './services/rulesService.js';
 const YACHIYO_PURPLE = 0x8e7dff;
 const YACHIYO_BLUE = 0x4db8e8;
 const yEmbed = (title, description, color = YACHIYO_PURPLE) => new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setFooter({ text: 'Yachiyo • Cosmic server manager' });
@@ -39,6 +40,10 @@ export const commands = [
   ,new SlashCommandBuilder().setName('giveaway').setDescription('Create and manage giveaways.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).setDMPermission(false)
     .addSubcommand(s=>s.setName('start').setDescription('Start a giveaway.').addStringOption(o=>o.setName('prize').setDescription('What is being given away').setRequired(true)).addStringOption(o=>o.setName('duration').setDescription('Duration, e.g. 30m, 1h, 2d').setRequired(true)).addChannelOption(o=>o.setName('channel').setDescription('Giveaway channel').setRequired(true)).addUserOption(o=>o.setName('host').setDescription('Giveaway host').setRequired(false)).addIntegerOption(o=>o.setName('winners').setDescription('Number of winners').setMinValue(1).setMaxValue(20).setRequired(true)).addRoleOption(o=>o.setName('required_role').setDescription('Role required to enter').setRequired(false)))
     .addSubcommand(s=>s.setName('repick').setDescription('Randomly repick winners.').addIntegerOption(o=>o.setName('giveaway_id').setDescription('Giveaway ID').setRequired(true)))
+  ,new SlashCommandBuilder().setName('rules-setup').setDescription('Set up the rulebook panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Rulebook channel').setRequired(true)).addAttachmentOption(o=>o.setName('banner').setDescription('Optional rulebook banner image').setRequired(false))
+  ,new SlashCommandBuilder().setName('rules-panel').setDescription('Refresh the rulebook panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
+  ,new SlashCommandBuilder().setName('rules-edit').setDescription('Edit a rulebook section.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addIntegerOption(o=>o.setName('section').setDescription('Section number 1-6').setMinValue(1).setMaxValue(6).setRequired(true))
+  ,new SlashCommandBuilder().setName('rules-banner').setDescription('Replace the rulebook banner.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addAttachmentOption(o=>o.setName('banner').setDescription('New banner image').setRequired(true))
   ,new SlashCommandBuilder().setName('fish-setup').setDescription('Set the only channel where fishing is allowed.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Fishing channel').setRequired(true))
   ,new SlashCommandBuilder().setName('curse-setup').setDescription('Save curse words and activate the server filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('words').setDescription('Comma or newline separated words, in any language.').setRequired(true))
   ,new SlashCommandBuilder().setName('curse').setDescription('Activate, deactivate, or view the curse filter.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Filter action').setRequired(true).addChoices({name:'Activate',value:'on'},{name:'Deactivate',value:'off'},{name:'View status',value:'status'}))
@@ -79,6 +84,13 @@ export async function handleCommand(interaction) {
   const adminOnly=['economy-add','logs','confession-setup','introduction-setup','introduction-panel','introduction-reset','introduction-status','fish-setup','curse-setup','curse','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout'];
   if(adminOnly.includes(name) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return interaction.reply({content:'🛡️ Only server administrators can use this command.',ephemeral:true});
   if(name==='ping') return interaction.reply({embeds:[yEmbed('☾ Yachiyo is watching over this server.','✦ The moonlit command center is online and watching this server.',YACHIYO_BLUE)]});
+  if (name === 'rules-setup' || name === 'rules-panel' || name === 'rules-banner' || name === 'rules-edit') {
+    if (name === 'rules-setup') { const r=await setupRules(interaction.guildId,interaction.options.getChannel('channel').id,interaction.options.getAttachment('banner')?.url); await interaction.reply({content:'✅ Rulebook saved. Refreshing the panel.',ephemeral:true}); return interaction.client.emit('rulesPanelRefresh',interaction.guildId); }
+    const rules=await getRules(interaction.guildId); if(!rules) return interaction.reply({content:'Run `/rules-setup` first.',ephemeral:true});
+    if (name === 'rules-panel') { await interaction.reply({content:'📖 Refreshing the rulebook panel.',ephemeral:true}); return interaction.client.emit('rulesPanelRefresh',interaction.guildId); }
+    if (name === 'rules-banner') { await updateRulesBanner(interaction.guildId,interaction.options.getAttachment('banner').url); await interaction.reply({content:'✅ Rulebook banner updated.',ephemeral:true}); return interaction.client.emit('rulesPanelRefresh',interaction.guildId); }
+    const section=interaction.options.getInteger('section'), current=rules.sections[section-1]; const modal=new ModalBuilder().setCustomId('rules_edit:'+section).setTitle('Edit rule '+section); modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Section title').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setValue(current.title)),new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('content').setLabel('Rule content').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000).setValue(current.content))); return interaction.showModal(modal);
+  }
   if (name === 'giveaway') {
     const action = interaction.options.getSubcommand();
     if (action === 'repick') {

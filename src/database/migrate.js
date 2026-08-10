@@ -143,6 +143,14 @@ CREATE TABLE IF NOT EXISTS giveaway_entries (
   user_id TEXT NOT NULL, entered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (giveaway_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS rules_settings (
+  guild_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, panel_message_id TEXT,
+  banner_url TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS rules_sections (
+  guild_id TEXT NOT NULL, section_number INTEGER NOT NULL, title TEXT NOT NULL,
+  content TEXT NOT NULL, PRIMARY KEY (guild_id, section_number)
+);
 
 `;
 

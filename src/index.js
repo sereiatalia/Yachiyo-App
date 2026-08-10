@@ -5,13 +5,14 @@ import { ensureGuild, getFishChannel } from './services/guildService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { fishInventory, fishAlmanac, fishCollection } from './services/economyService.js';
 import { buildAlmanacView } from './ui/almanac.js';
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } from 'discord.js';
 import { fishAgain } from './handlers/fishing.js';
 import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, itemInventory } from './services/fishingProgression.js';
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 import { getCurseSettings, findMatchedCurseWords, recordCurseWarning } from './services/curseService.js';
 import { getIntroductionSettings, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
 import { getGiveaway, getGiveawayByMessage, setGiveawayEmoji, addGiveawayEntry, getGiveawayEntries, finishGiveaway } from './services/giveawayService.js';
+import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -46,6 +47,15 @@ client.on('giveawayEnd', async giveawayId => {
   await finishGiveaway(giveawayId, winners);
   const channel = await client.channels.fetch(giveaway.channel_id).catch(() => null);
   if (channel?.isTextBased()) await channel.send('🎉 Giveaway **#' + giveawayId + '** ended! Winner(s): ' + (winners.length ? winners.map(id => '<@' + id + '>').join(', ') : 'No eligible participants.') );
+});
+client.on('rulesPanelRefresh', async guildId => {
+  const rules=await getRules(guildId).catch(()=>null); if(!rules) return;
+  const channel=await client.channels.fetch(rules.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
+  if(rules.panel_message_id) { const old=await channel.messages.fetch(rules.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
+  const menu=new StringSelectMenuBuilder().setCustomId('rules_section_select').setPlaceholder('୨୧ Browse the rulebook').addOptions(rules.sections.map(s=>({label:s.section_number.toString().padStart(3,'0')+' · '+s.title,value:String(s.section_number)})));
+  const panelEmbed=new EmbedBuilder().setColor(0xd9b8e8).setTitle('°❀⋆.ೃ࿔*:･°❀⋆.ೃ࿔*:･\n📖  RULE BOOK').setDescription('₊˚⊹ᰔ  Welcome to our little corner of the server.\n\nBy remaining in this server, you agree to follow all rules listed below. These guidelines help keep our community safe, comfortable, and welcoming.\n\n°❀⋆.ೃ࿔*:･°❀⋆.ೃ࿔*:･').setFooter({text:'♡ please help keep the server warm and safe ♡'}); if(rules.banner_url) panelEmbed.setImage(rules.banner_url);
+  const panel=await channel.send({embeds:[panelEmbed],components:[new ActionRowBuilder().addComponents(menu)]});
+  await saveRulesPanel(guildId,panel.id);
 });
 client.on('messageReactionAdd', async (reaction, user) => {
   if (user.bot || !reaction.message.guild) return;
@@ -114,6 +124,14 @@ client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.
 client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.create',targetId:channel.id,data:{summary:`Channel **${channel.name}** was created.`}}).catch(console.error); });
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
 client.on('interactionCreate', async interaction => {
+  if (interaction.isStringSelectMenu() && interaction.customId === 'rules_section_select') {
+    const rules=await getRules(interaction.guildId); const section=rules?.sections.find(s=>String(s.section_number)===interaction.values[0]);
+    if(!section) return interaction.reply({content:'That rule section is unavailable.',ephemeral:true});
+    return interaction.reply({embeds:[new EmbedBuilder().setColor(0xd9b8e8).setTitle('⭑.ᐟ  '+String(section.section_number).padStart(3,'0')+' · '+section.title).setDescription(section.content+'\n\n⋆.˚  please help keep the community comfortable  ⋆.˚')],ephemeral:true});
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('rules_edit:')) {
+    const section=Number(interaction.customId.split(':')[1]); await updateRule(interaction.guildId,section,interaction.fields.getTextInputValue('title').trim(),interaction.fields.getTextInputValue('content').trim()); await interaction.reply({content:'✅ Rule section updated.',ephemeral:true}); return interaction.client.emit('rulesPanelRefresh',interaction.guildId);
+  }
   if (interaction.isModalSubmit() && (interaction.customId === 'introduction_edit_template' || interaction.customId === 'introduction_edit_panel')) {
     try {
       const { getIntroductionSettings, saveIntroductionSettings } = await import('./services/introductionService.js');
