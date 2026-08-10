@@ -17,7 +17,7 @@ import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, de
 import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
 import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpReminder, markBumpReminderNotified, pendingBumpReminders } from './services/bumpService.js';
 import { getServerInfo, saveServerInfoPanel, updateServerInfo, getServerInfoStaffRoles, getProfileStats, recordProfileMessage, replaceProfileMessageCounts } from './services/serverInfoService.js';
-import { getOfflineBrainReply } from './services/offlineBrainService.js';
+import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './services/offlineBrainService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -30,6 +30,7 @@ const CARL_BOT_ID = '235148962103951360';
 const pendingBumps = new Map();
 const bumpReminderTimers = new Map();
 const profileRecounts = new Set();
+const pendingTimeQuestions = new Map();
 
 function scheduleBumpReminder(guildId, userId, remindAt) {
   const key=guildId+':'+userId; clearTimeout(bumpReminderTimers.get(key));
@@ -539,9 +540,16 @@ client.on('messageCreate', async message => {
   }
   if (message.author.bot) return;
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
+  const timeKey=message.guild.id+':'+message.author.id;
+  const pendingTime=pendingTimeQuestions.get(timeKey);
+  if (!message.mentions.everyone && pendingTime && pendingTime.expiresAt>Date.now()) {
+    const countryReply=findCountryTime(message.content);
+    if(countryReply) { pendingTimeQuestions.delete(timeKey); await message.reply({content:countryReply,allowedMentions:{repliedUser:false}}).catch(console.error); return; }
+  } else if (pendingTime) pendingTimeQuestions.delete(timeKey);
   if (client.user && message.mentions.has(client.user) && !message.mentions.everyone && !message.content.startsWith(process.env.PREFIX || '.')) {
     const clean=message.content.replace(new RegExp('<@!?' + client.user.id + '>', 'g'), '').trim();
-    const reply=await getOfflineBrainReply({text:clean,guild:message.guild,user:message.author.username});
+    if(isTimeQuestion(clean) && !findCountryTime(clean)) pendingTimeQuestions.set(timeKey,{expiresAt:Date.now()+120_000});
+    const reply=await getOfflineBrainReply({text:clean,guild:message.guild,user:message.author.username,member:message.member});
     await message.reply({content:reply,allowedMentions:{repliedUser:false}}).catch(console.error);
   }
   const ticket=await getTicketByChannel(message.channelId).catch(()=>null);
