@@ -16,7 +16,7 @@ import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js
 import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket, getTicketAccessRoles } from './services/ticketService.js';
 import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
 import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpReminder, markBumpReminderNotified, pendingBumpReminders } from './services/bumpService.js';
-import { getServerInfo, saveServerInfoPanel, updateServerInfo, getServerInfoStaffRoles, getProfileStats, recordProfileMessage } from './services/serverInfoService.js';
+import { getServerInfo, saveServerInfoPanel, updateServerInfo, getServerInfoStaffRoles, getProfileStats, recordProfileMessage, replaceProfileMessageCounts } from './services/serverInfoService.js';
 import { getOfflineBrainReply } from './services/offlineBrainService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
@@ -29,6 +29,7 @@ const voiceConnections = new Map();
 const CARL_BOT_ID = '235148962103951360';
 const pendingBumps = new Map();
 const bumpReminderTimers = new Map();
+const profileRecounts = new Set();
 
 function scheduleBumpReminder(guildId, userId, remindAt) {
   const key=guildId+':'+userId; clearTimeout(bumpReminderTimers.get(key));
@@ -102,6 +103,27 @@ async function createServerInfoEmbed(guild, info) {
   return embed;
 }
 client.createServerInfoEmbed=createServerInfoEmbed;
+client.profileRecounts=profileRecounts;
+client.recountProfiles=async guild => {
+  if(profileRecounts.has(guild.id)) throw new Error('Recount already running');
+  profileRecounts.add(guild.id);
+  try {
+    const counts=new Map(); let messages=0, channels=0;
+    const readable=[...guild.channels.cache.values()].filter(channel=>channel.isTextBased?.() && channel.messages?.fetch && channel.permissionsFor(guild.members.me)?.has(PermissionFlagsBits.ViewChannel));
+    for(const channel of readable) {
+      channels++; let before;
+      while(true) {
+        const batch=await channel.messages.fetch({limit:100,before}).catch(()=>null);
+        if(!batch?.size) break;
+        for(const message of batch.values()) if(!message.author?.bot) { counts.set(message.author.id,(counts.get(message.author.id)??0)+1); messages++; }
+        if(batch.size<100) break;
+        before=batch.last().id;
+      }
+    }
+    await replaceProfileMessageCounts(guild.id,counts);
+    return {messages,channels};
+  } finally { profileRecounts.delete(guild.id); }
+};
 client.on('serverInfoPanelRefresh', async guildId => {
   const info=await getServerInfo(guildId).catch(()=>null); if(!info) return;
   const channel=await client.channels.fetch(info.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;

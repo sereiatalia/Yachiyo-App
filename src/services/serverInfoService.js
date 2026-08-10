@@ -52,3 +52,13 @@ export async function recordProfileMessage(guildId, userId) {
 export async function getProfileStats(guildId, userId) {
   return (await query('SELECT message_count,last_message_at FROM member_profile_stats WHERE guild_id=$1 AND user_id=$2', [guildId,userId])).rows[0] ?? {message_count:0,last_message_at:null};
 }
+
+export async function replaceProfileMessageCounts(guildId, counts) {
+  const userIds=[...counts.keys()];
+  await query('DELETE FROM member_profile_stats WHERE guild_id=$1', [guildId]);
+  if (!userIds.length) return;
+  await query(`INSERT INTO member_profile_stats (guild_id,user_id,message_count,last_message_at)
+    SELECT $1, item.user_id, item.message_count, NOW()
+    FROM UNNEST($2::text[], $3::bigint[]) AS item(user_id,message_count)`,
+    [guildId,userIds,userIds.map(userId=>String(counts.get(userId)))]);
+}
