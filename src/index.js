@@ -24,6 +24,7 @@ import { getAutoReacts } from './services/autoReactService.js';
 import { getTempVoiceSettings, saveTempVoicePanel, createTempVoiceChannel, getTempVoiceChannel, getTempVoiceForOwner, deleteTempVoiceChannel } from './services/tempVoiceService.js';
 import { getSpamSettings, recordSpamWarning, resetSpamWarnings } from './services/spamService.js';
 import { getRobloxPanel, setRobloxPanelMessage, getRobloxProfile, resolveRobloxUser } from './services/robloxService.js';
+import { getMlbbPanel, setMlbbPanelMessage, getMlbbProfile } from './services/mlbbService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -39,6 +40,7 @@ const profileRecounts = new Set();
 const pendingTimeQuestions = new Map();
 const tempVoiceDeleteTimers = new Map();
 const robloxPanelTimers = new Map();
+const mlbbPanelTimers = new Map();
 const spamMessageWindows = new Map();
 const spamBurstWarnings = new Map();
 
@@ -47,6 +49,12 @@ async function scheduleRobloxPanelRefresh(guildId, channelId) {
   if (panel?.channel_id !== channelId) return;
   clearTimeout(robloxPanelTimers.get(guildId));
   robloxPanelTimers.set(guildId, setTimeout(() => refreshRobloxPanel(guildId).catch(console.error), 3_000));
+}
+async function scheduleMlbbPanelRefresh(guildId, channelId) {
+  const panel = await getMlbbPanel(guildId).catch(() => null);
+  if (panel?.channel_id !== channelId) return;
+  clearTimeout(mlbbPanelTimers.get(guildId));
+  mlbbPanelTimers.set(guildId, setTimeout(() => refreshMlbbPanel(guildId).catch(console.error), 3_000));
 }
 
 async function checkRapidSpam(message) {
@@ -227,6 +235,18 @@ async function refreshRobloxPanel(guildId) {
   await setRobloxPanelMessage(guildId,panel.id);
 }
 client.on('robloxPanelRefresh', guildId => refreshRobloxPanel(guildId).catch(console.error));
+async function sendMlbbProfile(interaction, user, ephemeral = true) {
+  const saved=await getMlbbProfile(interaction.guildId,user.id); if(!saved) return interaction.reply({content:'You have not saved an MLBB UID yet. Use `/mlbb uid` first.',ephemeral:true});
+  return interaction.reply({embeds:[new EmbedBuilder().setColor(0x3d8ee8).setAuthor({name:user.globalName||user.username,iconURL:user.displayAvatarURL()}).setTitle('MOBILE LEGENDS: BANG BANG').setDescription('**Player UID:** `'+saved.player_uid+'`').setFooter({text:'Yachiyo • MLBB profile'})],ephemeral});
+}
+async function refreshMlbbPanel(guildId) {
+  const settings=await getMlbbPanel(guildId).catch(()=>null); if(!settings) return;
+  const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
+  if(settings.panel_message_id) { const old=await channel.messages.fetch(settings.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
+  const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0x3d8ee8).setTitle('MOBILE LEGENDS').setDescription('Save UID: `/mlbb uid`\nCheck a member: `/mlbb-checkuser user`').setFooter({text:'Yachiyo • MLBB profiles'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('mlbb_show_profile').setLabel('SHOW PROFILE').setStyle(ButtonStyle.Primary))]});
+  await setMlbbPanelMessage(guildId,panel.id);
+}
+client.on('mlbbPanelRefresh', guildId => refreshMlbbPanel(guildId).catch(console.error));
 client.on('tempVoicePanelRefresh', async guildId => {
   const settings = await getTempVoiceSettings(guildId).catch(() => null); if (!settings) return;
   const channel = await client.channels.fetch(settings.panel_channel_id).catch(() => null); if (!channel?.isTextBased()) return;
@@ -361,7 +381,9 @@ client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,ch
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
 client.on('interactionCreate', async interaction => {
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleRobloxPanelRefresh(interaction.guildId, interaction.channelId);
+  if (interaction.guildId && interaction.isChatInputCommand()) await scheduleMlbbPanelRefresh(interaction.guildId, interaction.channelId);
   if (interaction.isButton() && interaction.customId === 'roblox_show_profile') return sendRobloxProfile(interaction, interaction.user, true);
+  if (interaction.isButton() && interaction.customId === 'mlbb_show_profile') return sendMlbbProfile(interaction, interaction.user, true);
   if (interaction.isButton() && interaction.customId === 'temp_vc_create') {
     return interaction.reply({content:'Join the configured **Create your own VC** voice channel to receive your room.',ephemeral:true});
   }
@@ -722,6 +744,7 @@ client.on('messageCreate', async message => {
   }
   if (message.author.bot) return;
   await scheduleRobloxPanelRefresh(message.guild.id, message.channelId);
+  await scheduleMlbbPanelRefresh(message.guild.id, message.channelId);
   if (await checkRapidSpam(message)) return;
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   await addChatXp(message.guild.id,message.author.id).catch(console.error);
