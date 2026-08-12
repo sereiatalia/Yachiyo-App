@@ -48,13 +48,13 @@ async function scheduleRobloxPanelRefresh(guildId, channelId) {
   const panel = await getRobloxPanel(guildId).catch(() => null);
   if (panel?.channel_id !== channelId) return;
   clearTimeout(robloxPanelTimers.get(guildId));
-  robloxPanelTimers.set(guildId, setTimeout(() => refreshRobloxPanel(guildId).catch(console.error), 3_000));
+  robloxPanelTimers.set(guildId, setTimeout(() => refreshRobloxPanel(guildId).catch(console.error), 5_000));
 }
 async function scheduleMlbbPanelRefresh(guildId, channelId) {
   const panel = await getMlbbPanel(guildId).catch(() => null);
   if (panel?.channel_id !== channelId) return;
   clearTimeout(mlbbPanelTimers.get(guildId));
-  mlbbPanelTimers.set(guildId, setTimeout(() => refreshMlbbPanel(guildId).catch(console.error), 3_000));
+  mlbbPanelTimers.set(guildId, setTimeout(() => refreshMlbbPanel(guildId).catch(console.error), 5_000));
 }
 
 async function checkRapidSpam(message) {
