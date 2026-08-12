@@ -284,17 +284,25 @@ client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,ch
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
 client.on('interactionCreate', async interaction => {
   if (interaction.isButton() && interaction.customId === 'temp_vc_create') {
-    const settings = await getTempVoiceSettings(interaction.guildId).catch(() => null);
-    if (!settings) return interaction.reply({content:'Temporary voice rooms are not configured yet.',ephemeral:true});
     const existing = await findOwnedTempVoice(interaction);
     if (existing) {
       if (interaction.member.voice.channelId !== existing.id) await interaction.member.voice.setChannel(existing, 'Returning owner to temporary VC').catch(() => null);
       return interaction.reply({content:'Your temporary VC is already active: '+existing,components:[tempVoiceControls()],ephemeral:true});
     }
+    const defaultName = `${interaction.member.displayName}'s VC`.replace(/[\\/:*?"<>|]/g, '').slice(0, 90) || 'Temporary VC';
+    const modal = new ModalBuilder().setCustomId('temp_vc_create_submit').setTitle('Create your own VC');
+    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Voice channel name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setValue(defaultName).setPlaceholder("e.g. Aly's comfy room")));
+    return interaction.showModal(modal);
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'temp_vc_create_submit') {
+    const settings = await getTempVoiceSettings(interaction.guildId).catch(() => null);
+    if (!settings) return interaction.reply({content:'Temporary voice rooms are not configured yet.',ephemeral:true});
+    const existing = await findOwnedTempVoice(interaction);
+    if (existing) return interaction.reply({content:'Your temporary VC is already active: '+existing,components:[tempVoiceControls()],ephemeral:true});
     await interaction.deferReply({ephemeral:true});
     try {
       const parent = settings.category_id ? await interaction.guild.channels.fetch(settings.category_id).catch(() => null) : null;
-      const name = `${interaction.member.displayName}'s VC`.replace(/[\\/:*?"<>|]/g, '').slice(0, 90) || 'Temporary VC';
+      const name = interaction.fields.getTextInputValue('name').trim().replace(/[\\/:*?"<>|]/g, '').slice(0, 100) || 'Temporary VC';
       const channel = await interaction.guild.channels.create({name,type:ChannelType.GuildVoice,parent:parent?.type===ChannelType.GuildCategory ? parent.id : undefined,reason:'Temporary VC created by '+interaction.user.tag});
       await createTempVoiceChannel(interaction.guildId,channel.id,interaction.user.id);
       if (interaction.member.voice.channelId) {
