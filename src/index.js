@@ -27,6 +27,8 @@ import { getRobloxPanel, setRobloxPanelMessage, getRobloxProfile, resolveRobloxU
 import { getMlbbPanel, setMlbbPanelMessage, getMlbbProfile } from './services/mlbbService.js';
 import { getHsrPanel, setHsrPanelMessage, getHsrProfile, fetchHsrProfile } from './services/hsrService.js';
 import { buildHsrProfileEmbed } from './ui/hsrProfile.js';
+import { getGenshinPanel, setGenshinPanelMessage, getGenshinProfile, fetchGenshinProfile } from './services/genshinService.js';
+import { buildGenshinProfileEmbed } from './ui/genshinProfile.js';
 import { buildRobloxProfileEmbed } from './ui/robloxProfile.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
@@ -45,6 +47,7 @@ const tempVoiceDeleteTimers = new Map();
 const robloxPanelTimers = new Map();
 const mlbbPanelTimers = new Map();
 const hsrPanelTimers = new Map();
+const genshinPanelTimers = new Map();
 const spamMessageWindows = new Map();
 const spamBurstWarnings = new Map();
 
@@ -65,6 +68,12 @@ async function scheduleHsrPanelRefresh(guildId, channelId) {
   if (panel?.channel_id !== channelId) return;
   clearTimeout(hsrPanelTimers.get(guildId));
   hsrPanelTimers.set(guildId, setTimeout(() => refreshHsrPanel(guildId).catch(console.error), 5_000));
+}
+async function scheduleGenshinPanelRefresh(guildId, channelId) {
+  const panel = await getGenshinPanel(guildId).catch(() => null);
+  if (panel?.channel_id !== channelId) return;
+  clearTimeout(genshinPanelTimers.get(guildId));
+  genshinPanelTimers.set(guildId, setTimeout(() => refreshGenshinPanel(guildId).catch(console.error), 5_000));
 }
 
 async function checkRapidSpam(message) {
@@ -271,6 +280,20 @@ async function refreshHsrPanel(guildId) {
   await setHsrPanelMessage(guildId,panel.id);
 }
 client.on('hsrPanelRefresh', guildId => refreshHsrPanel(guildId).catch(console.error));
+async function sendGenshinProfile(interaction, user, ephemeral = true) {
+  const saved = await getGenshinProfile(interaction.guildId, user.id); if (!saved) return interaction.reply({ content: 'You have not saved a Genshin UID yet. Use `/genshin uid` first.', ephemeral: true });
+  await interaction.deferReply({ ephemeral });
+  try { return interaction.editReply({ embeds: [buildGenshinProfileEmbed(user, await fetchGenshinProfile(saved.player_uid))] }); }
+  catch (error) { return interaction.editReply({ content: '⚠️ ' + error.message }); }
+}
+async function refreshGenshinPanel(guildId) {
+  const settings = await getGenshinPanel(guildId).catch(() => null); if (!settings) return;
+  const channel = await client.channels.fetch(settings.channel_id).catch(() => null); if (!channel?.isTextBased()) return;
+  if (settings.panel_message_id) { const old = await channel.messages.fetch(settings.panel_message_id).catch(() => null); if (old?.author?.id === client.user?.id) await old.delete().catch(() => null); }
+  const panel = await channel.send({ embeds: [new EmbedBuilder().setColor(0x79c9b8).setTitle('GENSHIN IMPACT').setDescription('Save UID: `/genshin uid`\nView a profile: `/genshin-checkuser user`').setFooter({ text: 'Yachiyo • Genshin public profiles' })], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('genshin_show_profile').setLabel('SHOW PROFILE').setStyle(ButtonStyle.Primary))] });
+  await setGenshinPanelMessage(guildId, panel.id);
+}
+client.on('genshinPanelRefresh', guildId => refreshGenshinPanel(guildId).catch(console.error));
 client.on('tempVoicePanelRefresh', async guildId => {
   const settings = await getTempVoiceSettings(guildId).catch(() => null); if (!settings) return;
   const channel = await client.channels.fetch(settings.panel_channel_id).catch(() => null); if (!channel?.isTextBased()) return;
@@ -407,9 +430,11 @@ client.on('interactionCreate', async interaction => {
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleRobloxPanelRefresh(interaction.guildId, interaction.channelId);
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleMlbbPanelRefresh(interaction.guildId, interaction.channelId);
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleHsrPanelRefresh(interaction.guildId, interaction.channelId);
+  if (interaction.guildId && interaction.isChatInputCommand()) await scheduleGenshinPanelRefresh(interaction.guildId, interaction.channelId);
   if (interaction.isButton() && interaction.customId === 'roblox_show_profile') return sendRobloxProfile(interaction, interaction.user, true);
   if (interaction.isButton() && interaction.customId === 'mlbb_show_profile') return sendMlbbProfile(interaction, interaction.user, true);
   if (interaction.isButton() && interaction.customId === 'hsr_show_profile') return sendHsrProfile(interaction, interaction.user, true);
+  if (interaction.isButton() && interaction.customId === 'genshin_show_profile') return sendGenshinProfile(interaction, interaction.user, true);
   if (interaction.isButton() && interaction.customId === 'temp_vc_create') {
     return interaction.reply({content:'Join the configured **Create your own VC** voice channel to receive your room.',ephemeral:true});
   }
@@ -772,6 +797,7 @@ client.on('messageCreate', async message => {
   await scheduleRobloxPanelRefresh(message.guild.id, message.channelId);
   await scheduleMlbbPanelRefresh(message.guild.id, message.channelId);
   await scheduleHsrPanelRefresh(message.guild.id, message.channelId);
+  await scheduleGenshinPanelRefresh(message.guild.id, message.channelId);
   if (await checkRapidSpam(message)) return;
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   await addChatXp(message.guild.id,message.author.id).catch(console.error);
