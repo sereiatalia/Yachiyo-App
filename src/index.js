@@ -247,7 +247,7 @@ async function refreshRobloxPanel(guildId) {
 client.on('robloxPanelRefresh', guildId => refreshRobloxPanel(guildId).catch(console.error));
 async function sendMlbbProfile(interaction, user, ephemeral = true) {
   const saved=await getMlbbProfile(interaction.guildId,user.id); if(!saved) return interaction.reply({content:'You have not saved an MLBB UID yet. Use `/mlbb uid` first.',ephemeral:true});
-  return interaction.reply({embeds:[new EmbedBuilder().setColor(0x3d8ee8).setAuthor({name:user.globalName||user.username,iconURL:user.displayAvatarURL()}).setTitle('MOBILE LEGENDS: BANG BANG').setDescription('**Player UID:** `'+saved.player_uid+'`').setFooter({text:'Yachiyo • MLBB profile'})],ephemeral});
+  return interaction.reply({embeds:[new EmbedBuilder().setColor(0x3d8ee8).setAuthor({name:user.globalName||user.username,iconURL:user.displayAvatarURL()}).setTitle('MOBILE LEGENDS: BANG BANG').setDescription('**Player UID**\n```\n'+saved.player_uid+'\n```').setFooter({text:'Yachiyo • MLBB profile'})],ephemeral});
 }
 async function refreshMlbbPanel(guildId) {
   const settings=await getMlbbPanel(guildId).catch(()=>null); if(!settings) return;
