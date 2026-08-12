@@ -55,25 +55,25 @@ async function scheduleRobloxPanelRefresh(guildId, channelId) {
   const panel = await getRobloxPanel(guildId).catch(() => null);
   if (panel?.channel_id !== channelId) return;
   clearTimeout(robloxPanelTimers.get(guildId));
-  robloxPanelTimers.set(guildId, setTimeout(() => refreshRobloxPanel(guildId).catch(console.error), 5_000));
+  robloxPanelTimers.set(guildId, setTimeout(() => refreshRobloxPanel(guildId).catch(console.error), 8_000));
 }
 async function scheduleMlbbPanelRefresh(guildId, channelId) {
   const panel = await getMlbbPanel(guildId).catch(() => null);
   if (panel?.channel_id !== channelId) return;
   clearTimeout(mlbbPanelTimers.get(guildId));
-  mlbbPanelTimers.set(guildId, setTimeout(() => refreshMlbbPanel(guildId).catch(console.error), 5_000));
+  mlbbPanelTimers.set(guildId, setTimeout(() => refreshMlbbPanel(guildId).catch(console.error), 8_000));
 }
 async function scheduleHsrPanelRefresh(guildId, channelId) {
   const panel = await getHsrPanel(guildId).catch(() => null);
   if (panel?.channel_id !== channelId) return;
   clearTimeout(hsrPanelTimers.get(guildId));
-  hsrPanelTimers.set(guildId, setTimeout(() => refreshHsrPanel(guildId).catch(console.error), 5_000));
+  hsrPanelTimers.set(guildId, setTimeout(() => refreshHsrPanel(guildId).catch(console.error), 8_000));
 }
 async function scheduleGenshinPanelRefresh(guildId, channelId) {
   const panel = await getGenshinPanel(guildId).catch(() => null);
   if (panel?.channel_id !== channelId) return;
   clearTimeout(genshinPanelTimers.get(guildId));
-  genshinPanelTimers.set(guildId, setTimeout(() => refreshGenshinPanel(guildId).catch(console.error), 5_000));
+  genshinPanelTimers.set(guildId, setTimeout(() => refreshGenshinPanel(guildId).catch(console.error), 8_000));
 }
 
 async function checkRapidSpam(message) {
