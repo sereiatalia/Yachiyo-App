@@ -19,7 +19,7 @@ async function ensureTables() {
 export async function saveTempVoiceSettings(guildId, panelChannelId, categoryId = null) {
   await ensureTables();
   await query(`INSERT INTO temp_voice_settings (guild_id,panel_channel_id,category_id) VALUES ($1,$2,$3)
-    ON CONFLICT (guild_id) DO UPDATE SET panel_channel_id=EXCLUDED.panel_channel_id,category_id=EXCLUDED.category_id,updated_at=NOW()`, [guildId, panelChannelId, categoryId]);
+    ON CONFLICT (guild_id) DO UPDATE SET panel_channel_id=EXCLUDED.panel_channel_id,category_id=EXCLUDED.category_id,panel_message_id=NULL,updated_at=NOW()`, [guildId, panelChannelId, categoryId]);
 }
 export async function getTempVoiceSettings(guildId) { await ensureTables(); return (await query('SELECT * FROM temp_voice_settings WHERE guild_id=$1', [guildId])).rows[0] ?? null; }
 export async function saveTempVoicePanel(guildId, messageId) { await ensureTables(); await query('UPDATE temp_voice_settings SET panel_message_id=$2,updated_at=NOW() WHERE guild_id=$1', [guildId, messageId]); }

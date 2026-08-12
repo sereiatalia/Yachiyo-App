@@ -49,6 +49,24 @@ async function findOwnedTempVoice(interaction) {
   if (!channel?.isVoiceBased()) { if (record) await deleteTempVoiceChannel(record.channel_id); return null; }
   return channel;
 }
+function isTempVoiceStaff(member) {
+  return member.permissions.has(PermissionFlagsBits.Administrator)
+    || member.permissions.has(PermissionFlagsBits.ManageMessages)
+    || member.permissions.has(PermissionFlagsBits.ModerateMembers)
+    || member.permissions.has(PermissionFlagsBits.KickMembers)
+    || member.permissions.has(PermissionFlagsBits.BanMembers);
+}
+async function createTempVoiceForMember(guild, member, settings) {
+  const trigger = await guild.channels.fetch(settings.panel_channel_id).catch(() => null);
+  if (!trigger?.isVoiceBased()) throw new Error('Join to Create voice channel is unavailable.');
+  const parent = settings.category_id ? await guild.channels.fetch(settings.category_id).catch(() => null) : trigger.parent;
+  const name = `${member.displayName}'s VC`.replace(/[\\/:*?"<>|]/g, '').slice(0, 90) || 'Temporary VC';
+  const channel = await guild.channels.create({name,type:ChannelType.GuildVoice,parent:parent?.type===ChannelType.GuildCategory ? parent.id : undefined,reason:'Temporary VC created by '+member.user.tag});
+  if (!settings.category_id) await channel.setPosition((trigger.rawPosition ?? trigger.position ?? 0) + 1).catch(console.error);
+  await createTempVoiceChannel(guild.id,channel.id,member.id);
+  await member.voice.setChannel(channel, 'Moving member into their temporary VC');
+  return channel;
+}
 function scheduleTempVoiceDeletion(channel) {
   if (!channel || channel.members.size) return;
   clearTimeout(tempVoiceDeleteTimers.get(channel.id));
@@ -118,6 +136,21 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     if (!channel?.isVoiceBased()) { await deleteTempVoiceChannel(channelId).catch(console.error); continue; }
     if (channel.members.size) clearTimeout(tempVoiceDeleteTimers.get(channelId));
     else scheduleTempVoiceDeletion(channel);
+  }
+  if (!newState.member?.user.bot && newState.channelId) {
+    const settings = await getTempVoiceSettings(newState.guild.id).catch(() => null);
+    if (settings?.panel_channel_id === newState.channelId) {
+      if (isTempVoiceStaff(newState.member)) {
+        await newState.disconnect('Staff may not use the Join to Create voice channel').catch(console.error);
+        return;
+      }
+      try {
+        const existing = await getTempVoiceForOwner(newState.guild.id, newState.id);
+        const existingChannel = existing ? await newState.guild.channels.fetch(existing.channel_id).catch(() => null) : null;
+        if (existingChannel?.isVoiceBased()) await newState.member.voice.setChannel(existingChannel, 'Returning member to their existing temporary VC');
+        else { if (existing) await deleteTempVoiceChannel(existing.channel_id); await createTempVoiceForMember(newState.guild, newState.member, settings); }
+      } catch (error) { console.error('[TEMP_VC_JOIN_TO_CREATE]', error); }
+    }
   }
   if (newState.id !== client.user?.id || newState.channelId) return;
   const voice = voiceConnections.get(newState.guild.id);
@@ -284,42 +317,7 @@ client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,ch
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
 client.on('interactionCreate', async interaction => {
   if (interaction.isButton() && interaction.customId === 'temp_vc_create') {
-    const existing = await findOwnedTempVoice(interaction);
-    if (existing) {
-      if (interaction.member.voice.channelId !== existing.id) await interaction.member.voice.setChannel(existing, 'Returning owner to temporary VC').catch(() => null);
-      return interaction.reply({content:'Your temporary VC is already active: '+existing,components:[tempVoiceControls()],ephemeral:true});
-    }
-    const defaultName = `${interaction.member.displayName}'s VC`.replace(/[\\/:*?"<>|]/g, '').slice(0, 90) || 'Temporary VC';
-    const modal = new ModalBuilder().setCustomId('temp_vc_create_submit').setTitle('Create your own VC');
-    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Voice channel name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setValue(defaultName).setPlaceholder("e.g. Aly's comfy room")));
-    return interaction.showModal(modal);
-  }
-  if (interaction.isModalSubmit() && interaction.customId === 'temp_vc_create_submit') {
-    const settings = await getTempVoiceSettings(interaction.guildId).catch(() => null);
-    if (!settings) return interaction.reply({content:'Temporary voice rooms are not configured yet.',ephemeral:true});
-    const existing = await findOwnedTempVoice(interaction);
-    if (existing) return interaction.reply({content:'Your temporary VC is already active: '+existing,components:[tempVoiceControls()],ephemeral:true});
-    await interaction.deferReply({ephemeral:true});
-    try {
-      const panelChannel = await interaction.guild.channels.fetch(settings.panel_channel_id).catch(() => null);
-      // By default, temporary rooms stay with the setup panel instead of being
-      // created at the server's top level. An optional configured category wins.
-      const parent = settings.category_id
-        ? await interaction.guild.channels.fetch(settings.category_id).catch(() => null)
-        : panelChannel?.parent;
-      const name = interaction.fields.getTextInputValue('name').trim().replace(/[\\/:*?"<>|]/g, '').slice(0, 100) || 'Temporary VC';
-      const channel = await interaction.guild.channels.create({name,type:ChannelType.GuildVoice,parent:parent?.type===ChannelType.GuildCategory ? parent.id : undefined,reason:'Temporary VC created by '+interaction.user.tag});
-      if (!settings.category_id && panelChannel) await channel.setPosition((panelChannel.rawPosition ?? panelChannel.position ?? 0) + 1).catch(console.error);
-      await createTempVoiceChannel(interaction.guildId,channel.id,interaction.user.id);
-      if (interaction.member.voice.channelId) {
-        try { await interaction.member.voice.setChannel(channel, 'Moving member into their temporary VC'); }
-        catch { return interaction.editReply({content:'✅ Your temporary voice channel is ready: '+channel+'\nYachiyo could not move you automatically—join it manually.\nUse these controls to personalize it.',components:[tempVoiceControls()]}); }
-      } else scheduleTempVoiceDeletion(channel);
-      return interaction.editReply({content:'✅ Your temporary voice channel is ready: '+channel+(interaction.member.voice.channelId ? '' : '\nJoin it within 15 seconds or it will clean itself up.')+'\nUse these controls to personalize it.',components:[tempVoiceControls()]});
-    } catch (error) {
-      console.error('[TEMP_VC_CREATE]',error);
-      return interaction.editReply({content:'Yachiyo could not create your temporary VC. Please make sure she has **Manage Channels** and **Move Members** permissions.'});
-    }
+    return interaction.reply({content:'Join the configured **Create your own VC** voice channel to receive your room.',ephemeral:true});
   }
   if (interaction.isButton() && (interaction.customId === 'temp_vc_rename' || interaction.customId === 'temp_vc_status')) {
     const channel = await findOwnedTempVoice(interaction);
