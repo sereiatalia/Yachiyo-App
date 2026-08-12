@@ -69,7 +69,7 @@ function scheduleTempVoiceDeletion(channel) {
     await deleteTempVoiceChannel(fresh.id).catch(console.error);
     await fresh.delete('Temporary voice channel was empty for 15 seconds').catch(console.error);
     tempVoiceDeleteTimers.delete(channel.id);
-  }, 15_000));
+  }, 10_000));
 }
 
 function scheduleBumpReminder(guildId, userId, remindAt) {
@@ -176,7 +176,7 @@ client.on('tempVoicePanelRefresh', async guildId => {
   const settings = await getTempVoiceSettings(guildId).catch(() => null); if (!settings) return;
   const channel = await client.channels.fetch(settings.panel_channel_id).catch(() => null); if (!channel?.isTextBased()) return;
   if (settings.panel_message_id) { const old = await channel.messages.fetch(settings.panel_message_id).catch(() => null); if (old?.author?.id === client.user?.id) await old.delete().catch(() => null); }
-  const panel = await channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('୨୧ Create your own VC').setDescription('Click below to create a temporary voice channel just for you.\n\nYou can rename it or set its status after it is made. It automatically disappears **15 seconds after it becomes empty**.').setFooter({text:'Yachiyo • temporary voice rooms'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('temp_vc_create').setLabel('Create your own VC').setStyle(ButtonStyle.Primary))]});
+  const panel = await channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('୨୧ Create your own VC').setDescription('Click below to create a temporary voice channel just for you.\n\nYou can rename it or set its status after it is made. It automatically disappears **10 seconds after it becomes empty**.').setFooter({text:'Yachiyo • temporary voice rooms'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('temp_vc_create').setLabel('Create your own VC').setStyle(ButtonStyle.Primary))]});
   await saveTempVoicePanel(guildId, panel.id);
 });
 client.on('tempVoiceControlsRequest', async interaction => {
