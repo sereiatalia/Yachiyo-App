@@ -20,14 +20,23 @@ async function robloxFetch(url, options) {
   if (!response.ok) throw new Error('Roblox could not verify that username right now.');
   return response.json();
 }
+async function optionalRobloxFetch(url, options) { try { return await robloxFetch(url, options); } catch { return null; } }
 export async function resolveRobloxUser(username) {
   const cleaned = String(username ?? '').trim();
   if (!/^[A-Za-z0-9_]{3,20}$/.test(cleaned)) throw new Error('Enter a valid Roblox username (3–20 letters, numbers, or underscores).');
   const lookup = await robloxFetch('https://users.roblox.com/v1/usernames/users', {method:'POST',body:JSON.stringify({usernames:[cleaned],excludeBannedUsers:false})});
   const matched = lookup.data?.[0]; if (!matched) throw new Error('That Roblox username was not found.');
   const user = await robloxFetch('https://users.roblox.com/v1/users/'+matched.id);
-  const thumbnails = await robloxFetch('https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds='+user.id+'&size=420x420&format=Png&isCircular=false');
-  return {id:String(user.id),username:user.name,displayName:user.displayName,description:user.description ?? '',created:user.created,avatarUrl:thumbnails.data?.[0]?.imageUrl ?? null};
+  const [thumbnails,friends,followers,following,presence] = await Promise.all([
+    optionalRobloxFetch('https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds='+user.id+'&size=420x420&format=Png&isCircular=false'),
+    optionalRobloxFetch('https://friends.roblox.com/v1/users/'+user.id+'/friends/count'),
+    optionalRobloxFetch('https://friends.roblox.com/v1/users/'+user.id+'/followers/count'),
+    optionalRobloxFetch('https://friends.roblox.com/v1/users/'+user.id+'/followings/count'),
+    optionalRobloxFetch('https://presence.roblox.com/v1/presence/users',{method:'POST',body:JSON.stringify({userIds:[user.id]})}),
+  ]);
+  const presenceType=presence?.userPresences?.[0]?.userPresenceType;
+  const statuses={0:'Offline',1:'Online',2:'In game',3:'In Studio'};
+  return {id:String(user.id),username:user.name,displayName:user.displayName,description:user.description ?? '',created:user.created,avatarUrl:thumbnails?.data?.[0]?.imageUrl ?? null,friends:friends?.count ?? null,followers:followers?.count ?? null,following:following?.count ?? null,status:statuses[presenceType] ?? 'Unavailable',totalBadges:null};
 }
 export async function saveRobloxProfile(guildId, discordUserId, profile) {
   await ensureTables();

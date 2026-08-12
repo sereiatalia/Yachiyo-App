@@ -27,6 +27,7 @@ import { getRobloxPanel, setRobloxPanelMessage, getRobloxProfile, resolveRobloxU
 import { getMlbbPanel, setMlbbPanelMessage, getMlbbProfile } from './services/mlbbService.js';
 import { getHsrPanel, setHsrPanelMessage, getHsrProfile, fetchHsrProfile } from './services/hsrService.js';
 import { buildHsrProfileEmbed } from './ui/hsrProfile.js';
+import { buildRobloxProfileEmbed } from './ui/robloxProfile.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -234,7 +235,7 @@ client.on('truthOrDarePanelRefresh', async guildId => {
 async function sendRobloxProfile(interaction, user, ephemeral = true) {
   const saved=await getRobloxProfile(interaction.guildId,user.id); if(!saved) return interaction.reply({content:'You have not saved a Roblox username yet. Use `/roblox-user` first.',ephemeral:true});
   await interaction.deferReply({ephemeral});
-  try { const profile=await resolveRobloxUser(saved.username); const embed=new EmbedBuilder().setColor(0xf3a6c7).setAuthor({name:user.globalName||user.username,iconURL:user.displayAvatarURL()}).setTitle(profile.displayName).setURL('https://www.roblox.com/users/'+profile.id+'/profile').setDescription('**@'+profile.username+'**\nRoblox ID: `'+profile.id+'`').setFooter({text:'Yachiyo • Roblox profile'}); if(profile.avatarUrl) embed.setThumbnail(profile.avatarUrl); return interaction.editReply({embeds:[embed]}); } catch(error) { return interaction.editReply({content:'⚠️ '+error.message}); }
+  try { return interaction.editReply({embeds:[buildRobloxProfileEmbed(user,await resolveRobloxUser(saved.username),'Yachiyo • Roblox profile')]}); } catch(error) { return interaction.editReply({content:'⚠️ '+error.message}); }
 }
 async function refreshRobloxPanel(guildId) {
   const settings=await getRobloxPanel(guildId).catch(()=>null); if(!settings) return;
