@@ -21,6 +21,7 @@ import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './service
 import { addChatXp, startVoiceActivity, stopVoiceActivity } from './services/activityLeaderboardService.js';
 import { getTruthOrDareSettings, saveTruthOrDarePanel, randomTruthOrDare, SAFE_TRUTHS, SAFE_DARES } from './services/truthOrDareService.js';
 import { getAutoReacts } from './services/autoReactService.js';
+import { getTempVoiceSettings, saveTempVoicePanel, createTempVoiceChannel, getTempVoiceChannel, getTempVoiceForOwner, deleteTempVoiceChannel } from './services/tempVoiceService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -34,6 +35,31 @@ const pendingBumps = new Map();
 const bumpReminderTimers = new Map();
 const profileRecounts = new Set();
 const pendingTimeQuestions = new Map();
+const tempVoiceDeleteTimers = new Map();
+
+function tempVoiceControls() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('temp_vc_rename').setLabel('Edit name').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('temp_vc_status').setLabel('Edit status').setStyle(ButtonStyle.Secondary)
+  );
+}
+async function findOwnedTempVoice(interaction) {
+  const record = await getTempVoiceForOwner(interaction.guildId, interaction.user.id);
+  const channel = record ? await interaction.guild.channels.fetch(record.channel_id).catch(() => null) : null;
+  if (!channel?.isVoiceBased()) { if (record) await deleteTempVoiceChannel(record.channel_id); return null; }
+  return channel;
+}
+function scheduleTempVoiceDeletion(channel) {
+  if (!channel || channel.members.size) return;
+  clearTimeout(tempVoiceDeleteTimers.get(channel.id));
+  tempVoiceDeleteTimers.set(channel.id, setTimeout(async () => {
+    const fresh = await channel.guild.channels.fetch(channel.id).catch(() => null);
+    if (!fresh?.isVoiceBased() || fresh.members.size) return;
+    await deleteTempVoiceChannel(fresh.id).catch(console.error);
+    await fresh.delete('Temporary voice channel was empty for 15 seconds').catch(console.error);
+    tempVoiceDeleteTimers.delete(channel.id);
+  }, 15_000));
+}
 
 function scheduleBumpReminder(guildId, userId, remindAt) {
   const key=guildId+':'+userId; clearTimeout(bumpReminderTimers.get(key));
@@ -85,6 +111,14 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     if (!oldState.channelId && newState.channelId) await startVoiceActivity(newState.guild.id,newState.id).catch(console.error);
     if (oldState.channelId && !newState.channelId) await stopVoiceActivity(newState.guild.id,newState.id).catch(console.error);
   }
+  for (const channelId of new Set([oldState.channelId, newState.channelId].filter(Boolean))) {
+    const record = await getTempVoiceChannel(channelId).catch(() => null);
+    if (!record) continue;
+    const channel = await newState.guild.channels.fetch(channelId).catch(() => null);
+    if (!channel?.isVoiceBased()) { await deleteTempVoiceChannel(channelId).catch(console.error); continue; }
+    if (channel.members.size) clearTimeout(tempVoiceDeleteTimers.get(channelId));
+    else scheduleTempVoiceDeletion(channel);
+  }
   if (newState.id !== client.user?.id || newState.channelId) return;
   const voice = voiceConnections.get(newState.guild.id);
   if (voice) setTimeout(() => keepVoiceConnection(newState.guild.id, voice.joinConfig.channelId).catch(console.error), 2000);
@@ -115,6 +149,18 @@ client.on('truthOrDarePanelRefresh', async guildId => {
   const embed=new EmbedBuilder().setColor(0xf3a6c7).setTitle('TRUTH OR DARE').setDescription('Choose **Truth**, **Dare**, or **Random** for a fresh prompt.\n\nExpect specific questions that help everyone know each other—and themselves—through memories, friendships, habits, goals, boundaries, and personality.\n\n✦ **PG + PG-13 • SFW only**\n✦ **1,000 built-in prompts:** '+SAFE_TRUTHS.length+' Truths + '+SAFE_DARES.length+' Dares.').setFooter({text:'Yachiyo • honest, social, and never spicy'});
   const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('tod_truth').setLabel('TRUTH').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('tod_dare').setLabel('DARE').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('tod_random').setLabel('RANDOM').setStyle(ButtonStyle.Success));
   const panel=await channel.send({embeds:[embed],components:[row]}); await saveTruthOrDarePanel(guildId,panel.id);
+});
+client.on('tempVoicePanelRefresh', async guildId => {
+  const settings = await getTempVoiceSettings(guildId).catch(() => null); if (!settings) return;
+  const channel = await client.channels.fetch(settings.panel_channel_id).catch(() => null); if (!channel?.isTextBased()) return;
+  if (settings.panel_message_id) { const old = await channel.messages.fetch(settings.panel_message_id).catch(() => null); if (old?.author?.id === client.user?.id) await old.delete().catch(() => null); }
+  const panel = await channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('୨୧ Create your own VC').setDescription('Click below to create a temporary voice channel just for you.\n\nYou can rename it or set its status after it is made. It automatically disappears **15 seconds after it becomes empty**.').setFooter({text:'Yachiyo • temporary voice rooms'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('temp_vc_create').setLabel('Create your own VC').setStyle(ButtonStyle.Primary))]});
+  await saveTempVoicePanel(guildId, panel.id);
+});
+client.on('tempVoiceControlsRequest', async interaction => {
+  const channel = await findOwnedTempVoice(interaction);
+  if (!channel) return interaction.reply({content:'You do not have an active temporary voice channel. Create one from the panel first.',ephemeral:true});
+  return interaction.reply({content:'♡ **Your temporary VC:** '+channel+'\nUse these controls whenever you want to update it.',components:[tempVoiceControls()],ephemeral:true});
 });
 async function createServerInfoEmbed(guild, info) {
   const owner=await guild.fetchOwner().catch(()=>null);
@@ -237,6 +283,52 @@ client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.
 client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.create',targetId:channel.id,data:{summary:`Channel **${channel.name}** was created.`}}).catch(console.error); });
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
 client.on('interactionCreate', async interaction => {
+  if (interaction.isButton() && interaction.customId === 'temp_vc_create') {
+    const settings = await getTempVoiceSettings(interaction.guildId).catch(() => null);
+    if (!settings) return interaction.reply({content:'Temporary voice rooms are not configured yet.',ephemeral:true});
+    const existing = await findOwnedTempVoice(interaction);
+    if (existing) {
+      if (interaction.member.voice.channelId !== existing.id) await interaction.member.voice.setChannel(existing, 'Returning owner to temporary VC').catch(() => null);
+      return interaction.reply({content:'Your temporary VC is already active: '+existing,components:[tempVoiceControls()],ephemeral:true});
+    }
+    await interaction.deferReply({ephemeral:true});
+    try {
+      const parent = settings.category_id ? await interaction.guild.channels.fetch(settings.category_id).catch(() => null) : null;
+      const name = `${interaction.member.displayName}'s VC`.replace(/[\\/:*?"<>|]/g, '').slice(0, 90) || 'Temporary VC';
+      const channel = await interaction.guild.channels.create({name,type:ChannelType.GuildVoice,parent:parent?.type===ChannelType.GuildCategory ? parent.id : undefined,reason:'Temporary VC created by '+interaction.user.tag});
+      await createTempVoiceChannel(interaction.guildId,channel.id,interaction.user.id);
+      if (interaction.member.voice.channelId) {
+        try { await interaction.member.voice.setChannel(channel, 'Moving member into their temporary VC'); }
+        catch { return interaction.editReply({content:'✅ Your temporary voice channel is ready: '+channel+'\nYachiyo could not move you automatically—join it manually.\nUse these controls to personalize it.',components:[tempVoiceControls()]}); }
+      } else scheduleTempVoiceDeletion(channel);
+      return interaction.editReply({content:'✅ Your temporary voice channel is ready: '+channel+(interaction.member.voice.channelId ? '' : '\nJoin it within 15 seconds or it will clean itself up.')+'\nUse these controls to personalize it.',components:[tempVoiceControls()]});
+    } catch (error) {
+      console.error('[TEMP_VC_CREATE]',error);
+      return interaction.editReply({content:'Yachiyo could not create your temporary VC. Please make sure she has **Manage Channels** and **Move Members** permissions.'});
+    }
+  }
+  if (interaction.isButton() && (interaction.customId === 'temp_vc_rename' || interaction.customId === 'temp_vc_status')) {
+    const channel = await findOwnedTempVoice(interaction);
+    if (!channel) return interaction.reply({content:'Your temporary VC is no longer active.',ephemeral:true});
+    const isName = interaction.customId === 'temp_vc_rename';
+    const modal = new ModalBuilder().setCustomId(isName ? 'temp_vc_save_name' : 'temp_vc_save_status').setTitle(isName ? 'Edit your VC name' : 'Edit your VC status');
+    const input = new TextInputBuilder().setCustomId(isName ? 'name' : 'status').setLabel(isName ? 'Voice channel name' : 'Voice channel status').setStyle(isName ? TextInputStyle.Short : TextInputStyle.Paragraph).setRequired(isName).setMaxLength(isName ? 100 : 500).setPlaceholder(isName ? "e.g. Aly's comfy room" : 'e.g. studying — feel free to join');
+    if (isName) input.setValue(channel.name); else if (channel.status) input.setValue(channel.status);
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return interaction.showModal(modal);
+  }
+  if (interaction.isModalSubmit() && (interaction.customId === 'temp_vc_save_name' || interaction.customId === 'temp_vc_save_status')) {
+    const channel = await findOwnedTempVoice(interaction);
+    if (!channel) return interaction.reply({content:'Your temporary VC is no longer active.',ephemeral:true});
+    try {
+      if (interaction.customId === 'temp_vc_save_name') await channel.setName(interaction.fields.getTextInputValue('name').trim(), 'Temporary VC owner updated the name');
+      else await channel.setStatus(interaction.fields.getTextInputValue('status').trim(), 'Temporary VC owner updated the status');
+      return interaction.reply({content:'✅ Your temporary VC '+(interaction.customId.endsWith('name') ? 'name' : 'status')+' was updated.',ephemeral:true});
+    } catch (error) {
+      console.error('[TEMP_VC_EDIT]',error);
+      return interaction.reply({content:'Yachiyo could not update your temporary VC. Check her **Manage Channels** permission.',ephemeral:true});
+    }
+  }
   if (interaction.isButton() && (interaction.customId==='tod_truth'||interaction.customId==='tod_dare'||interaction.customId==='tod_random')) {
     const type=interaction.customId==='tod_random'?(Math.random()<0.5?'truth':'dare'):(interaction.customId==='tod_dare'?'dare':'truth');
     const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('tod_truth').setLabel('TRUTH').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('tod_dare').setLabel('DARE').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('tod_random').setLabel('RANDOM').setStyle(ButtonStyle.Success));
