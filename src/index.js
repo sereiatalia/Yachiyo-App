@@ -572,7 +572,14 @@ client.on('messageCreate', async message => {
     const countryReply=findCountryTime(message.content,pendingTime.language);
     if(countryReply) { pendingTimeQuestions.delete(timeKey); await message.reply({content:countryReply,allowedMentions:{repliedUser:false}}).catch(console.error); return; }
   } else if (pendingTime) pendingTimeQuestions.delete(timeKey);
-  if (client.user && message.mentions.has(client.user) && !message.mentions.everyone && !message.content.startsWith(process.env.PREFIX || '.')) {
+  // Discord adds a mention when someone replies to Yachiyo's panel/message. Those
+  // are normal conversation replies, not requests for her offline brain.
+  const isReplyToYachiyo = Boolean(
+    client.user
+    && message.reference?.messageId
+    && (await message.fetchReference().then(reference => reference.author.id === client.user.id).catch(() => false))
+  );
+  if (client.user && message.mentions.has(client.user) && !message.mentions.everyone && !isReplyToYachiyo && !message.content.startsWith(process.env.PREFIX || '.')) {
     const clean=message.content.replace(new RegExp('<@!?' + client.user.id + '>', 'g'), '').trim();
     if(isTimeQuestion(clean) && !findCountryTime(clean)) pendingTimeQuestions.set(timeKey,{expiresAt:Date.now()+120_000,language:/\b(ano|anong|oras|saan|petsa|kailan|sino|sinong|maganda|pinaka)\b/i.test(clean)?'tl':'en'});
     const reply=await getOfflineBrainReply({text:clean,guild:message.guild,user:message.author.username,member:message.member});
