@@ -557,6 +557,12 @@ client.on('messageCreate', async message => {
       setTimeout(() => pendingBumps.delete(key), 30_000);
     }
   }
+  // Include Yachiyo's own panels, embeds, and messages in auto-reactions, but
+  // leave other bots alone so integrations such as Carl do not get reactions.
+  if (!message.author.bot || message.author.id === client.user?.id) {
+    const autoReacts = await getAutoReacts(message.guild.id, message.channelId).catch(() => []);
+    await Promise.all(autoReacts.map(emoji => message.react(emoji).catch(() => null)));
+  }
   if (message.author.bot && (message.author.id === CARL_BOT_ID || /carl/i.test(message.author.username || message.author.tag || ''))) {
     if (/you'?ve successfully bumped this server/i.test(message.content || '')) {
       const userId = message.interactionMetadata?.user?.id ?? message.interaction?.user?.id ?? pendingBumps.get(message.guild.id + ':' + message.channelId);
@@ -565,8 +571,6 @@ client.on('messageCreate', async message => {
     return;
   }
   if (message.author.bot) return;
-  const autoReacts = await getAutoReacts(message.guild.id, message.channelId).catch(() => []);
-  for (const emoji of autoReacts) await message.react(emoji).catch(() => null);
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   await addChatXp(message.guild.id,message.author.id).catch(console.error);
   const timeKey=message.guild.id+':'+message.author.id;
