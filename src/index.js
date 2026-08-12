@@ -111,7 +111,7 @@ client.on('truthOrDarePanelRefresh', async guildId => {
   const settings=await getTruthOrDareSettings(guildId).catch(()=>null); if(!settings) return;
   const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
   if(settings.panel_message_id) { const old=await channel.messages.fetch(settings.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
-  const embed=new EmbedBuilder().setColor(0xf3a6c7).setTitle('TRUTH OR DARE').setDescription('Choose **Truth** or **Dare** for a fresh prompt.\n\n♡ This game is safe-for-work, voluntary, and made for fun—skip anything that makes you uncomfortable.\n\n✦ **1,000 built-in prompts:** '+SAFE_TRUTHS.length+' Truths + '+SAFE_DARES.length+' Dares.').setFooter({text:'Yachiyo • keep it kind, safe, and comfy'});
+  const embed=new EmbedBuilder().setColor(0xf3a6c7).setTitle('TRUTH OR DARE').setDescription('Choose **Truth**, **Dare**, or **Random** for a fresh prompt.\n\n**Truths** cover Who, Where, When, What, and How. **Dares** are social, creative, and SFW.\n\n✦ **1,000 built-in prompts:** '+SAFE_TRUTHS.length+' Truths + '+SAFE_DARES.length+' Dares.').setFooter({text:'Yachiyo • SFW only • keep it respectful'});
   const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('tod_truth').setLabel('TRUTH').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('tod_dare').setLabel('DARE').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('tod_random').setLabel('RANDOM').setStyle(ButtonStyle.Success));
   const panel=await channel.send({embeds:[embed],components:[row]}); await saveTruthOrDarePanel(guildId,panel.id);
 });
@@ -239,7 +239,7 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isButton() && (interaction.customId==='tod_truth'||interaction.customId==='tod_dare'||interaction.customId==='tod_random')) {
     const type=interaction.customId==='tod_random'?(Math.random()<0.5?'truth':'dare'):(interaction.customId==='tod_dare'?'dare':'truth');
     const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('tod_truth').setLabel('TRUTH').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('tod_dare').setLabel('DARE').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('tod_random').setLabel('RANDOM').setStyle(ButtonStyle.Success));
-    return interaction.reply({content:'<@'+interaction.user.id+'> chose **'+type.toUpperCase()+'**!',allowedMentions:{users:[interaction.user.id]},embeds:[new EmbedBuilder().setColor(type==='truth'?0x8e7dff:0xf3a6c7).setTitle(type==='truth'?'TRUTH':'DARE').setDescription(randomTruthOrDare(type)+'\n\n*You can skip any prompt—comfort always comes first.*').setFooter({text:'Yachiyo • choose the next prompt below'})],components:[row]});
+    return interaction.reply({content:'<@'+interaction.user.id+'> chose **'+type.toUpperCase()+'**!',allowedMentions:{users:[interaction.user.id]},embeds:[new EmbedBuilder().setColor(type==='truth'?0x8e7dff:0xf3a6c7).setTitle(type==='truth'?'TRUTH':'DARE').setDescription(randomTruthOrDare(type)).setFooter({text:'Yachiyo • choose the next prompt below'})],components:[row]});
   }
   if (interaction.isStringSelectMenu() && interaction.customId === 'yachiyo_help_category') return interaction.update(buildHelpView(interaction.values[0]));
   if (interaction.isButton() && interaction.customId === 'server_info_staffs') {
