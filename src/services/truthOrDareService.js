@@ -106,6 +106,112 @@ const DARE_PROMPTS = [
   '[PG-13] Give a friend a gentle reminder they might need to hear today.'
 ];
 
+const FAVORITE_TRUTHS = [
+  '[PG] WHAT: What is your favorite snack combination that other people might find unusual?',
+  '[PG] WHAT: What is your favorite song right now, and which exact part makes you replay it?',
+  '[PG] WHAT: What is your favorite fictional character’s most relatable trait?',
+  '[PG] WHAT: What is your favorite color to wear, and what mood does it give you?',
+  '[PG] WHAT: What is your favorite game to play with friends rather than alone?',
+  '[PG] WHAT: What is your favorite movie, series, anime, or book scene without giving spoilers?',
+  '[PG] WHAT: What is your favorite seasonal weather, and what would your perfect day in it look like?',
+  '[PG] WHAT: What is your favorite comfort item in your room or bag?',
+  '[PG] WHAT: What is your favorite smell, and what memory does it connect to?',
+  '[PG] WHAT: What is your favorite kind of compliment to receive?',
+  '[PG] WHAT: What is your favorite thing to order when you want to treat yourself?',
+  '[PG] WHAT: What is your favorite emoji, emoticon, or reaction to use and why?',
+  '[PG] WHAT: What is your favorite school or work task when you are in the mood to be productive?',
+  '[PG] WHAT: What is your favorite way to spend an hour with no plans?',
+  '[PG] WHAT: What is your favorite small tradition with friends or family?',
+  '[PG] WHAT: What is your favorite thing about your current hobby?',
+  '[PG] WHAT: What is your favorite kind of gift to give someone?',
+  '[PG] WHAT: What is your favorite internet rabbit hole or topic to learn about?',
+  '[PG] WHAT: What is your favorite outfit detail: shoes, jewelry, hoodie, bag, or something else?',
+  '[PG] WHAT: What is your favorite way to make a boring day feel less boring?',
+  '[PG] WHO: Who would understand your taste in music best, and what would you play for them first?',
+  '[PG] WHO: Who would you trust to choose a restaurant or snack for you?',
+  '[PG] WHERE: Where would you go for your ideal low-budget hangout?',
+  '[PG] WHERE: Where do you find your best recommendations for games, songs, or shows?',
+  '[PG] WHEN: When do you most enjoy listening to music: commuting, studying, late at night, or another time?',
+  '[PG] WHEN: When did you last discover a favorite artist, game, or series?',
+  '[PG] HOW: How do you decide whether a new song, game, or show becomes a favorite?',
+  '[PG] HOW: How would you introduce your favorite hobby to a curious beginner?',
+  '[PG-13] WHAT: What opinion about a popular food, show, game, or trend do you defend every time?',
+  '[PG-13] WHAT: What is a favorite of yours that you used to hide because you worried it was uncool?',
+  '[PG-13] WHAT: What kind of people, conversations, or spaces make you feel most comfortable?',
+  '[PG-13] WHAT: What is one interest you want to explore more this year?',
+  '[PG-13] WHAT: What is a harmless pet peeve that can instantly test your patience?',
+  '[PG-13] WHAT: What is one personal value you want your friends to notice about you?',
+  '[PG-13] WHO: Who has influenced your taste in music, fashion, games, or food the most?',
+  '[PG-13] WHERE: Where do you go when you need inspiration for a creative idea?',
+  '[PG-13] WHEN: When do you feel most confident being yourself?',
+  '[PG-13] WHEN: When did a hobby or fandom help you connect with someone new?',
+  '[PG-13] HOW: How do you react when someone dislikes something you genuinely love?',
+  '[PG-13] HOW: How do you tell a friend you need quiet time without making them feel rejected?',
+  '[PG] WHAT: What fictional world would fit your personality best, and what would you do there first?',
+  '[PG] WHAT: What is the best meal you can make or want to learn to make?',
+  '[PG] WHAT: What is your go-to topic when you want to start a fun conversation?',
+  '[PG] WHAT: What is one tiny luxury you enjoy more than most people do?',
+  '[PG] WHERE: Where would you take someone visiting your city for the first time?',
+  '[PG] WHEN: When are you most likely to try a new food, song, game, or activity?',
+  '[PG] HOW: How do you recharge after spending a lot of time around people?',
+  '[PG-13] WHAT: What interest of yours has changed the most in the last two years?',
+  '[PG-13] WHO: Who would you call for a recommendation when you cannot choose what to watch or play?',
+  '[PG-13] HOW: How would you describe your sense of humor to someone new?'
+];
+
+const FAVORITE_DARES = [
+  '[PG] Make a top-five list of your favorite snacks and give each one a tiny award title.',
+  '[PG] Share a three-item starter pack for someone who wants to understand your taste in music.',
+  '[PG] Recommend one game, show, anime, book, or movie and describe its vibe without spoilers.',
+  '[PG] Describe your favorite drink as if it is a famous celebrity being interviewed.',
+  '[PG] Create a mini menu with three foods that represent your personality.',
+  '[PG] Write a two-line review of your current favorite song without naming its lyrics.',
+  '[PG] Name three fictional characters you would invite to a calm dinner and assign each a seat.',
+  '[PG] Give your favorite color a personality, hobby, and one dramatic secret.',
+  '[PG] Make a five-word slogan for your favorite hobby.',
+  '[PG] Build a one-day itinerary around your favorite kind of weather.',
+  '[PG] Share your ideal study, gaming, or relaxing setup using exactly five items.',
+  '[PG] Create a silly award for the best food you ate recently and explain the winner.',
+  '[PG] Write a tiny postcard from your dream travel destination.',
+  '[PG] Rank three comfort foods from “good” to “would defend forever.”',
+  '[PG] Turn your favorite animal into a Discord username and status.',
+  '[PG] Give the chat a one-sentence recommendation based on your favorite genre.',
+  '[PG] Describe a favorite memory using only three emojis and one sentence.',
+  '[PG] Invent a themed café based on your favorite game, show, or hobby.',
+  '[PG] Share a “listen to this when…” recommendation for one mood.',
+  '[PG] Make a two-question quiz that could reveal whether someone shares your taste.',
+  '[PG] Tell the group your favorite harmless fun fact and why you remember it.',
+  '[PG] Describe your ideal birthday cake, meal, or celebration in two sentences.',
+  '[PG] Create a playlist title for your current week and list three song vibes, not lyrics.',
+  '[PG] Write a friendly invitation to try one of your favorite activities.',
+  '[PG] Pick a favorite fictional place and explain the first rule you would make there.',
+  '[PG] Name a favorite item you own and give it an overly dramatic product advertisement.',
+  '[PG] Make a “things I will always say yes to” list with three safe answers.',
+  '[PG] Give a movie or game genre a new funny name based on its usual plot.',
+  '[PG] Describe your perfect weekend morning without mentioning a screen.',
+  '[PG] Choose one favorite song, food, and color to represent your mood today.',
+  '[PG-13] Share one harmless unpopular favorite and explain it respectfully in two sentences.',
+  '[PG-13] Write a polite defense for something people often call overrated.',
+  '[PG-13] Describe your personal “do not disturb” ritual in a way friends could understand.',
+  '[PG-13] Make a short list of three conversation topics that always make you light up.',
+  '[PG-13] Write a gentle boundary around one hobby, interest, or free-time need.',
+  '[PG-13] Give a respectful “not for me, but I see the appeal” review of a popular trend.',
+  '[PG-13] Share one interest you want to try and one small first step you could take.',
+  '[PG-13] Write a note to your future self about making room for the things you enjoy.',
+  '[PG-13] Make a “my energy is low, but I still care” message a friend could understand.',
+  '[PG-13] Explain how a friend can invite you somewhere in a way that feels comfortable.',
+  '[PG] Make a fictional mascot for your favorite food, drink, or hobby.',
+  '[PG] Give three objects near you a rating based on how well they match your personality.',
+  '[PG] Create a tiny bucket list of three fun experiences related to your interests.',
+  '[PG] Write a haiku about a food, game, place, or song you love.',
+  '[PG] Name a favorite comfort activity and give someone a beginner-friendly first step.',
+  '[PG] Invent a sticker pack based on your favorite things; name its first three stickers.',
+  '[PG] Make a five-word review for your favorite season.',
+  '[PG-13] Write a short “I changed my mind about this” post about a harmless taste or interest.',
+  '[PG-13] Give a specific, kind compliment to someone who shares one of your interests.',
+  '[PG-13] Describe a hobby you admire in others even if you are not good at it.'
+];
+
 const PROMPT_VARIATIONS = [
   'Give one real example if you can.',
   'Keep it honest and concise.',
@@ -123,8 +229,8 @@ function buildPromptPool(prompts) {
   return Object.freeze(prompts.flatMap(prompt => PROMPT_VARIATIONS.map(variation => `${prompt}\n*${variation}*`)));
 }
 
-export const SAFE_TRUTHS = buildPromptPool(TRUTH_PROMPTS);
-export const SAFE_DARES = buildPromptPool(DARE_PROMPTS);
+export const SAFE_TRUTHS = buildPromptPool([...TRUTH_PROMPTS, ...FAVORITE_TRUTHS]);
+export const SAFE_DARES = buildPromptPool([...DARE_PROMPTS, ...FAVORITE_DARES]);
 let settingsReady=false;
 async function ensureSettingsTable() {
   if(settingsReady) return;
