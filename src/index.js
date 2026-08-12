@@ -18,6 +18,7 @@ import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs
 import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpReminder, markBumpReminderNotified, pendingBumpReminders } from './services/bumpService.js';
 import { getServerInfo, saveServerInfoPanel, updateServerInfo, getServerInfoStaffRoles, getProfileStats, recordProfileMessage, replaceProfileMessageCounts } from './services/serverInfoService.js';
 import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './services/offlineBrainService.js';
+import { addChatXp, startVoiceActivity, stopVoiceActivity } from './services/activityLeaderboardService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -71,8 +72,17 @@ client.once('ready', async () => {
   console.log(`Yachiyo is online as ${client.user.tag}`);
   for (const voice of await getVoiceChannels().catch(() => [])) keepVoiceConnection(voice.guild_id, voice.voice_channel_id).catch(console.error);
   for (const reminder of await pendingBumpReminders().catch(() => [])) scheduleBumpReminder(reminder.guild_id,reminder.user_id,reminder.remind_at);
+  for (const guild of client.guilds.cache.values()) {
+    for (const state of guild.voiceStates.cache.values()) {
+      if (state.channelId && !state.member?.user.bot) startVoiceActivity(guild.id,state.id).catch(console.error);
+    }
+  }
 });
-client.on('voiceStateUpdate', (oldState, newState) => {
+client.on('voiceStateUpdate', async (oldState, newState) => {
+  if (!newState.member?.user.bot) {
+    if (!oldState.channelId && newState.channelId) await startVoiceActivity(newState.guild.id,newState.id).catch(console.error);
+    if (oldState.channelId && !newState.channelId) await stopVoiceActivity(newState.guild.id,newState.id).catch(console.error);
+  }
   if (newState.id !== client.user?.id || newState.channelId) return;
   const voice = voiceConnections.get(newState.guild.id);
   if (voice) setTimeout(() => keepVoiceConnection(newState.guild.id, voice.joinConfig.channelId).catch(console.error), 2000);
@@ -541,6 +551,7 @@ client.on('messageCreate', async message => {
   }
   if (message.author.bot) return;
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
+  await addChatXp(message.guild.id,message.author.id).catch(console.error);
   const timeKey=message.guild.id+':'+message.author.id;
   const pendingTime=pendingTimeQuestions.get(timeKey);
   if (!message.mentions.everyone && pendingTime && pendingTime.expiresAt>Date.now()) {

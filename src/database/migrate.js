@@ -203,6 +203,13 @@ CREATE TABLE IF NOT EXISTS member_profile_stats (
   guild_id TEXT NOT NULL, user_id TEXT NOT NULL, message_count BIGINT NOT NULL DEFAULT 0,
   last_message_at TIMESTAMPTZ, PRIMARY KEY (guild_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS guild_member_activity (
+  guild_id TEXT NOT NULL, user_id TEXT NOT NULL, chat_xp BIGINT NOT NULL DEFAULT 0,
+  voice_seconds BIGINT NOT NULL DEFAULT 0, voice_started_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id,user_id)
+);
+CREATE INDEX IF NOT EXISTS guild_member_activity_xp_idx ON guild_member_activity(guild_id,chat_xp DESC);
+CREATE INDEX IF NOT EXISTS guild_member_activity_voice_idx ON guild_member_activity(guild_id,voice_seconds DESC);
 CREATE TABLE IF NOT EXISTS brain_faqs (
   id BIGSERIAL PRIMARY KEY, guild_id TEXT NOT NULL, question TEXT NOT NULL, answer TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
