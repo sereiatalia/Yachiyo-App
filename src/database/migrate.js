@@ -233,6 +233,15 @@ CREATE TABLE IF NOT EXISTS spam_warnings (
   guild_id TEXT NOT NULL, user_id TEXT NOT NULL, warning_count INTEGER NOT NULL DEFAULT 0,
   last_warned_at TIMESTAMPTZ, PRIMARY KEY (guild_id,user_id)
 );
+CREATE TABLE IF NOT EXISTS roblox_profiles (
+  guild_id TEXT NOT NULL, discord_user_id TEXT NOT NULL, roblox_user_id TEXT NOT NULL,
+  username TEXT NOT NULL, display_name TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (guild_id,discord_user_id)
+);
+CREATE TABLE IF NOT EXISTS roblox_panel_settings (
+  guild_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, panel_message_id TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 CREATE INDEX IF NOT EXISTS guild_member_activity_xp_idx ON guild_member_activity(guild_id,chat_xp DESC);
 CREATE INDEX IF NOT EXISTS guild_member_activity_voice_idx ON guild_member_activity(guild_id,voice_seconds DESC);
 CREATE TABLE IF NOT EXISTS brain_faqs (

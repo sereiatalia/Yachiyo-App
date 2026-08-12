@@ -23,6 +23,7 @@ import { getTruthOrDareSettings, saveTruthOrDarePanel, randomTruthOrDare, SAFE_T
 import { getAutoReacts } from './services/autoReactService.js';
 import { getTempVoiceSettings, saveTempVoicePanel, createTempVoiceChannel, getTempVoiceChannel, getTempVoiceForOwner, deleteTempVoiceChannel } from './services/tempVoiceService.js';
 import { getSpamSettings, recordSpamWarning, resetSpamWarnings } from './services/spamService.js';
+import { getRobloxPanel, setRobloxPanelMessage, getRobloxProfile, resolveRobloxUser } from './services/robloxService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -37,6 +38,7 @@ const bumpReminderTimers = new Map();
 const profileRecounts = new Set();
 const pendingTimeQuestions = new Map();
 const tempVoiceDeleteTimers = new Map();
+const robloxPanelTimers = new Map();
 const spamMessageWindows = new Map();
 const spamBurstWarnings = new Map();
 
@@ -205,6 +207,19 @@ client.on('truthOrDarePanelRefresh', async guildId => {
   const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('tod_truth').setLabel('TRUTH').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('tod_dare').setLabel('DARE').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('tod_random').setLabel('RANDOM').setStyle(ButtonStyle.Success));
   const panel=await channel.send({embeds:[embed],components:[row]}); await saveTruthOrDarePanel(guildId,panel.id);
 });
+async function sendRobloxProfile(interaction, user, ephemeral = true) {
+  const saved=await getRobloxProfile(interaction.guildId,user.id); if(!saved) return interaction.reply({content:'You have not saved a Roblox username yet. Use `/roblox-user` first.',ephemeral:true});
+  await interaction.deferReply({ephemeral});
+  try { const profile=await resolveRobloxUser(saved.username); const embed=new EmbedBuilder().setColor(0xf3a6c7).setAuthor({name:user.globalName||user.username,iconURL:user.displayAvatarURL()}).setTitle(profile.displayName).setURL('https://www.roblox.com/users/'+profile.id+'/profile').setDescription('**@'+profile.username+'**\nRoblox ID: `'+profile.id+'`').setFooter({text:'Yachiyo • Roblox profile'}); if(profile.avatarUrl) embed.setThumbnail(profile.avatarUrl); return interaction.editReply({embeds:[embed]}); } catch(error) { return interaction.editReply({content:'⚠️ '+error.message}); }
+}
+async function refreshRobloxPanel(guildId) {
+  const settings=await getRobloxPanel(guildId).catch(()=>null); if(!settings) return;
+  const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
+  if(settings.panel_message_id) { const old=await channel.messages.fetch(settings.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
+  const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('ROBLOX PROFILE').setDescription('Save yours: `/roblox-user username`\nCheck a member: `/roblox-checkuser user`').setFooter({text:'Yachiyo • Roblox profiles'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('roblox_show_profile').setLabel('SHOW PROFILE').setStyle(ButtonStyle.Primary))]});
+  await setRobloxPanelMessage(guildId,panel.id);
+}
+client.on('robloxPanelRefresh', guildId => refreshRobloxPanel(guildId).catch(console.error));
 client.on('tempVoicePanelRefresh', async guildId => {
   const settings = await getTempVoiceSettings(guildId).catch(() => null); if (!settings) return;
   const channel = await client.channels.fetch(settings.panel_channel_id).catch(() => null); if (!channel?.isTextBased()) return;
@@ -338,6 +353,7 @@ client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.
 client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.create',targetId:channel.id,data:{summary:`Channel **${channel.name}** was created.`}}).catch(console.error); });
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
 client.on('interactionCreate', async interaction => {
+  if (interaction.isButton() && interaction.customId === 'roblox_show_profile') return sendRobloxProfile(interaction, interaction.user, true);
   if (interaction.isButton() && interaction.customId === 'temp_vc_create') {
     return interaction.reply({content:'Join the configured **Create your own VC** voice channel to receive your room.',ephemeral:true});
   }
@@ -697,6 +713,11 @@ client.on('messageCreate', async message => {
     return;
   }
   if (message.author.bot) return;
+  const robloxPanel=await getRobloxPanel(message.guild.id).catch(()=>null);
+  if (robloxPanel?.channel_id===message.channelId) {
+    clearTimeout(robloxPanelTimers.get(message.guild.id));
+    robloxPanelTimers.set(message.guild.id,setTimeout(()=>refreshRobloxPanel(message.guild.id).catch(console.error),8_000));
+  }
   if (await checkRapidSpam(message)) return;
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   await addChatXp(message.guild.id,message.author.id).catch(console.error);
