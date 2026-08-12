@@ -716,7 +716,7 @@ client.on('messageCreate', async message => {
   const robloxPanel=await getRobloxPanel(message.guild.id).catch(()=>null);
   if (robloxPanel?.channel_id===message.channelId) {
     clearTimeout(robloxPanelTimers.get(message.guild.id));
-    robloxPanelTimers.set(message.guild.id,setTimeout(()=>refreshRobloxPanel(message.guild.id).catch(console.error),8_000));
+    robloxPanelTimers.set(message.guild.id,setTimeout(()=>refreshRobloxPanel(message.guild.id).catch(console.error),5_000));
   }
   if (await checkRapidSpam(message)) return;
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
