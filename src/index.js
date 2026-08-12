@@ -301,9 +301,15 @@ client.on('interactionCreate', async interaction => {
     if (existing) return interaction.reply({content:'Your temporary VC is already active: '+existing,components:[tempVoiceControls()],ephemeral:true});
     await interaction.deferReply({ephemeral:true});
     try {
-      const parent = settings.category_id ? await interaction.guild.channels.fetch(settings.category_id).catch(() => null) : null;
+      const panelChannel = await interaction.guild.channels.fetch(settings.panel_channel_id).catch(() => null);
+      // By default, temporary rooms stay with the setup panel instead of being
+      // created at the server's top level. An optional configured category wins.
+      const parent = settings.category_id
+        ? await interaction.guild.channels.fetch(settings.category_id).catch(() => null)
+        : panelChannel?.parent;
       const name = interaction.fields.getTextInputValue('name').trim().replace(/[\\/:*?"<>|]/g, '').slice(0, 100) || 'Temporary VC';
       const channel = await interaction.guild.channels.create({name,type:ChannelType.GuildVoice,parent:parent?.type===ChannelType.GuildCategory ? parent.id : undefined,reason:'Temporary VC created by '+interaction.user.tag});
+      if (!settings.category_id && panelChannel) await channel.setPosition((panelChannel.rawPosition ?? panelChannel.position ?? 0) + 1).catch(console.error);
       await createTempVoiceChannel(interaction.guildId,channel.id,interaction.user.id);
       if (interaction.member.voice.channelId) {
         try { await interaction.member.voice.setChannel(channel, 'Moving member into their temporary VC'); }
