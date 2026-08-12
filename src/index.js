@@ -42,6 +42,13 @@ const robloxPanelTimers = new Map();
 const spamMessageWindows = new Map();
 const spamBurstWarnings = new Map();
 
+async function scheduleRobloxPanelRefresh(guildId, channelId) {
+  const panel = await getRobloxPanel(guildId).catch(() => null);
+  if (panel?.channel_id !== channelId) return;
+  clearTimeout(robloxPanelTimers.get(guildId));
+  robloxPanelTimers.set(guildId, setTimeout(() => refreshRobloxPanel(guildId).catch(console.error), 3_000));
+}
+
 async function checkRapidSpam(message) {
   const settings = await getSpamSettings(message.guild.id).catch(() => ({enabled:false}));
   if (!settings.enabled) return false;
@@ -353,6 +360,7 @@ client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.
 client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.create',targetId:channel.id,data:{summary:`Channel **${channel.name}** was created.`}}).catch(console.error); });
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
 client.on('interactionCreate', async interaction => {
+  if (interaction.guildId && interaction.isChatInputCommand()) await scheduleRobloxPanelRefresh(interaction.guildId, interaction.channelId);
   if (interaction.isButton() && interaction.customId === 'roblox_show_profile') return sendRobloxProfile(interaction, interaction.user, true);
   if (interaction.isButton() && interaction.customId === 'temp_vc_create') {
     return interaction.reply({content:'Join the configured **Create your own VC** voice channel to receive your room.',ephemeral:true});
@@ -713,11 +721,7 @@ client.on('messageCreate', async message => {
     return;
   }
   if (message.author.bot) return;
-  const robloxPanel=await getRobloxPanel(message.guild.id).catch(()=>null);
-  if (robloxPanel?.channel_id===message.channelId) {
-    clearTimeout(robloxPanelTimers.get(message.guild.id));
-    robloxPanelTimers.set(message.guild.id,setTimeout(()=>refreshRobloxPanel(message.guild.id).catch(console.error),5_000));
-  }
+  await scheduleRobloxPanelRefresh(message.guild.id, message.channelId);
   if (await checkRapidSpam(message)) return;
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   await addChatXp(message.guild.id,message.author.id).catch(console.error);
