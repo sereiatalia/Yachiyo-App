@@ -225,6 +225,14 @@ CREATE TABLE IF NOT EXISTS temp_voice_channels (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS temp_voice_channels_guild_idx ON temp_voice_channels(guild_id);
+CREATE TABLE IF NOT EXISTS spam_settings (
+  guild_id TEXT PRIMARY KEY, enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS spam_warnings (
+  guild_id TEXT NOT NULL, user_id TEXT NOT NULL, warning_count INTEGER NOT NULL DEFAULT 0,
+  last_warned_at TIMESTAMPTZ, PRIMARY KEY (guild_id,user_id)
+);
 CREATE INDEX IF NOT EXISTS guild_member_activity_xp_idx ON guild_member_activity(guild_id,chat_xp DESC);
 CREATE INDEX IF NOT EXISTS guild_member_activity_voice_idx ON guild_member_activity(guild_id,voice_seconds DESC);
 CREATE TABLE IF NOT EXISTS brain_faqs (

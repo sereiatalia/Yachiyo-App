@@ -22,6 +22,7 @@ import { addChatXp, startVoiceActivity, stopVoiceActivity } from './services/act
 import { getTruthOrDareSettings, saveTruthOrDarePanel, randomTruthOrDare, SAFE_TRUTHS, SAFE_DARES } from './services/truthOrDareService.js';
 import { getAutoReacts } from './services/autoReactService.js';
 import { getTempVoiceSettings, saveTempVoicePanel, createTempVoiceChannel, getTempVoiceChannel, getTempVoiceForOwner, deleteTempVoiceChannel } from './services/tempVoiceService.js';
+import { getSpamSettings, recordSpamWarning, resetSpamWarnings } from './services/spamService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -36,6 +37,31 @@ const bumpReminderTimers = new Map();
 const profileRecounts = new Set();
 const pendingTimeQuestions = new Map();
 const tempVoiceDeleteTimers = new Map();
+const spamMessageWindows = new Map();
+const spamBurstWarnings = new Map();
+
+async function checkRapidSpam(message) {
+  const settings = await getSpamSettings(message.guild.id).catch(() => ({enabled:false}));
+  if (!settings.enabled) return false;
+  const key = `${message.guild.id}:${message.author.id}`, now = Date.now();
+  const messages = (spamMessageWindows.get(key) ?? []).filter(timestamp => now - timestamp < 1_000);
+  messages.push(now); spamMessageWindows.set(key, messages);
+  if (messages.length < 10 || now - (spamBurstWarnings.get(key) ?? 0) < 1_000) return false;
+  spamBurstWarnings.set(key, now); spamMessageWindows.set(key, []);
+  const warnings = await recordSpamWarning(message.guild.id, message.author.id);
+  let timedOut = false;
+  if (warnings >= 3 && message.member?.moderatable) {
+    timedOut = await message.member.timeout(10 * 60_000, 'Automatic spam protection: 3 rapid-message warnings').then(() => true).catch(() => false);
+    if (timedOut) await resetSpamWarnings(message.guild.id, message.author.id);
+  }
+  const warningMessage = await message.channel.send({
+    content:'<@'+message.author.id+'>', allowedMentions:{users:[message.author.id]},
+    embeds:[new EmbedBuilder().setColor(0xff6b9d).setTitle('⚠️ Rapid-message warning').setDescription('You sent **10 messages within 1 second**.\n\n**Warning '+Math.min(warnings,3)+'/3**'+(timedOut?'\n\nYou reached 3 warnings and have been timed out for **10 minutes**.':warnings>=3?'\n\nYachiyo could not apply the timeout. Check the bot role and **Moderate Members** permission.':'\n\nThree warnings result in a **10-minute timeout**.')).setFooter({text:'Yachiyo • server-wide spam protection'})]
+  }).catch(() => null);
+  if (warningMessage) setTimeout(() => warningMessage.delete().catch(() => null), 10_000);
+  await sendAuditLog(client,message.guild,{eventType:'moderation.spam_warning',actorId:message.author.id,targetId:message.channelId,data:{channelName:message.channel?.name ?? 'unknown-channel',warningCount:warnings,timedOut,summary:message.author.tag+' sent 10 messages within one second.'}}).catch(console.error);
+  return true;
+}
 
 function tempVoiceControls() {
   return new ActionRowBuilder().addComponents(
@@ -671,6 +697,7 @@ client.on('messageCreate', async message => {
     return;
   }
   if (message.author.bot) return;
+  if (await checkRapidSpam(message)) return;
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   await addChatXp(message.guild.id,message.author.id).catch(console.error);
   const timeKey=message.guild.id+':'+message.author.id;
