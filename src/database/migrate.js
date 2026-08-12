@@ -212,6 +212,10 @@ CREATE TABLE IF NOT EXISTS truth_or_dare_settings (
   guild_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, panel_message_id TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS auto_react_settings (
+  guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, emojis JSONB NOT NULL DEFAULT '[]',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id, channel_id)
+);
 CREATE INDEX IF NOT EXISTS guild_member_activity_xp_idx ON guild_member_activity(guild_id,chat_xp DESC);
 CREATE INDEX IF NOT EXISTS guild_member_activity_voice_idx ON guild_member_activity(guild_id,voice_seconds DESC);
 CREATE TABLE IF NOT EXISTS brain_faqs (

@@ -20,6 +20,7 @@ import { getServerInfo, saveServerInfoPanel, updateServerInfo, getServerInfoStaf
 import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './services/offlineBrainService.js';
 import { addChatXp, startVoiceActivity, stopVoiceActivity } from './services/activityLeaderboardService.js';
 import { getTruthOrDareSettings, saveTruthOrDarePanel, randomTruthOrDare, SAFE_TRUTHS, SAFE_DARES } from './services/truthOrDareService.js';
+import { getAutoReacts } from './services/autoReactService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -564,6 +565,8 @@ client.on('messageCreate', async message => {
     return;
   }
   if (message.author.bot) return;
+  const autoReacts = await getAutoReacts(message.guild.id, message.channelId).catch(() => []);
+  for (const emoji of autoReacts) await message.react(emoji).catch(() => null);
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   await addChatXp(message.guild.id,message.author.id).catch(console.error);
   const timeKey=message.guild.id+':'+message.author.id;
