@@ -57,6 +57,13 @@ async function createTempVoiceForMember(guild, member, settings) {
   const channel = await guild.channels.create({name,type:ChannelType.GuildVoice,parent:parent?.type===ChannelType.GuildCategory ? parent.id : undefined,reason:'Temporary VC created by '+member.user.tag});
   if (!settings.category_id) await channel.setPosition((trigger.rawPosition ?? trigger.position ?? 0) + 1).catch(console.error);
   await createTempVoiceChannel(guild.id,channel.id,member.id);
+  if (typeof channel.send === 'function') {
+    await channel.send({
+      content:'<@'+member.id+'>',
+      allowedMentions:{users:[member.id]},
+      embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('୨୧ Your temporary VC is ready').setDescription('♡ Welcome to your room! Use `/my-vc` whenever you want to edit the **name** or **status**.\n\nThis VC will delete itself **10 seconds after it becomes empty**.').setFooter({text:'Yachiyo • temporary voice room'})]
+    }).catch(error => console.error('[TEMP_VC_WELCOME]', error));
+  }
   await member.voice.setChannel(channel, 'Moving member into their temporary VC');
   return channel;
 }
