@@ -25,6 +25,8 @@ import { getTempVoiceSettings, saveTempVoicePanel, createTempVoiceChannel, getTe
 import { getSpamSettings, recordSpamWarning, resetSpamWarnings } from './services/spamService.js';
 import { getRobloxPanel, setRobloxPanelMessage, getRobloxProfile, resolveRobloxUser } from './services/robloxService.js';
 import { getMlbbPanel, setMlbbPanelMessage, getMlbbProfile } from './services/mlbbService.js';
+import { getHsrPanel, setHsrPanelMessage, getHsrProfile, fetchHsrProfile } from './services/hsrService.js';
+import { buildHsrProfileEmbed } from './ui/hsrProfile.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -41,6 +43,7 @@ const pendingTimeQuestions = new Map();
 const tempVoiceDeleteTimers = new Map();
 const robloxPanelTimers = new Map();
 const mlbbPanelTimers = new Map();
+const hsrPanelTimers = new Map();
 const spamMessageWindows = new Map();
 const spamBurstWarnings = new Map();
 
@@ -55,6 +58,12 @@ async function scheduleMlbbPanelRefresh(guildId, channelId) {
   if (panel?.channel_id !== channelId) return;
   clearTimeout(mlbbPanelTimers.get(guildId));
   mlbbPanelTimers.set(guildId, setTimeout(() => refreshMlbbPanel(guildId).catch(console.error), 5_000));
+}
+async function scheduleHsrPanelRefresh(guildId, channelId) {
+  const panel = await getHsrPanel(guildId).catch(() => null);
+  if (panel?.channel_id !== channelId) return;
+  clearTimeout(hsrPanelTimers.get(guildId));
+  hsrPanelTimers.set(guildId, setTimeout(() => refreshHsrPanel(guildId).catch(console.error), 5_000));
 }
 
 async function checkRapidSpam(message) {
@@ -247,6 +256,20 @@ async function refreshMlbbPanel(guildId) {
   await setMlbbPanelMessage(guildId,panel.id);
 }
 client.on('mlbbPanelRefresh', guildId => refreshMlbbPanel(guildId).catch(console.error));
+async function sendHsrProfile(interaction, user, ephemeral = true) {
+  const saved=await getHsrProfile(interaction.guildId,user.id); if(!saved) return interaction.reply({content:'You have not saved an HSR UID yet. Use `/hsr uid` first.',ephemeral:true});
+  await interaction.deferReply({ephemeral});
+  try { return interaction.editReply({embeds:[buildHsrProfileEmbed(user,await fetchHsrProfile(saved.player_uid))]}); }
+  catch(error) { return interaction.editReply({content:'⚠️ '+error.message}); }
+}
+async function refreshHsrPanel(guildId) {
+  const settings=await getHsrPanel(guildId).catch(()=>null); if(!settings) return;
+  const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
+  if(settings.panel_message_id) { const old=await channel.messages.fetch(settings.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
+  const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0x9b78e6).setTitle('HONKAI: STAR RAIL').setDescription('Save UID: `/hsr uid`\nView a profile: `/hsr-checkuser user`').setFooter({text:'Yachiyo • public HSR showcase'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hsr_show_profile').setLabel('SHOW PROFILE').setStyle(ButtonStyle.Primary))]});
+  await setHsrPanelMessage(guildId,panel.id);
+}
+client.on('hsrPanelRefresh', guildId => refreshHsrPanel(guildId).catch(console.error));
 client.on('tempVoicePanelRefresh', async guildId => {
   const settings = await getTempVoiceSettings(guildId).catch(() => null); if (!settings) return;
   const channel = await client.channels.fetch(settings.panel_channel_id).catch(() => null); if (!channel?.isTextBased()) return;
@@ -382,8 +405,10 @@ client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,ch
 client.on('interactionCreate', async interaction => {
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleRobloxPanelRefresh(interaction.guildId, interaction.channelId);
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleMlbbPanelRefresh(interaction.guildId, interaction.channelId);
+  if (interaction.guildId && interaction.isChatInputCommand()) await scheduleHsrPanelRefresh(interaction.guildId, interaction.channelId);
   if (interaction.isButton() && interaction.customId === 'roblox_show_profile') return sendRobloxProfile(interaction, interaction.user, true);
   if (interaction.isButton() && interaction.customId === 'mlbb_show_profile') return sendMlbbProfile(interaction, interaction.user, true);
+  if (interaction.isButton() && interaction.customId === 'hsr_show_profile') return sendHsrProfile(interaction, interaction.user, true);
   if (interaction.isButton() && interaction.customId === 'temp_vc_create') {
     return interaction.reply({content:'Join the configured **Create your own VC** voice channel to receive your room.',ephemeral:true});
   }
@@ -745,6 +770,7 @@ client.on('messageCreate', async message => {
   if (message.author.bot) return;
   await scheduleRobloxPanelRefresh(message.guild.id, message.channelId);
   await scheduleMlbbPanelRefresh(message.guild.id, message.channelId);
+  await scheduleHsrPanelRefresh(message.guild.id, message.channelId);
   if (await checkRapidSpam(message)) return;
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   await addChatXp(message.guild.id,message.author.id).catch(console.error);
