@@ -49,13 +49,6 @@ async function findOwnedTempVoice(interaction) {
   if (!channel?.isVoiceBased()) { if (record) await deleteTempVoiceChannel(record.channel_id); return null; }
   return channel;
 }
-function isTempVoiceStaff(member) {
-  return member.permissions.has(PermissionFlagsBits.Administrator)
-    || member.permissions.has(PermissionFlagsBits.ManageMessages)
-    || member.permissions.has(PermissionFlagsBits.ModerateMembers)
-    || member.permissions.has(PermissionFlagsBits.KickMembers)
-    || member.permissions.has(PermissionFlagsBits.BanMembers);
-}
 async function createTempVoiceForMember(guild, member, settings) {
   const trigger = await guild.channels.fetch(settings.panel_channel_id).catch(() => null);
   if (!trigger?.isVoiceBased()) throw new Error('Join to Create voice channel is unavailable.');
@@ -140,10 +133,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   if (!newState.member?.user.bot && newState.channelId) {
     const settings = await getTempVoiceSettings(newState.guild.id).catch(() => null);
     if (settings?.panel_channel_id === newState.channelId) {
-      if (isTempVoiceStaff(newState.member)) {
-        await newState.disconnect('Staff may not use the Join to Create voice channel').catch(console.error);
-        return;
-      }
       try {
         const existing = await getTempVoiceForOwner(newState.guild.id, newState.id);
         const existingChannel = existing ? await newState.guild.channels.fetch(existing.channel_id).catch(() => null) : null;
