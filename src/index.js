@@ -29,7 +29,7 @@ import { getHsrPanel, setHsrPanelMessage, getHsrProfile, fetchHsrProfile } from 
 import { buildHsrProfileEmbed } from './ui/hsrProfile.js';
 import { getGenshinPanel, setGenshinPanelMessage, getGenshinProfile, fetchGenshinProfile } from './services/genshinService.js';
 import { buildGenshinProfileEmbed } from './ui/genshinProfile.js';
-import { getReactionRolePanels, getReactionRolePanel, createReactionRolePanel, addReactionRoleOption, removeReactionRoleOption, setReactionRolePanelMessage, deleteReactionRolePanel } from './services/reactionRoleService.js';
+import { getReactionRolePanels, getReactionRolePanel, createReactionRolePanel, addReactionRoleOption, removeReactionRoleOption, setReactionRolePanelMessage, getReactionRoleByMessage, deleteReactionRolePanel } from './services/reactionRoleService.js';
 import { buildRobloxProfileEmbed } from './ui/robloxProfile.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
@@ -89,25 +89,36 @@ async function runReactionRoleWizard(interaction) {
   try {
     await interaction.reply({content:'୨୧ **Reaction-role setup started.** I’ll guide you through the panel step by step in this channel.',ephemeral:true});
     const name = await wizardAnswer(interaction, 'What should we call this panel?');
+    const livePreview = await interaction.channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('Reaction-role preview').setDescription('*Title and description will appear here as you build the panel.*')]});
     await interaction.channel.send('⏳ Loading the panel name…'); await wait(700);
     const title = await wizardAnswer(interaction, 'Type the title design you want displayed in the panel.');
+    await livePreview.edit({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle(title).setDescription('*Waiting for the panel description…*')]});
     await interaction.channel.send('⏳ Loading the title…'); await wait(700);
-    const description = await wizardAnswer(interaction, 'Type the panel description or instructions.');
+    const description = await wizardAnswer(interaction, 'Type the panel description or instructions. Mention every role that should appear, for example `<@&123456789012345678>`.');
+    await livePreview.edit({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle(title).setDescription(description)]});
     await interaction.channel.send('⏳ Loading the title and description…'); await wait(700);
     const channelText = await wizardAnswer(interaction, 'Which channel should receive the finished panel? Send a channel mention or channel ID.');
     const channelId = channelText.match(/\d{15,25}/)?.[0];
     const channel = channelId ? await interaction.guild.channels.fetch(channelId).catch(() => null) : null;
     if (!channel?.isTextBased()) throw new Error('I could not find that text channel.');
-    const reactionText = await wizardAnswer(interaction, 'Send the emojis for the roles, separated by spaces. Server emojis work too, for example `<:bunny:123456789012345678>` or `<a:sparkle:123456789012345678>`.');
-    const emojis = reactionText.split(/\s+/).filter(Boolean);
-    if (!emojis.length) throw new Error('No emojis were provided.');
-    if (emojis.length > 25) throw new Error('Discord allows 25 buttons per panel. Create another panel for more roles.');
+    const roleIds = [...description.matchAll(/<@&(\d{15,25})>/g)].map(match => match[1]);
+    const uniqueRoleIds = [...new Set(roleIds)];
+    if (!uniqueRoleIds.length) throw new Error('Mention at least one role in the description before continuing.');
+    if (uniqueRoleIds.length > 25) throw new Error('Discord allows 25 reactions per panel. Create another panel for more roles.');
+    const preview = livePreview;
+    await interaction.channel.send('୨୧ React to the preview panel with the emoji for each role. I will ask one by one, and confirm every match.');
     const roles=[];
-    for (const emoji of emojis) {
-      const roleText = await wizardAnswer(interaction, 'Which role should receive '+emoji+'? Send a role mention or role ID.');
-      const roleId = parseRoleId(roleText), role = roleId ? await interaction.guild.roles.fetch(roleId).catch(() => null) : null;
-      if (!role) throw new Error('I could not find the role for '+emoji+'.');
+    for (const roleId of uniqueRoleIds) {
+      const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
+      if (!role) throw new Error('I could not find one of the mentioned roles.');
+      await interaction.channel.send('What reaction emoji should be used for **'+role.name+'**? React to the preview panel above now. Server emojis are supported.');
+      const collected = await preview.awaitReactions({filter: (reaction,user) => user.id === interaction.user.id, max: 1, time: 300_000, errors: ['time']}).catch(() => null);
+      if (!collected?.size) throw new Error('No reaction was received for '+role.name+'.');
+      const reaction = collected.first();
+      const emoji = reaction.emoji.toString();
       roles.push({role,emoji});
+      await interaction.channel.send('✅ '+emoji+' is assigned to **'+role.name+'**.');
+      await preview.reactions.removeAll().catch(() => null);
     }
     await interaction.channel.send('⏳ Finishing **'+name+'** and publishing the panel…'); await wait(700);
     const panel = await createReactionRolePanel(interaction.guildId, channel.id, title, description);
@@ -115,7 +126,8 @@ async function runReactionRoleWizard(interaction) {
     const complete = await getReactionRolePanel(panel.id, interaction.guildId);
     const rows=[];
     for (let index=0; index<complete.options.length; index+=5) rows.push(new ActionRowBuilder().addComponents(complete.options.slice(index,index+5).map(option=>new ButtonBuilder().setCustomId('rr_role:'+complete.id+':'+option.role_id).setLabel((interaction.guild.roles.cache.get(option.role_id)?.name ?? 'Role').slice(0,80)).setEmoji(option.emoji).setStyle(ButtonStyle.Secondary))));
-    const message = await channel.send({embeds:[new EmbedBuilder().setColor(complete.color).setTitle(complete.title).setDescription(complete.description).setFooter({text:'Click a role button to receive or remove the role.'})],components:rows});
+    const message = await channel.send({embeds:[new EmbedBuilder().setColor(complete.color).setTitle(complete.title).setDescription(complete.description).setFooter({text:'React to receive or remove a role.'})]});
+    for (const option of complete.options) await message.react(option.emoji).catch(error => console.error('[REACTION_ROLE_EMOJI]', error));
     await setReactionRolePanelMessage(complete.id,message.id);
     await interaction.channel.send('✅ **'+name+' is complete and ready!** The panel has been published in '+channel+'.');
   } catch (error) {
@@ -446,11 +458,26 @@ client.on('messageReactionAdd', async (reaction, user) => {
       return;
     }
   }
+  const reactionRole = await getReactionRoleByMessage(reaction.message.id, reaction.emoji.toString()).catch(() => null);
+  if (reactionRole) {
+    const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
+    const role = await reaction.message.guild.roles.fetch(reactionRole.role_id).catch(() => null);
+    if (member && role?.editable) await member.roles.add(role, 'Reaction role selection').catch(console.error);
+    return;
+  }
   const giveaway = await getGiveawayByMessage(reaction.message.id);
   if (!giveaway || giveaway.status !== 'active' || giveaway.emoji !== reaction.emoji.toString()) return;
   const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
   if (giveaway.required_role_id && !member?.roles.cache.has(giveaway.required_role_id)) return reaction.users.remove(user.id).catch(() => null);
   await addGiveawayEntry(giveaway.id, user.id);
+});
+client.on('messageReactionRemove', async (reaction, user) => {
+  if (user.bot || !reaction.message.guild) return;
+  const reactionRole = await getReactionRoleByMessage(reaction.message.id, reaction.emoji.toString()).catch(() => null);
+  if (!reactionRole) return;
+  const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
+  const role = await reaction.message.guild.roles.fetch(reactionRole.role_id).catch(() => null);
+  if (member && role?.editable) await member.roles.remove(role, 'Reaction role selection removed').catch(console.error);
 });
 client.on('introductionPanelRefresh', (guildId) => {
   clearTimeout(introductionPanelTimers.get(guildId));
