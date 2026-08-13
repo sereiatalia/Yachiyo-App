@@ -266,6 +266,17 @@ CREATE TABLE IF NOT EXISTS genshin_panel_settings (
   guild_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, panel_message_id TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS reaction_role_panels (
+  id BIGSERIAL PRIMARY KEY, guild_id TEXT NOT NULL, channel_id TEXT NOT NULL,
+  message_id TEXT, title TEXT NOT NULL, description TEXT NOT NULL,
+  color INTEGER NOT NULL DEFAULT 15902919, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS reaction_role_options (
+  panel_id BIGINT NOT NULL REFERENCES reaction_role_panels(id) ON DELETE CASCADE,
+  role_id TEXT NOT NULL, emoji TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (panel_id, role_id)
+);
 CREATE INDEX IF NOT EXISTS guild_member_activity_xp_idx ON guild_member_activity(guild_id,chat_xp DESC);
 CREATE INDEX IF NOT EXISTS guild_member_activity_voice_idx ON guild_member_activity(guild_id,voice_seconds DESC);
 CREATE TABLE IF NOT EXISTS brain_faqs (

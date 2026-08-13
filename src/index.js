@@ -29,6 +29,7 @@ import { getHsrPanel, setHsrPanelMessage, getHsrProfile, fetchHsrProfile } from 
 import { buildHsrProfileEmbed } from './ui/hsrProfile.js';
 import { getGenshinPanel, setGenshinPanelMessage, getGenshinProfile, fetchGenshinProfile } from './services/genshinService.js';
 import { buildGenshinProfileEmbed } from './ui/genshinProfile.js';
+import { getReactionRolePanels, getReactionRolePanel, createReactionRolePanel, addReactionRoleOption, removeReactionRoleOption, setReactionRolePanelMessage, deleteReactionRolePanel } from './services/reactionRoleService.js';
 import { buildRobloxProfileEmbed } from './ui/robloxProfile.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
@@ -50,6 +51,26 @@ const hsrPanelTimers = new Map();
 const genshinPanelTimers = new Map();
 const spamMessageWindows = new Map();
 const spamBurstWarnings = new Map();
+
+function reactionRoleManager(panel = null) {
+  const rows = [];
+  if (panel) rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('rr_add:' + panel.id).setLabel('Add role').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('rr_publish:' + panel.id).setLabel('Publish panel').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('rr_delete:' + panel.id).setLabel('Delete panel').setStyle(ButtonStyle.Danger)
+  ));
+  else rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('rr_create').setLabel('Create Panel').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('rr_edit_choose').setLabel('Edit Panel').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('rr_list').setLabel('List Panels').setStyle(ButtonStyle.Secondary)
+  ));
+  const body = panel
+    ? `**Channel:** <#${panel.channel_id}>\n**Title:** ${panel.title}\n**Options:** ${panel.options.length}\n\n${panel.options.length ? panel.options.map(option => `${option.emoji} <@&${option.role_id}>`).join('\n') : '*No roles added yet.*'}\n\nUse **Add role** to choose a role and emoji. Publishing replaces only Yachiyo’s previous panel message.`
+    : 'Create and edit reaction-role panels in one place. Each role gets its own emoji button. You can create as many panels as your server needs.';
+  return { embeds: [new EmbedBuilder().setColor(0xf3a6c7).setTitle('୨୧ Reaction Role Manager').setDescription(body)], components: rows };
+}
+
+function parseRoleId(value) { const match = String(value ?? '').match(/^(?:<@&)?(\d{15,25})>?$/); return match?.[1] ?? null; }
 
 async function scheduleRobloxPanelRefresh(guildId, channelId) {
   const panel = await getRobloxPanel(guildId).catch(() => null);
@@ -466,6 +487,86 @@ client.on('interactionCreate', async interaction => {
     return interaction.reply({content:'<@'+interaction.user.id+'> chose **'+type.toUpperCase()+'**!',allowedMentions:{users:[interaction.user.id]},embeds:[new EmbedBuilder().setColor(type==='truth'?0x8e7dff:0xf3a6c7).setTitle(type==='truth'?'TRUTH':'DARE').setDescription(randomTruthOrDare(type)).setFooter({text:'Yachiyo • choose the next prompt below'})],components:[row]});
   }
   if (interaction.isStringSelectMenu() && interaction.customId === 'yachiyo_help_category') return interaction.update(buildHelpView(interaction.values[0]));
+  if (interaction.isButton() && interaction.customId === 'rr_create') {
+    const modal = new ModalBuilder().setCustomId('rr_create_modal').setTitle('Create reaction-role panel');
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel('Channel ID or #channel mention').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(30)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Panel title').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel('Panel instructions').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(2000))
+    );
+    return interaction.showModal(modal);
+  }
+  if (interaction.isButton() && interaction.customId === 'rr_edit_choose') {
+    const panels = await getReactionRolePanels(interaction.guildId);
+    if (!panels.length) return interaction.reply({content:'No reaction-role panels exist yet. Choose **Create Panel** first.',ephemeral:true});
+    const menu = new StringSelectMenuBuilder().setCustomId('rr_choose_panel').setPlaceholder('Choose a panel to edit').addOptions(panels.slice(0,25).map(panel => ({label:panel.title.slice(0,100),value:String(panel.id),description:'<#'+panel.channel_id+'>'})));
+    return interaction.reply({content:'Choose the panel you want to edit:',components:[new ActionRowBuilder().addComponents(menu)],ephemeral:true});
+  }
+  if (interaction.isButton() && interaction.customId === 'rr_list') {
+    const panels = await getReactionRolePanels(interaction.guildId);
+    return interaction.reply({content:panels.length ? '୨୧ **Reaction-role panels**\n'+panels.map(panel=>'`#'+panel.id+'` **'+panel.title+'** — <#'+panel.channel_id+'>').join('\n') : 'No reaction-role panels exist yet.',ephemeral:true});
+  }
+  if (interaction.isModalSubmit() && interaction.customId === 'rr_create_modal') {
+    try {
+      const channelId = String(interaction.fields.getTextInputValue('channel_id')).match(/\d{15,25}/)?.[0];
+      const channel = channelId ? await interaction.guild.channels.fetch(channelId).catch(() => null) : null;
+      if (!channel?.isTextBased()) return interaction.reply({content:'Choose a valid text channel mention or channel ID.',ephemeral:true});
+      const panel = await createReactionRolePanel(interaction.guildId, channel.id, interaction.fields.getTextInputValue('title').trim(), interaction.fields.getTextInputValue('description').trim());
+      return interaction.reply({...reactionRoleManager(await getReactionRolePanel(panel.id, interaction.guildId)),ephemeral:true});
+    } catch (error) { console.error('[REACTION_ROLE_CREATE]',error); return interaction.reply({content:'Yachiyo could not create that panel.',ephemeral:true}); }
+  }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'rr_choose_panel') {
+    const panel = await getReactionRolePanel(interaction.values[0], interaction.guildId);
+    if (!panel) return interaction.update({content:'That panel no longer exists.',components:[],embeds:[]});
+    return interaction.update({...reactionRoleManager(panel),content:''});
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('rr_add:')) {
+    const panelId = interaction.customId.split(':')[1];
+    if (!await getReactionRolePanel(panelId, interaction.guildId)) return interaction.reply({content:'That panel no longer exists.',ephemeral:true});
+    const modal = new ModalBuilder().setCustomId('rr_add_modal:'+panelId).setTitle('Add role to panel');
+    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role').setLabel('Role mention or role ID').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(30).setPlaceholder('@Gamers or 123456789012345678')),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji or emoticon').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setPlaceholder('🎮 or ♡')));
+    return interaction.showModal(modal);
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('rr_add_modal:')) {
+    try {
+      const panelId = interaction.customId.split(':')[1], roleId = parseRoleId(interaction.fields.getTextInputValue('role'));
+      const role = roleId ? await interaction.guild.roles.fetch(roleId).catch(() => null) : null;
+      const emoji = interaction.fields.getTextInputValue('emoji').trim();
+      if (!role) return interaction.reply({content:'That role could not be found. Use a role mention or ID.',ephemeral:true});
+      if (!emoji) return interaction.reply({content:'Please provide an emoji or emoticon.',ephemeral:true});
+      await addReactionRoleOption(panelId, role.id, emoji);
+      return interaction.reply({...reactionRoleManager(await getReactionRolePanel(panelId, interaction.guildId)),ephemeral:true});
+    } catch (error) { console.error('[REACTION_ROLE_ADD]',error); return interaction.reply({content:'Yachiyo could not add that role.',ephemeral:true}); }
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('rr_publish:')) {
+    const panel = await getReactionRolePanel(interaction.customId.split(':')[1], interaction.guildId);
+    if (!panel) return interaction.reply({content:'That panel no longer exists.',ephemeral:true});
+    if (!panel.options.length) return interaction.reply({content:'Add at least one role before publishing.',ephemeral:true});
+    const channel = await interaction.guild.channels.fetch(panel.channel_id).catch(() => null);
+    if (!channel?.isTextBased()) return interaction.reply({content:'The panel channel is unavailable.',ephemeral:true});
+    if (panel.message_id) { const old = await channel.messages.fetch(panel.message_id).catch(() => null); if (old?.author?.id === client.user?.id) await old.delete().catch(() => null); }
+    const rows=[];
+    for (let index=0; index<panel.options.length && index<25; index+=5) rows.push(new ActionRowBuilder().addComponents(panel.options.slice(index,index+5).map(option=>new ButtonBuilder().setCustomId('rr_role:'+panel.id+':'+option.role_id).setLabel((interaction.guild.roles.cache.get(option.role_id)?.name ?? 'Role').slice(0,80)).setEmoji(option.emoji).setStyle(ButtonStyle.Secondary))));
+    const message = await channel.send({embeds:[new EmbedBuilder().setColor(panel.color).setTitle(panel.title).setDescription(panel.description).setFooter({text:'Click a role button to receive or remove the role.'})],components:rows});
+    await setReactionRolePanelMessage(panel.id,message.id);
+    return interaction.reply({content:'✅ Reaction-role panel published in '+channel+'.',ephemeral:true});
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('rr_delete:')) {
+    const panelId=interaction.customId.split(':')[1], panel=await getReactionRolePanel(panelId,interaction.guildId);
+    if (!panel) return interaction.reply({content:'That panel no longer exists.',ephemeral:true});
+    const channel=await interaction.guild.channels.fetch(panel.channel_id).catch(()=>null); const message=channel?.messages?.fetch?await channel.messages.fetch(panel.message_id).catch(()=>null):null;
+    if (message?.author?.id===client.user?.id) await message.delete().catch(()=>null);
+    await deleteReactionRolePanel(panelId,interaction.guildId); return interaction.update({content:'✅ Reaction-role panel deleted.',embeds:[],components:[]});
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('rr_role:')) {
+    const [,panelId,roleId]=interaction.customId.split(':'), panel=await getReactionRolePanel(panelId,interaction.guildId), option=panel?.options.find(item=>item.role_id===roleId);
+    if (!option) return interaction.reply({content:'That role option is no longer available.',ephemeral:true});
+    const role=await interaction.guild.roles.fetch(roleId).catch(()=>null); if(!role) return interaction.reply({content:'That role no longer exists.',ephemeral:true});
+    if (!role.editable) return interaction.reply({content:'Yachiyo cannot manage that role. Move Yachiyo’s bot role above it.',ephemeral:true});
+    const member=await interaction.guild.members.fetch(interaction.user.id); const has=member.roles.cache.has(role.id);
+    await member.roles[has?'remove':'add'](role,'Reaction role panel selection'); return interaction.reply({content:(has?'➖ Removed ':'✅ Added ')+role+' '+option.emoji,ephemeral:true});
+  }
   if (interaction.isButton() && interaction.customId === 'server_info_staffs') {
     const configured=await getServerInfoStaffRoles(interaction.guildId);
     if(!configured.length) return interaction.reply({content:'No staff roles have been added yet.',ephemeral:true});
