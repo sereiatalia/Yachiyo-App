@@ -71,6 +71,57 @@ function reactionRoleManager(panel = null) {
 }
 
 function parseRoleId(value) { const match = String(value ?? '').match(/^(?:<@&)?(\d{15,25})>?$/); return match?.[1] ?? null; }
+const reactionRoleWizards = new Set();
+const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+async function wizardAnswer(interaction, prompt) {
+  const promptMessage = await interaction.channel.send('୨୧ '+prompt+'\n*Reply in this channel within 5 minutes, or type `cancel`.*');
+  const collected = await interaction.channel.awaitMessages({filter: message => message.author.id === interaction.user.id, max: 1, time: 300_000, errors: ['time']}).catch(() => null);
+  if (!collected?.size) throw new Error('The setup timed out. Run `/reaction-role setup` again.');
+  const message = collected.first();
+  if (message.content.trim().toLowerCase() === 'cancel') throw new Error('Reaction-role setup cancelled.');
+  await promptMessage.delete().catch(() => null);
+  return message.content.trim();
+}
+async function runReactionRoleWizard(interaction) {
+  const key = interaction.guildId+':'+interaction.user.id;
+  if (reactionRoleWizards.has(key)) return interaction.reply({content:'You already have a reaction-role setup in progress.',ephemeral:true});
+  reactionRoleWizards.add(key);
+  try {
+    await interaction.reply({content:'୨୧ **Reaction-role setup started.** I’ll guide you through the panel step by step in this channel.',ephemeral:true});
+    const name = await wizardAnswer(interaction, 'What should we call this panel?');
+    await interaction.channel.send('⏳ Loading the panel name…'); await wait(700);
+    const title = await wizardAnswer(interaction, 'Type the title design you want displayed in the panel.');
+    await interaction.channel.send('⏳ Loading the title…'); await wait(700);
+    const description = await wizardAnswer(interaction, 'Type the panel description or instructions.');
+    await interaction.channel.send('⏳ Loading the title and description…'); await wait(700);
+    const channelText = await wizardAnswer(interaction, 'Which channel should receive the finished panel? Send a channel mention or channel ID.');
+    const channelId = channelText.match(/\d{15,25}/)?.[0];
+    const channel = channelId ? await interaction.guild.channels.fetch(channelId).catch(() => null) : null;
+    if (!channel?.isTextBased()) throw new Error('I could not find that text channel.');
+    const reactionText = await wizardAnswer(interaction, 'Send the emojis for the roles, separated by spaces. Server emojis work too, for example `<:bunny:123456789012345678>` or `<a:sparkle:123456789012345678>`.');
+    const emojis = reactionText.split(/\s+/).filter(Boolean);
+    if (!emojis.length) throw new Error('No emojis were provided.');
+    if (emojis.length > 25) throw new Error('Discord allows 25 buttons per panel. Create another panel for more roles.');
+    const roles=[];
+    for (const emoji of emojis) {
+      const roleText = await wizardAnswer(interaction, 'Which role should receive '+emoji+'? Send a role mention or role ID.');
+      const roleId = parseRoleId(roleText), role = roleId ? await interaction.guild.roles.fetch(roleId).catch(() => null) : null;
+      if (!role) throw new Error('I could not find the role for '+emoji+'.');
+      roles.push({role,emoji});
+    }
+    await interaction.channel.send('⏳ Finishing **'+name+'** and publishing the panel…'); await wait(700);
+    const panel = await createReactionRolePanel(interaction.guildId, channel.id, title, description);
+    for (const item of roles) await addReactionRoleOption(panel.id, item.role.id, item.emoji);
+    const complete = await getReactionRolePanel(panel.id, interaction.guildId);
+    const rows=[];
+    for (let index=0; index<complete.options.length; index+=5) rows.push(new ActionRowBuilder().addComponents(complete.options.slice(index,index+5).map(option=>new ButtonBuilder().setCustomId('rr_role:'+complete.id+':'+option.role_id).setLabel((interaction.guild.roles.cache.get(option.role_id)?.name ?? 'Role').slice(0,80)).setEmoji(option.emoji).setStyle(ButtonStyle.Secondary))));
+    const message = await channel.send({embeds:[new EmbedBuilder().setColor(complete.color).setTitle(complete.title).setDescription(complete.description).setFooter({text:'Click a role button to receive or remove the role.'})],components:rows});
+    await setReactionRolePanelMessage(complete.id,message.id);
+    await interaction.channel.send('✅ **'+name+' is complete and ready!** The panel has been published in '+channel+'.');
+  } catch (error) {
+    await interaction.channel.send('⚠️ '+error.message).catch(() => null);
+  } finally { reactionRoleWizards.delete(key); }
+}
 
 async function scheduleRobloxPanelRefresh(guildId, channelId) {
   const panel = await getRobloxPanel(guildId).catch(() => null);
@@ -447,6 +498,7 @@ client.on('roleCreate', role => sendAuditLog(client,role.guild,{eventType:'role.
 client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.delete',targetId:role.id,data:{summary:`Role **${role.name}** was deleted.`}}).catch(console.error));
 client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.create',targetId:channel.id,data:{summary:`Channel **${channel.name}** was created.`}}).catch(console.error); });
 client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
+client.on('reactionRoleWizardStart', interaction => runReactionRoleWizard(interaction).catch(error => console.error('[REACTION_ROLE_WIZARD]', error)));
 client.on('interactionCreate', async interaction => {
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleRobloxPanelRefresh(interaction.guildId, interaction.channelId);
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleMlbbPanelRefresh(interaction.guildId, interaction.channelId);
