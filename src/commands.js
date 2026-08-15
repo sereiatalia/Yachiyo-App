@@ -1,7 +1,7 @@
 import { buildAlmanacView } from './ui/almanac.js';
 import { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } from 'discord.js';
 import { balance, claim, castFish, addMoney, transfer, bankMove, leaderboard, fishPointsLeaderboard, rollFish, saveFish, fishInventory, fishAlmanac, fishCollection, cooldownRemaining } from './services/economyService.js';
-import { FISH_RARITIES } from './config/fishRarities.js';
+import { FISH_RARITIES, FISH_TABLE } from './config/fishRarities.js';
 import { createFishCard } from './ui/fishCard.js';
 import { handleFishCommand } from './commands/fishing/fish.js';
 import { runPullSequence } from './services/fishingPresentation.js';
@@ -19,7 +19,7 @@ import { saveTicketSettings, addTicketAccessRole, removeTicketAccessRole, getTic
 import { getBumpTimer, saveBumpPanel } from './services/bumpService.js';
 import { setupServerInfo, getServerInfo, updateServerInfo, updateServerInfoBanner, addServerInfoStaffRole, removeServerInfoStaffRole, getServerInfoStaffRoles } from './services/serverInfoService.js';
 import { addBrainFaq, removeBrainFaq, getBrainFaqs, addRoleGuide, removeRoleGuide, getRoleGuides } from './services/brainMemoryService.js';
-import { chatXpLeaderboard, voiceLeaderboard, chatLevelFromXp, chatXpForNextLevel, getChatXp } from './services/activityLeaderboardService.js';
+import { chatXpLeaderboard, voiceLeaderboard, chatLevelFromXp, chatXpForNextLevel, getChatXp, addChatXpAmount } from './services/activityLeaderboardService.js';
 import { addShopItem, removeShopItem, listShopItems, getShopItem } from './services/serverShopService.js';
 import { saveTruthOrDareSettings, getTruthOrDareSettings } from './services/truthOrDareService.js';
 import { parseAutoReactEmojis, saveAutoReacts, listAutoReacts, clearAutoReacts } from './services/autoReactService.js';
@@ -59,6 +59,10 @@ export const commands = [
   new SlashCommandBuilder().setName('work').setDescription('Work for coins.'),
   new SlashCommandBuilder().setName('fish').setDescription('Go fishing for coins.'),
   new SlashCommandBuilder().setName('economy-add').setDescription('Add global coins to a user.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addUserOption(o=>o.setName('user').setDescription('Target').setRequired(true)).addIntegerOption(o=>o.setName('amount').setDescription('Amount').setRequired(true)),
+  new SlashCommandBuilder().setName('admin-abuse').setDescription('Owner-only economy testing tools.').setDMPermission(false)
+    .addSubcommand(s=>s.setName('money').setDescription('Give coins to a member.').addUserOption(o=>o.setName('user').setDescription('Target member').setRequired(true)).addIntegerOption(o=>o.setName('amount').setDescription('Coins to add').setRequired(true).setMinValue(1)))
+    .addSubcommand(s=>s.setName('xp').setDescription('Give chat XP to a member.').addUserOption(o=>o.setName('user').setDescription('Target member').setRequired(true)).addIntegerOption(o=>o.setName('amount').setDescription('XP to add').setRequired(true).setMinValue(1)))
+    .addSubcommand(s=>s.setName('fish').setDescription('Give a specific fish to a member.').addUserOption(o=>o.setName('user').setDescription('Target member').setRequired(true)).addStringOption(o=>o.setName('fish').setDescription('Exact fish name').setRequired(true).setAutocomplete(true))),
   new SlashCommandBuilder().setName('logs').setDescription('Set the audit-log channel.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addChannelOption(o=>o.setName('channel').setDescription('Text channel').setRequired(true))
   ,new SlashCommandBuilder().setName('logs-category').setDescription('Route an audit-log category to a channel.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addStringOption(o=>o.setName('category').setDescription('Event category').setRequired(true).addChoices({name:'Messages',value:'messages'},{name:'Members',value:'members'},{name:'Moderation',value:'moderation'},{name:'Curse warnings',value:'curse'},{name:'Channels and roles',value:'server'},{name:'Confessions',value:'confessions'})).addChannelOption(o=>o.setName('channel').setDescription('Destination channel').setRequired(true))
   ,new SlashCommandBuilder().setName('confession').setDescription('Submit an anonymous confession.').setDMPermission(false)
@@ -159,6 +163,14 @@ export const commands = [
 export async function handleCommand(interaction) {
   await ensureGuild(interaction.guildId);
   const name=interaction.commandName;
+  if(name==='admin-abuse') {
+    const allowedId=process.env.ADMIN_ABUSE_USER_ID?.trim();
+    if(!allowedId || interaction.user.id!==allowedId) return interaction.reply({content:'This private admin tool is not enabled for your account.',ephemeral:true});
+    const action=interaction.options.getSubcommand(), target=interaction.options.getUser('user');
+    if(action==='money') { const amount=interaction.options.getInteger('amount'); const b=await addMoney(target.id,amount,'admin_abuse'); return interaction.reply({content:'Added **'+amount.toLocaleString()+'** coins to '+target+'. Wallet: **'+Number(b.wallet).toLocaleString()+'**.',ephemeral:true}); }
+    if(action==='xp') { const xp=await addChatXpAmount(interaction.guildId,target.id,interaction.options.getInteger('amount')); return interaction.reply({content:'Added XP to '+target+'. Chat XP: **'+xp.toLocaleString()+'**.',ephemeral:true}); }
+    const fishName=interaction.options.getString('fish'); const fish=FISH_TABLE.find(item=>item.name.toLowerCase()===fishName.toLowerCase()); if(!fish) return interaction.reply({content:'Fish not found. Use the exact name from `/fishalmanac`.',ephemeral:true}); await saveFish(target.id,fish); return interaction.reply({content:'Gave **'+fish.name+'** ('+fish.rarity+') to '+target+'.',ephemeral:true});
+  }
   const adminOnly=['economy-add','logs','confession-setup','introduction-setup','introduction-panel','introduction-reset','introduction-status','fish-setup','curse-setup','curse','curse-exempt-role','spam-setup','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout','vc-join','bump-panel','ticket-role','server-info-setup','server-info-edit','server-info-banner','server-info-staff','server-info-recount','brain-faq','role-guide','tod-setup','tod-panel','auto-react-setup','auto-react-list','auto-react-clear','temp-vc-setup','temp-vc-panel','roblox-panel-setup','roblox-panel','mlbb-panel-setup','mlbb-panel','hsr-panel-setup','hsr-panel','genshin-panel-setup','genshin-panel','reaction-role'];
   if(name==='help') return interaction.reply(buildHelpView());
   if(name==='reaction-role' && interaction.options.getSubcommand()==='panel') return interaction.reply({content:'୨୧ Opening the Reaction Role Manager...',components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('rr_create').setLabel('Create Panel').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('rr_edit_choose').setLabel('Edit Panel').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('rr_list').setLabel('List Panels').setStyle(ButtonStyle.Secondary))],ephemeral:true});

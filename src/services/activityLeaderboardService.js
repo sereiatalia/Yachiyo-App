@@ -16,6 +16,13 @@ export async function addChatXp(guildId, userId) {
   await query(`INSERT INTO guild_member_activity (guild_id,user_id,chat_xp) VALUES ($1,$2,1)
     ON CONFLICT (guild_id,user_id) DO UPDATE SET chat_xp=guild_member_activity.chat_xp+1,updated_at=NOW()`, [guildId,userId]);
 }
+export async function addChatXpAmount(guildId, userId, amount) {
+  await ensureActivityTable();
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('XP amount must be a positive integer.');
+  await query(`INSERT INTO guild_member_activity (guild_id,user_id,chat_xp) VALUES ($1,$2,$3)
+    ON CONFLICT (guild_id,user_id) DO UPDATE SET chat_xp=guild_member_activity.chat_xp+$3,updated_at=NOW()`, [guildId,userId,amount]);
+  return getChatXp(guildId,userId);
+}
 
 export function chatLevelFromXp(xp) {
   const points = Number(xp) || 0;
