@@ -279,6 +279,11 @@ CREATE TABLE IF NOT EXISTS reaction_role_options (
 );
 CREATE INDEX IF NOT EXISTS guild_member_activity_xp_idx ON guild_member_activity(guild_id,chat_xp DESC);
 CREATE INDEX IF NOT EXISTS guild_member_activity_voice_idx ON guild_member_activity(guild_id,voice_seconds DESC);
+CREATE TABLE IF NOT EXISTS server_shop_items (
+  guild_id TEXT NOT NULL, role_id TEXT NOT NULL, name TEXT NOT NULL,
+  price BIGINT NOT NULL CHECK (price > 0), required_level INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id,role_id)
+);
 CREATE TABLE IF NOT EXISTS brain_faqs (
   id BIGSERIAL PRIMARY KEY, guild_id TEXT NOT NULL, question TEXT NOT NULL, answer TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

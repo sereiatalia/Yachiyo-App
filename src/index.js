@@ -19,6 +19,7 @@ import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpRe
 import { getServerInfo, saveServerInfoPanel, updateServerInfo, getServerInfoStaffRoles, getProfileStats, recordProfileMessage, replaceProfileMessageCounts } from './services/serverInfoService.js';
 import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './services/offlineBrainService.js';
 import { addChatXp, startVoiceActivity, stopVoiceActivity } from './services/activityLeaderboardService.js';
+import { addMoney } from './services/economyService.js';
 import { getTruthOrDareSettings, saveTruthOrDarePanel, randomTruthOrDare, SAFE_TRUTHS, SAFE_DARES } from './services/truthOrDareService.js';
 import { getAutoReacts } from './services/autoReactService.js';
 import { getTempVoiceSettings, saveTempVoicePanel, createTempVoiceChannel, getTempVoiceChannel, getTempVoiceForOwner, deleteTempVoiceChannel } from './services/tempVoiceService.js';
@@ -987,6 +988,7 @@ client.on('messageCreate', async message => {
   if (await checkRapidSpam(message)) return;
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   await addChatXp(message.guild.id,message.author.id).catch(console.error);
+  await addMoney(message.author.id,1,'chat_message').catch(console.error);
   const timeKey=message.guild.id+':'+message.author.id;
   const pendingTime=pendingTimeQuestions.get(timeKey);
   if (!message.mentions.everyone && pendingTime && pendingTime.expiresAt>Date.now()) {

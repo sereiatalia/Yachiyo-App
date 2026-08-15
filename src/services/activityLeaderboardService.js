@@ -17,6 +17,15 @@ export async function addChatXp(guildId, userId) {
     ON CONFLICT (guild_id,user_id) DO UPDATE SET chat_xp=guild_member_activity.chat_xp+1,updated_at=NOW()`, [guildId,userId]);
 }
 
+export function chatLevelFromXp(xp) {
+  const points = Number(xp) || 0;
+  if (points < 100) return 1;
+  if (points < 500) return 2;
+  return 3 + Math.floor((points - 500) / 500);
+}
+export function chatXpForNextLevel(level) { return level <= 1 ? 100 : level === 2 ? 500 : 500 + ((level - 2) * 500); }
+export async function getChatXp(guildId, userId) { await ensureActivityTable(); return Number((await query('SELECT chat_xp FROM guild_member_activity WHERE guild_id=$1 AND user_id=$2',[guildId,userId])).rows[0]?.chat_xp ?? 0); }
+
 export async function startVoiceActivity(guildId, userId) {
   await ensureActivityTable();
   await query(`INSERT INTO guild_member_activity (guild_id,user_id,voice_started_at) VALUES ($1,$2,NOW())
@@ -33,7 +42,7 @@ export async function stopVoiceActivity(guildId, userId) {
 
 export async function chatXpLeaderboard(guildId, limit=10) {
   await ensureActivityTable();
-  return (await query('SELECT user_id,chat_xp FROM guild_member_activity WHERE guild_id=$1 AND chat_xp>0 ORDER BY chat_xp DESC,user_id ASC LIMIT $2',[guildId,limit])).rows;
+  return (await query('SELECT user_id,chat_xp FROM guild_member_activity WHERE guild_id=$1 AND chat_xp>0 ORDER BY chat_xp DESC,user_id ASC LIMIT $2',[guildId,limit])).rows.map(row=>({...row,level:chatLevelFromXp(row.chat_xp)}));
 }
 
 export async function voiceLeaderboard(guildId, limit=10) {
