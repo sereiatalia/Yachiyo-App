@@ -74,9 +74,9 @@ function parseRoleId(value) { const match = String(value ?? '').match(/^(?:<@&)?
 const reactionRoleWizards = new Set();
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 async function wizardAnswer(interaction, prompt) {
-  const promptMessage = await interaction.channel.send('୨୧ '+prompt+'\n*Reply in this channel within 5 minutes, or type `cancel`.*');
-  const collected = await interaction.channel.awaitMessages({filter: message => message.author.id === interaction.user.id, max: 1, time: 300_000, errors: ['time']}).catch(() => null);
-  if (!collected?.size) throw new Error('The setup timed out. Run `/reaction-role setup` again.');
+  const promptMessage = await interaction.channel.send('୨୧ '+prompt+'\n*Reply in this channel within 10 minutes, or type `cancel`.*');
+  const collected = await interaction.channel.awaitMessages({filter: message => message.author.id === interaction.user.id, max: 1, time: 600_000, errors: ['time']}).catch(() => null);
+  if (!collected?.size) throw new Error('The setup timed out after 10 minutes. Run `/reaction-role setup` again.');
   const message = collected.first();
   if (message.content.trim().toLowerCase() === 'cancel') throw new Error('Reaction-role setup cancelled.');
   await promptMessage.delete().catch(() => null);
@@ -89,31 +89,37 @@ async function runReactionRoleWizard(interaction) {
   try {
     await interaction.reply({content:'୨୧ **Reaction-role setup started.** I’ll guide you through the panel step by step in this channel.',ephemeral:true});
     const name = await wizardAnswer(interaction, 'What should we call this panel?');
-    const livePreview = await interaction.channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('Reaction-role preview').setDescription('*Title and description will appear here as you build the panel.*')]});
+    await interaction.channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('Reaction-role preview').setDescription('*Title and description will appear here as you build the panel.*')]});
     await interaction.channel.send('⏳ Loading the panel name…'); await wait(700);
     const title = await wizardAnswer(interaction, 'Type the title design you want displayed in the panel.');
-    await livePreview.edit({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle(title).setDescription('*Waiting for the panel description…*')]});
+    await interaction.channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle(title).setDescription('*Waiting for the panel description…*')]});
     await interaction.channel.send('⏳ Loading the title…'); await wait(700);
     const description = await wizardAnswer(interaction, 'Type the panel description or instructions. Mention every role that should appear, for example `<@&123456789012345678>`.');
-    await livePreview.edit({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle(title).setDescription(description)]});
+    await interaction.channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle(title).setDescription(description)]});
     await interaction.channel.send('⏳ Loading the title and description…'); await wait(700);
-    const channelText = await wizardAnswer(interaction, 'Which channel should receive the finished panel? Send a channel mention or channel ID.');
-    const channelId = channelText.match(/\d{15,25}/)?.[0];
-    const channel = channelId ? await interaction.guild.channels.fetch(channelId).catch(() => null) : null;
-    if (!channel?.isTextBased()) throw new Error('I could not find that text channel.');
+    let channel = null;
+    while (!channel) {
+      const channelText = await wizardAnswer(interaction, 'Which channel should receive the finished panel? Send a channel mention or channel ID.');
+      const channelId = channelText.match(/\d{15,25}/)?.[0];
+      channel = channelId ? await interaction.guild.channels.fetch(channelId).catch(() => null) : null;
+      if (!channel?.isTextBased()) {
+        channel = null;
+        await interaction.channel.send('⚠️ I could not find that text channel. No progress was lost—please send the correct channel mention or ID.');
+      }
+    }
     const roleIds = [...description.matchAll(/<@&(\d{15,25})>/g)].map(match => match[1]);
     const uniqueRoleIds = [...new Set(roleIds)];
     if (!uniqueRoleIds.length) throw new Error('Mention at least one role in the description before continuing.');
     if (uniqueRoleIds.length > 25) throw new Error('Discord allows 25 reactions per panel. Create another panel for more roles.');
-    const preview = livePreview;
+    const preview = await interaction.channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle(title).setDescription(description)]});
     await interaction.channel.send('୨୧ React to the preview panel with the emoji for each role. I will ask one by one, and confirm every match.');
     const roles=[];
     for (const roleId of uniqueRoleIds) {
-      const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
-      if (!role) throw new Error('I could not find one of the mentioned roles.');
-      await interaction.channel.send('What reaction emoji should be used for **'+role.name+'**? React to the preview panel above now. Server emojis are supported.');
-      const collected = await preview.awaitReactions({filter: (reaction,user) => user.id === interaction.user.id, max: 1, time: 300_000, errors: ['time']}).catch(() => null);
-      if (!collected?.size) throw new Error('No reaction was received for '+role.name+'.');
+      let role = await interaction.guild.roles.fetch(roleId).catch(() => null);
+      if (!role) { await interaction.channel.send('⚠️ I could not find one of the mentioned roles. Please continue by checking the role mention in your description and run the setup again if needed.'); throw new Error('A mentioned role could not be found.'); }
+      await interaction.channel.send('What reaction emoji should be used for **'+role.name+'**? React to the preview panel above now. Server emojis are supported. You have 10 minutes.');
+      const collected = await preview.awaitReactions({filter: (reaction,user) => user.id === interaction.user.id, max: 1, time: 600_000, errors: ['time']}).catch(() => null);
+      if (!collected?.size) throw new Error('No reaction was received for '+role.name+' within 10 minutes.');
       const reaction = collected.first();
       const emoji = reaction.emoji.toString();
       roles.push({role,emoji});
