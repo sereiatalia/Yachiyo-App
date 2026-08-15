@@ -17,6 +17,7 @@ import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, de
 import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
 import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpReminder, markBumpReminderNotified, pendingBumpReminders } from './services/bumpService.js';
 import { getServerInfo, saveServerInfoPanel, updateServerInfo, getServerInfoStaffRoles, getProfileStats, recordProfileMessage, replaceProfileMessageCounts } from './services/serverInfoService.js';
+import { getShopSettings, listPurchases } from './services/serverShopService.js';
 import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './services/offlineBrainService.js';
 import { addChatXp, startVoiceActivity, stopVoiceActivity } from './services/activityLeaderboardService.js';
 import { addMoney } from './services/economyService.js';
@@ -538,6 +539,8 @@ client.on('interactionCreate', async interaction => {
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleMlbbPanelRefresh(interaction.guildId, interaction.channelId);
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleHsrPanelRefresh(interaction.guildId, interaction.channelId);
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleGenshinPanelRefresh(interaction.guildId, interaction.channelId);
+  if (interaction.isButton() && interaction.customId === 'server_shop_inventory') return interaction.reply({content:'Use `/server-inventory` to view your purchased server roles.',ephemeral:true});
+  if (interaction.isButton() && interaction.customId === 'server_shop_unequip_premium') { const settings=await getShopSettings(interaction.guildId); const owned=await listPurchases(interaction.guildId,interaction.user.id); let removed=0; if(settings.one_premium_only) for(const item of owned) if(item.premium && interaction.member.roles.cache.has(item.role_id)) { await interaction.member.roles.remove(item.role_id,'Member unequipped premium shop role'); removed++; } return interaction.reply({content:removed?'Unequipped your premium role. You can now equip another premium role from your inventory.':'You do not currently have an equipped premium role.',ephemeral:true}); }
   if (interaction.isButton() && interaction.customId === 'roblox_show_profile') return sendRobloxProfile(interaction, interaction.user, true);
   if (interaction.isButton() && interaction.customId === 'mlbb_show_profile') return sendMlbbProfile(interaction, interaction.user, true);
   if (interaction.isButton() && interaction.customId === 'hsr_show_profile') return sendHsrProfile(interaction, interaction.user, true);
