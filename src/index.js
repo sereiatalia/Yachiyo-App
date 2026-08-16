@@ -259,8 +259,8 @@ const client = new Client({
 client.once('ready', async () => {
   try {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    if (process.env.DISCORD_GUILD_ID) {
-      await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID), { body: registeredCommands });
+    if (configuredGuildIds.length) {
+      for (const guildId of configuredGuildIds) await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, guildId), { body: registeredCommands });
       console.log(`Registered ${commands.length} guild slash commands.`);
       console.log('[COMMANDS] '+commands.map(command=>command.name).join(', '));
     } else {
@@ -281,6 +281,7 @@ client.once('ready', async () => {
   }
 });
 const registeredCommands = commands.filter(command => !['economy-add','fishbattle','fishbattlepvp'].includes(command.name));
+const configuredGuildIds = (process.env.DISCORD_GUILD_ID || '').split(',').map(id => id.trim()).filter(Boolean);
 client.on('voiceStateUpdate', async (oldState, newState) => {
   if (!newState.member?.user.bot) {
     if (!oldState.channelId && newState.channelId) await startVoiceActivity(newState.guild.id,newState.id).catch(console.error);

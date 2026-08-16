@@ -5,6 +5,7 @@ import { commands } from './commands.js';
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 const applicationId = process.env.DISCORD_CLIENT_ID;
 const guildId = process.env.DISCORD_GUILD_ID;
+const guildIds = (guildId || '').split(',').map(id => id.trim()).filter(Boolean);
 const deployGlobally = process.env.DEPLOY_GLOBAL === 'true' || !guildId;
 const registeredCommands = commands.filter(command => !['economy-add','fishbattle','fishbattlepvp'].includes(command.name));
 
@@ -19,7 +20,7 @@ if (deployGlobally) {
     console.log(`Cleared guild-scoped commands for ${guildId}.`);
   }
 } else {
-  await rest.put(Routes.applicationGuildCommands(applicationId, guildId), { body: registeredCommands });
+  for (const configuredGuildId of guildIds) await rest.put(Routes.applicationGuildCommands(applicationId, configuredGuildId), { body: registeredCommands });
   console.log(`Deployed ${commands.length} guild commands.`);
   console.log('[COMMANDS] '+commands.map(command=>command.name).join(', '));
 }
