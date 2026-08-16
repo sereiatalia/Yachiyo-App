@@ -57,7 +57,8 @@ const websiteServer = createServer(async (request, response) => {
     response.end('Website unavailable');
   }
 });
-websiteServer.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => console.log('[WEB] Yachiyo website is online'));
+const websitePort = 3000;
+websiteServer.listen(websitePort, '0.0.0.0', () => console.log(`[WEB] Yachiyo website is online on port ${websitePort}`));
 
 const filteredMessageIds = new Set();
 const introductionPanelTimers = new Map();
