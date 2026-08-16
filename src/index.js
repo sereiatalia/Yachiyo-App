@@ -34,7 +34,7 @@ import { getHsrPanel, setHsrPanelMessage, getHsrProfile, fetchHsrProfile } from 
 import { buildHsrProfileEmbed } from './ui/hsrProfile.js';
 import { getGenshinPanel, setGenshinPanelMessage, getGenshinProfile, fetchGenshinProfile } from './services/genshinService.js';
 import { buildGenshinProfileEmbed } from './ui/genshinProfile.js';
-import { getActiveQuiz, joinQuiz, getPlayers, finishQuiz, nextQuestion, startRound, activateQuiz, answerQuiz } from './services/quizService.js';
+import { getActiveQuiz, joinQuiz, getPlayers, finishQuiz, nextQuestion, startRound, activateQuiz, answerQuiz, getCurrentRound } from './services/quizService.js';
 import { getReactionRolePanels, getReactionRolePanel, createReactionRolePanel, addReactionRoleOption, removeReactionRoleOption, setReactionRolePanelMessage, getReactionRoleByMessage, deleteReactionRolePanel } from './services/reactionRoleService.js';
 import { buildRobloxProfileEmbed } from './ui/robloxProfile.js';
 
@@ -575,7 +575,7 @@ async function publishQuizRound(session) {
   const channel=await client.channels.fetch(session.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
   const round=Number(session.current_round)+1, question=await nextQuestion(session); if(!question) return;
   await startRound(session.id,round,question);
-  const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('☾ QUIZ BEE • ROUND '+round+' / '+session.rounds).setDescription('**'+question.question+'**\n\nBe the first player to submit the correct answer.\n\nPlayers may answer in any case. The answer panel will remain below this round.').setFooter({text:'Yachiyo • first correct answer wins 1 point'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('quiz_answer:'+session.id+':'+round).setLabel('Answer').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('quiz_stop:'+session.id).setLabel('Stop Quiz').setStyle(ButtonStyle.Danger))]});
+  const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0x8e7dff).setTitle('☾ QUIZ BEE • ROUND '+round+' / '+session.rounds).setDescription('**'+question.question+'**\n\nType your answer directly in this channel. The first correct answer wins the round.\n\nAnswers are not case-sensitive.').setFooter({text:'Yachiyo • type your answer in chat'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('quiz_stop:'+session.id).setLabel('Stop Quiz').setStyle(ButtonStyle.Danger))]});
   await activateQuiz(session.id,round,session.panel_message_id,panel.id);
 }
 client.on('interactionCreate', async interaction => {
@@ -598,7 +598,7 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isButton() && interaction.customId.startsWith('quiz_join:')) {
     const sessionId=interaction.customId.split(':')[1], session=await getActiveQuiz(interaction.guildId,interaction.channelId);
     if(!session || String(session.id)!==sessionId) return interaction.reply({content:'This Quiz Bee is no longer active.',ephemeral:true});
-    await joinQuiz(session.id,interaction.user.id); const players=await getPlayers(session.id);
+    await joinQuiz(session.id,interaction.user.id); const players=await getPlayers(session.id); const old=interaction.message.embeds[0]; const oldDescription=old?.description??''; await interaction.message.edit({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('☾ QUIZ BEE LOBBY').setDescription(oldDescription+'\n\n**Players joined ('+players.length+'):**\n'+players.map(p=>'<@'+p.user_id+'>').join(' '))],components:interaction.message.components});
     return interaction.reply({content:'✅ You joined the Quiz Bee. Players joined: **'+players.length+'**.',ephemeral:true});
   }
   if (interaction.isButton() && interaction.customId.startsWith('quiz_stop:')) {
@@ -1054,6 +1054,19 @@ client.on('messageCreate', async message => {
     return;
   }
   if (message.author.bot) return;
+  const quizSession=await getActiveQuiz(message.guild.id,message.channelId).catch(()=>null);
+  if (quizSession?.status==='active') {
+    const quizRound=await getCurrentRound(quizSession.id).catch(()=>null);
+    if (quizRound) {
+      const result=await answerQuiz(quizSession.id,quizRound.round_number,message.author.id,message.content).catch(()=>null);
+      if (!result?.wrong && result) {
+        const players=await getPlayers(quizSession.id);
+        await message.channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('✦ Correct answer!').setDescription('<@'+message.author.id+'> was first and earned **1 point**.\n\nAnswer: **'+result.answer+'**\n\n'+players.map((p,i)=>`${i<3?['🥇','🥈','🥉'][i]:'✦'} <@${p.user_id}> — **${p.score}**`).join('\n'))]});
+        if(Number(quizRound.round_number)<Number(quizSession.rounds)) setTimeout(()=>publishQuizRound({...quizSession,current_round:Number(quizRound.round_number)}).catch(console.error),2500); else setTimeout(()=>finishQuiz(quizSession.id).catch(console.error),2500);
+        return;
+      }
+    }
+  }
   await scheduleRobloxPanelRefresh(message.guild.id, message.channelId);
   await scheduleMlbbPanelRefresh(message.guild.id, message.channelId);
   await scheduleHsrPanelRefresh(message.guild.id, message.channelId);
