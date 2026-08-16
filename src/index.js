@@ -34,6 +34,7 @@ import { getHsrPanel, setHsrPanelMessage, getHsrProfile, fetchHsrProfile } from 
 import { buildHsrProfileEmbed } from './ui/hsrProfile.js';
 import { getGenshinPanel, setGenshinPanelMessage, getGenshinProfile, fetchGenshinProfile } from './services/genshinService.js';
 import { buildGenshinProfileEmbed } from './ui/genshinProfile.js';
+import { getActiveQuiz, joinQuiz, getPlayers, finishQuiz } from './services/quizService.js';
 import { getReactionRolePanels, getReactionRolePanel, createReactionRolePanel, addReactionRoleOption, removeReactionRoleOption, setReactionRolePanelMessage, getReactionRoleByMessage, deleteReactionRolePanel } from './services/reactionRoleService.js';
 import { buildRobloxProfileEmbed } from './ui/robloxProfile.js';
 
@@ -574,6 +575,18 @@ client.on('interactionCreate', async interaction => {
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleMlbbPanelRefresh(interaction.guildId, interaction.channelId);
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleHsrPanelRefresh(interaction.guildId, interaction.channelId);
   if (interaction.guildId && interaction.isChatInputCommand()) await scheduleGenshinPanelRefresh(interaction.guildId, interaction.channelId);
+  if (interaction.isButton() && interaction.customId.startsWith('quiz_join:')) {
+    const sessionId=interaction.customId.split(':')[1], session=await getActiveQuiz(interaction.guildId,interaction.channelId);
+    if(!session || String(session.id)!==sessionId) return interaction.reply({content:'This Quiz Bee is no longer active.',ephemeral:true});
+    await joinQuiz(session.id,interaction.user.id); const players=await getPlayers(session.id);
+    return interaction.reply({content:'✅ You joined the Quiz Bee. Players joined: **'+players.length+'**.',ephemeral:true});
+  }
+  if (interaction.isButton() && interaction.customId.startsWith('quiz_stop:')) {
+    const session=await getActiveQuiz(interaction.guildId,interaction.channelId);
+    if(!session) return interaction.reply({content:'This Quiz Bee is no longer active.',ephemeral:true});
+    if(session.host_id!==interaction.user.id) return interaction.reply({content:'Only the Quiz Bee host can stop this game.',ephemeral:true});
+    const players=await finishQuiz(session.id); return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('☾ Quiz Bee stopped').setDescription(players.length?players.map((p,i)=>`${i<3?['🥇','🥈','🥉'][i]:'✦'} <@${p.user_id}> — **${p.score} point${p.score===1?'':'s'}**`).join('\n'):'No players joined.').setFooter({text:'Yachiyo • Quiz Bee'})]});
+  }
   if (interaction.isButton() && interaction.customId === 'server_shop_inventory') return interaction.reply({content:'Use `/server-inventory` to view your purchased server roles.',ephemeral:true});
   if (interaction.isButton() && interaction.customId === 'server_shop_unequip_premium') { const settings=await getShopSettings(interaction.guildId); const owned=await listPurchases(interaction.guildId,interaction.user.id); let removed=0; if(settings.one_premium_only) for(const item of owned) if(item.premium && interaction.member.roles.cache.has(item.role_id)) { await interaction.member.roles.remove(item.role_id,'Member unequipped premium shop role'); removed++; } return interaction.reply({content:removed?'Unequipped your premium role. You can now equip another premium role from your inventory.':'You do not currently have an equipped premium role.',ephemeral:true}); }
   if (interaction.isButton() && interaction.customId === 'roblox_show_profile') return sendRobloxProfile(interaction, interaction.user, true);
