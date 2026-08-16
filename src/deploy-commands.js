@@ -10,6 +10,7 @@ const deployGlobally = process.env.DEPLOY_GLOBAL === 'true' || !guildId;
 if (deployGlobally) {
   await rest.put(Routes.applicationCommands(applicationId), { body: commands });
   console.log(`Deployed ${commands.length} global commands.`);
+  console.log('[COMMANDS] '+commands.map(command=>command.name).join(', '));
 
   // Remove stale guild-scoped copies so Discord does not show duplicate commands.
   if (guildId) {
@@ -19,4 +20,5 @@ if (deployGlobally) {
 } else {
   await rest.put(Routes.applicationGuildCommands(applicationId, guildId), { body: commands });
   console.log(`Deployed ${commands.length} guild commands.`);
+  console.log('[COMMANDS] '+commands.map(command=>command.name).join(', '));
 }

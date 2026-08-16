@@ -262,9 +262,11 @@ client.once('ready', async () => {
     if (process.env.DISCORD_GUILD_ID) {
       await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID), { body: commands });
       console.log(`Registered ${commands.length} guild slash commands.`);
+      console.log('[COMMANDS] '+commands.map(command=>command.name).join(', '));
     } else {
       await rest.put(Routes.applicationCommands(process.env.DISCORD_CLIENT_ID), { body: commands });
       console.log(`Registered ${commands.length} global slash commands.`);
+      console.log('[COMMANDS] '+commands.map(command=>command.name).join(', '));
     }
   } catch (error) {
     console.error('[COMMAND_DEPLOY]', error);
