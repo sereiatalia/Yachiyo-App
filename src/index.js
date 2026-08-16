@@ -269,7 +269,7 @@ client.once('ready', async () => {
       console.log('[COMMANDS] '+commands.map(command=>command.name).join(', '));
     }
   } catch (error) {
-    console.error('[COMMAND_DEPLOY]', error);
+    console.error('[COMMAND_DEPLOY]', error?.rawError ? JSON.stringify(error.rawError, null, 2) : (error?.stack || error));
   }
   console.log(`Yachiyo is online as ${client.user.tag}`);
   for (const voice of await getVoiceChannels().catch(() => [])) keepVoiceConnection(voice.guild_id, voice.voice_channel_id).catch(console.error);
