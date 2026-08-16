@@ -19,8 +19,7 @@ import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpRe
 import { getServerInfo, saveServerInfoPanel, updateServerInfo, getServerInfoStaffRoles, getProfileStats, recordProfileMessage, replaceProfileMessageCounts } from './services/serverInfoService.js';
 import { getShopSettings, listPurchases } from './services/serverShopService.js';
 import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './services/offlineBrainService.js';
-import { addChatXp, startVoiceActivity, stopVoiceActivity } from './services/activityLeaderboardService.js';
-import { addMoney } from './services/economyService.js';
+import { startVoiceActivity, stopVoiceActivity } from './services/activityLeaderboardService.js';
 import { getTruthOrDareSettings, saveTruthOrDarePanel, randomTruthOrDare, SAFE_TRUTHS, SAFE_DARES } from './services/truthOrDareService.js';
 import { getAutoReacts } from './services/autoReactService.js';
 import { getTempVoiceSettings, saveTempVoicePanel, createTempVoiceChannel, getTempVoiceChannel, getTempVoiceForOwner, deleteTempVoiceChannel } from './services/tempVoiceService.js';
@@ -280,7 +279,8 @@ client.once('ready', async () => {
     }
   }
 });
-const registeredCommands = commands.filter(command => !['economy-add','fishbattle','fishbattlepvp'].includes(command.name));
+const disabledEconomyCommands = new Set(['balance','daily','work','fish','economy-add','admin-abuse','pay','deposit','withdraw','leaderboard','level','fish-setup','fishinventory','fishalmanac','give','gamble','rob','fishprofile','fishleaderboard','server-shop','server-inventory','fishshop','fishrod','fishstatuseffects','fishdrink','fishmarket','fishaquarium','fishbattle','fishbattlepvp']);
+const registeredCommands = commands.filter(command => !disabledEconomyCommands.has(command.name));
 const configuredGuildIds = (process.env.DISCORD_GUILD_ID || '').split(',').map(id => id.trim()).filter(Boolean);
 client.on('voiceStateUpdate', async (oldState, newState) => {
   if (!newState.member?.user.bot) {
@@ -994,8 +994,6 @@ client.on('messageCreate', async message => {
   await scheduleGenshinPanelRefresh(message.guild.id, message.channelId);
   if (await checkRapidSpam(message)) return;
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
-  await addChatXp(message.guild.id,message.author.id).catch(console.error);
-  await addMoney(message.author.id,1,'chat_message').catch(console.error);
   const timeKey=message.guild.id+':'+message.author.id;
   const pendingTime=pendingTimeQuestions.get(timeKey);
   if (!message.mentions.everyone && pendingTime && pendingTime.expiresAt>Date.now()) {
@@ -1070,11 +1068,6 @@ client.on('messageCreate', async message => {
   if (!message.content.startsWith(prefix)) return;
   const [name] = message.content.slice(prefix.length).trim().split(/\s+/);
   if (name === 'ping') return message.reply('Yachiyo is watching over this server.');
-  if (name === 'balance') {
-    const { balance } = await import('./services/economyService.js');
-    const b = await balance(message.author.id);
-    return message.reply('☾ You have **' + b.wallet.toLocaleString() + '** global coins.');
-  }
 });
 client.on('error', error => console.error('[DISCORD]', error));
 
