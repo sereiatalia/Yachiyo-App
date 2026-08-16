@@ -24,4 +24,6 @@ if (deployGlobally) {
   for (const configuredGuildId of guildIds) await rest.put(Routes.applicationGuildCommands(applicationId, configuredGuildId), { body: registeredCommands });
   console.log(`Deployed ${commands.length} guild commands.`);
   console.log('[COMMANDS] '+commands.map(command=>command.name).join(', '));
+  await rest.put(Routes.applicationCommands(applicationId), { body: [] });
+  console.log('Cleared stale global commands.');
 }
