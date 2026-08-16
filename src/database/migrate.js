@@ -294,6 +294,54 @@ CREATE TABLE IF NOT EXISTS brain_role_guides (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id,role_id)
 );
 
+CREATE TABLE IF NOT EXISTS quiz_questions (
+  id BIGSERIAL PRIMARY KEY,
+  topic TEXT NOT NULL DEFAULT 'general',
+  difficulty TEXT NOT NULL DEFAULT 'mixed',
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  accepted_answers JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS quiz_questions_topic_idx ON quiz_questions(topic, difficulty);
+CREATE TABLE IF NOT EXISTS quiz_sessions (
+  id BIGSERIAL PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  host_id TEXT NOT NULL,
+  rounds INTEGER NOT NULL CHECK (rounds > 0),
+  difficulty TEXT NOT NULL DEFAULT 'mixed',
+  topic TEXT NOT NULL DEFAULT 'random',
+  current_round INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'lobby',
+  panel_message_id TEXT,
+  question_message_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ended_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS quiz_sessions_active_idx ON quiz_sessions(guild_id, channel_id, status);
+CREATE TABLE IF NOT EXISTS quiz_players (
+  session_id BIGINT NOT NULL REFERENCES quiz_sessions(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  score INTEGER NOT NULL DEFAULT 0,
+  correct_answers INTEGER NOT NULL DEFAULT 0,
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (session_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS quiz_rounds (
+  id BIGSERIAL PRIMARY KEY,
+  session_id BIGINT NOT NULL REFERENCES quiz_sessions(id) ON DELETE CASCADE,
+  round_number INTEGER NOT NULL,
+  question_id BIGINT REFERENCES quiz_questions(id),
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  winner_id TEXT,
+  points INTEGER NOT NULL DEFAULT 1,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  answered_at TIMESTAMPTZ,
+  UNIQUE(session_id, round_number)
+);
+
 `;
 
 try { await pool.query(sql); console.log('Yachiyo database migration complete.'); }
