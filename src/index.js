@@ -298,6 +298,10 @@ client.once('ready', async () => {
     console.error('[COMMAND_DEPLOY]', error?.rawError ? JSON.stringify(error.rawError, null, 2) : (error?.stack || error));
   }
   console.log(`Yachiyo is online as ${client.user.tag}`);
+  client.user.setPresence({
+    activities: [{ name: 'Managing servers', type: 0 }],
+    status: 'online',
+  });
   for (const voice of await getVoiceChannels().catch(() => [])) keepVoiceConnection(voice.guild_id, voice.voice_channel_id).catch(console.error);
   for (const reminder of await pendingBumpReminders().catch(() => [])) scheduleBumpReminder(reminder.guild_id,reminder.user_id,reminder.remind_at);
   for (const guild of client.guilds.cache.values()) {
