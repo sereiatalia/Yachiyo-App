@@ -299,7 +299,7 @@ client.once('ready', async () => {
   }
   console.log(`Yachiyo is online as ${client.user.tag}`);
   client.user.setPresence({
-    activities: [{ name: 'Yachiyo', state: 'discord.gg/VudRMn6vKV', type: ActivityType.Custom }],
+    activities: [{ name: 'Yachiyo', state: 'Managing Servers', type: ActivityType.Custom }],
     status: 'online',
   });
   for (const voice of await getVoiceChannels().catch(() => [])) keepVoiceConnection(voice.guild_id, voice.voice_channel_id).catch(console.error);
