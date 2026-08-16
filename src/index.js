@@ -1,4 +1,8 @@
 import 'dotenv/config';
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes, ChannelType } from 'discord.js';
 import { commands, handleCommand, buildHelpView } from './commands.js';
 import { ensureGuild, getFishChannel, getVoiceChannels } from './services/guildService.js';
@@ -34,6 +38,26 @@ import { getReactionRolePanels, getReactionRolePanel, createReactionRolePanel, a
 import { buildRobloxProfileEmbed } from './ui/robloxProfile.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
+
+const websiteRoot = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'website');
+const websiteTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const websiteServer = createServer(async (request, response) => {
+  const route = request.url?.split('?')[0] ?? '/';
+  const file = route === '/' ? 'index.html' : route === '/terms' ? 'terms.html' : route === '/privacy' ? 'privacy.html' : route.slice(1);
+  if (!['index.html', 'terms.html', 'privacy.html', 'styles.css'].includes(file)) {
+    response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    return response.end('Not found');
+  }
+  try {
+    const content = await readFile(join(websiteRoot, file));
+    response.writeHead(200, { 'content-type': websiteTypes[extname(file)] ?? 'text/plain; charset=utf-8' });
+    response.end(content);
+  } catch {
+    response.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+    response.end('Website unavailable');
+  }
+});
+websiteServer.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => console.log('[WEB] Yachiyo website is online'));
 
 const filteredMessageIds = new Set();
 const introductionPanelTimers = new Map();
