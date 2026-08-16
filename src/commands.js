@@ -291,7 +291,7 @@ export async function handleCommand(interaction) {
   if(name==='balance') {
     const user=interaction.options.getUser('user')??interaction.user;
     const b=await balance(user.id);
-    const total=b.wallet+b.bank;
+    const total=Number(b.wallet||0)+Number(b.bank||0);
     return interaction.reply({embeds:[new EmbedBuilder()
       .setColor(0xf0b6d8)
       .setTitle('💰 '+user.username+' • Balance')
