@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes, ChannelType } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes, ChannelType, ActivityType } from 'discord.js';
 import { commands, handleCommand, buildHelpView } from './commands.js';
 import { ensureGuild, getFishChannel, getVoiceChannels } from './services/guildService.js';
 import { sendAuditLog } from './services/auditService.js';
@@ -299,7 +299,7 @@ client.once('ready', async () => {
   }
   console.log(`Yachiyo is online as ${client.user.tag}`);
   client.user.setPresence({
-    activities: [{ name: 'Managing servers', type: 0 }],
+    activities: [{ name: 'Yachiyo', state: 'discord.gg/VudRMn6vKV', type: ActivityType.Custom }],
     status: 'online',
   });
   for (const voice of await getVoiceChannels().catch(() => [])) keepVoiceConnection(voice.guild_id, voice.voice_channel_id).catch(console.error);
