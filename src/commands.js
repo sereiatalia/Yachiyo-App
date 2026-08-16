@@ -54,6 +54,7 @@ export function buildHelpView(category='start') {
 export const commands = [
   new SlashCommandBuilder().setName('ping').setDescription('Check whether Yachiyo is online.'),
   new SlashCommandBuilder().setName('help').setDescription('Open Yachiyo’s command center.'),
+  new SlashCommandBuilder().setName('report-bug').setDescription('Open Yachiyo’s bug and error report form.'),
   new SlashCommandBuilder().setName('balance').setDescription('View your global Yachiyo balance.').addUserOption(o=>o.setName('user').setDescription('User to view').setRequired(false)),
   new SlashCommandBuilder().setName('daily').setDescription('Claim your daily cosmic allowance.'),
   new SlashCommandBuilder().setName('work').setDescription('Work for coins.'),
@@ -164,6 +165,7 @@ export const commands = [
 export async function handleCommand(interaction) {
   await ensureGuild(interaction.guildId);
   const name=interaction.commandName;
+  if (name==='report-bug') return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('☾ Report a bug or error').setDescription('Found something that is not working correctly? Please use the form below to send the details to Yachiyo’s developer.\n\nInclude what you were trying to do, what happened, and any useful screenshots or error messages.' ).setFooter({text:'Yachiyo • Thank you for helping improve the app.'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('REPORT HERE').setStyle(ButtonStyle.Link).setURL('https://docs.google.com/forms/d/e/1FAIpQLSfAF3EVdTzeAm51EjUxOf6fMvpXdJvxCAAVE9yCMf0OBNNRsg/viewform?usp=sharing&ouid=110698965186717204096'))]});
   const disabledEconomyCommands = new Set(['balance','daily','work','fish','economy-add','admin-abuse','pay','deposit','withdraw','leaderboard','level','fish-setup','fishinventory','fishalmanac','give','gamble','rob','fishprofile','fishleaderboard','server-shop','server-inventory','fishshop','fishrod','fishstatuseffects','fishdrink','fishmarket','fishaquarium','fishbattle','fishbattlepvp']);
   if (disabledEconomyCommands.has(name)) return interaction.reply({content:'This economy and fishing feature has moved to Kaguya-App.',ephemeral:true});
   if(name==='server-shop' && interaction.options.getSubcommand()==='view') { const items=await listShopItems(interaction.guildId); return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('Server Role Shop').setDescription(items.length?items.map(item=>(item.premium?'**Premium**':'**Standard**')+' · <@&'+item.role_id+'>\nPrice: **'+Number(item.price).toLocaleString()+' coins** · Unlocks at **Level '+item.required_level+'**').join('\n\n'):'The server shop is currently empty.')],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('server_shop_inventory').setLabel('View Inventory').setStyle(ButtonStyle.Primary))]}); }
