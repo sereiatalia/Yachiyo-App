@@ -306,7 +306,7 @@ client.once('ready', async () => {
     }
   }
 });
-const disabledEconomyCommands = new Set(['balance','daily','work','fish','economy-add','admin-abuse','pay','deposit','withdraw','leaderboard','level','fish-setup','fishinventory','fishalmanac','give','gamble','rob','fishprofile','fishleaderboard','server-shop','server-inventory','fishshop','fishrod','fishstatuseffects','fishdrink','fishmarket','fishaquarium','fishbattle','fishbattlepvp']);
+const disabledEconomyCommands = new Set(['balance','daily','work','fish','economy-add','admin-abuse','pay','deposit','withdraw','leaderboard','level','fish-setup','fishinventory','fishalmanac','give','gamble','rob','fishprofile','fishleaderboard','server-shop','server-inventory','fishshop','fishrod','fishstatuseffects','fishdrink','fishmarket','fishaquarium','fishbattle','fishbattlepvp','bump-panel','bump-status']);
 const registeredCommands = commands.filter(command => !disabledEconomyCommands.has(command.name));
 const configuredGuildIds = (process.env.DISCORD_GUILD_ID || '').split(',').map(id => id.trim()).filter(Boolean);
 client.on('voiceStateUpdate', async (oldState, newState) => {

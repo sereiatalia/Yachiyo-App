@@ -161,7 +161,7 @@ export const commands = [
   ,new SlashCommandBuilder().setName('fishaquarium').setDescription('Open your personal fish aquarium.')
   ,new SlashCommandBuilder().setName('fishbattle').setDescription('Battle your equipped fish.')
   ,new SlashCommandBuilder().setName('fishbattlepvp').setDescription('Challenge another fisher.').addUserOption(o=>o.setName('user').setDescription('Opponent').setRequired(true))
-].filter(c=>!['balance','daily','work','fish','economy-add','admin-abuse','pay','deposit','withdraw','leaderboard','level','fish-setup','fishinventory','fishalmanac','give','gamble','rob','fishprofile','fishleaderboard','server-shop','server-inventory','fishshop','fishrod','fishstatuseffects','fishdrink','fishmarket','fishaquarium','fishbattle','fishbattlepvp'].includes(c.name)).map(c=>c.toJSON());
+].filter(c=>!['balance','daily','work','fish','economy-add','admin-abuse','pay','deposit','withdraw','leaderboard','level','fish-setup','fishinventory','fishalmanac','give','gamble','rob','fishprofile','fishleaderboard','server-shop','server-inventory','fishshop','fishrod','fishstatuseffects','fishdrink','fishmarket','fishaquarium','fishbattle','fishbattlepvp','bump-panel','bump-status'].includes(c.name)).map(c=>c.toJSON());
 export async function handleCommand(interaction) {
   await ensureGuild(interaction.guildId);
   const name=interaction.commandName;
