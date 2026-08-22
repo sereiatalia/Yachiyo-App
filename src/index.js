@@ -292,6 +292,10 @@ client.once('ready', async () => {
       await rest.put(Routes.applicationCommands(process.env.DISCORD_CLIENT_ID), { body: [] });
       console.log('Cleared stale global commands.');
     } else {
+      for (const guild of client.guilds.cache.values()) {
+        await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, guild.id), { body: [] });
+        console.log(`Cleared stale guild commands for ${guild.id}.`);
+      }
       await rest.put(Routes.applicationCommands(process.env.DISCORD_CLIENT_ID), { body: registeredCommands });
       console.log(`Registered ${commands.length} global slash commands.`);
       console.log('[COMMANDS] '+commands.map(command=>command.name).join(', '));
