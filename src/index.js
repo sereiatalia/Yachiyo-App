@@ -307,6 +307,7 @@ client.once('ready', async () => {
   for (const voice of await getVoiceChannels().catch(() => [])) keepVoiceConnection(voice.guild_id, voice.voice_channel_id).catch(console.error);
   for (const reminder of await pendingBumpReminders().catch(() => [])) scheduleBumpReminder(reminder.guild_id,reminder.user_id,reminder.remind_at);
   for (const guild of client.guilds.cache.values()) {
+    client.emit('serverInfoPanelRefresh',guild.id);
     for (const state of guild.voiceStates.cache.values()) {
       if (state.channelId && !state.member?.user.bot) startVoiceActivity(guild.id,state.id).catch(console.error);
     }
