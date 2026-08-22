@@ -23,9 +23,11 @@ export async function saveServerInfoPanel(guildId, messageId) {
   await query('UPDATE server_info_settings SET panel_message_id=$2, updated_at=NOW() WHERE guild_id=$1', [guildId, messageId]);
 }
 
-export async function updateServerInfo(guildId, { title, description, extraInfo }) {
-  await query(`UPDATE server_info_settings SET title=$2, description=$3, extra_info=$4, updated_at=NOW() WHERE guild_id=$1`,
-    [guildId, title, description, extraInfo]);
+export async function updateServerInfoField(guildId, field, value) {
+  const columns = { title: 'title', description: 'description', extra_info: 'extra_info' };
+  const column = columns[field];
+  if (!column) throw new Error('Unsupported server info field.');
+  await query(`UPDATE server_info_settings SET ${column}=$2, updated_at=NOW() WHERE guild_id=$1`, [guildId, value]);
 }
 
 export async function updateServerInfoBanner(guildId, bannerUrl) {
