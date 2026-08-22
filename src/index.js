@@ -439,7 +439,7 @@ client.on('tempVoiceControlsRequest', async interaction => {
 async function createServerInfoEmbed(guild, info) {
   const owner=await guild.fetchOwner().catch(()=>null);
   const created=Math.floor(guild.createdTimestamp/1000);
-  const embed=new EmbedBuilder().setColor(0xf3a6c7).setTitle('°❀⋆.ೃ࿔*:･  '+info.title+'  °❀⋆.ೃ࿔*:･').setDescription(`${info.description}\n\n₊˚⊹ᰔ **Server Name:** ${guild.name}\n˚. ᵎᵎ **Date Created:** <t:${created}:D>\n⭑.ᐟ **Server Owner:** ${owner ? owner.user.tag : 'Unavailable'}\n⊹ ࣪ ˖ **Members:** ${guild.memberCount.toLocaleString()}\n\n♡ ${info.extra_info}`).setFooter({text:'‎ꫂ᭪݁ Yachiyo • server information'});
+  const embed=new EmbedBuilder().setColor(0xf3a6c7).setTitle(info.title).setDescription(`${info.description}\n\n₊˚⊹ᰔ **Server Name:** ${guild.name}\n˚. ᵎᵎ **Date Created:** <t:${created}:D>\n⭑.ᐟ **Server Owner:** ${owner ? owner.user.tag : 'Unavailable'}\n⊹ ࣪ ˖ **Members:** ${guild.memberCount.toLocaleString()}\n\n♡ ${info.extra_info}`).setFooter({text:'‎ꫂ᭪݁ Yachiyo • server information'});
   if(info.banner_url) embed.setImage(info.banner_url);
   return embed;
 }
