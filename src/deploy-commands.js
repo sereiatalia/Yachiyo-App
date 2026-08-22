@@ -12,15 +12,14 @@ const disabledEconomyCommands = new Set(['balance','daily','work','fish','econom
 const registeredCommands = commands.filter(command => !disabledEconomyCommands.has(command.name));
 
 if (deployGlobally) {
-  await rest.put(Routes.applicationCommands(applicationId), { body: registeredCommands });
-  console.log(`Deployed ${commands.length} global commands.`);
-  console.log('[COMMANDS] '+commands.map(command=>command.name).join(', '));
-
-  // Remove stale guild-scoped copies so Discord does not show duplicate commands.
+  // Remove stale guild-scoped copies before publishing the global command list.
   for (const id of [...new Set([...guildIds, ...clearGuildIds])]) {
     await rest.put(Routes.applicationGuildCommands(applicationId, id), { body: [] });
     console.log(`Cleared guild-scoped commands for ${id}.`);
   }
+  await rest.put(Routes.applicationCommands(applicationId), { body: registeredCommands });
+  console.log(`Deployed ${commands.length} global commands.`);
+  console.log('[COMMANDS] '+commands.map(command=>command.name).join(', '));
 } else {
   for (const configuredGuildId of guildIds) await rest.put(Routes.applicationGuildCommands(applicationId, configuredGuildId), { body: registeredCommands });
   console.log(`Deployed ${commands.length} guild commands.`);
