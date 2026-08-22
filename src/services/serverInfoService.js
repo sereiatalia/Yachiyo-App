@@ -1,7 +1,7 @@
 import { query } from '../database/db.js';
 
 export const DEFAULT_SERVER_INFO = {
-  title: 'SERVER INFO',
+  title: '⊹₊˚‧︵‿₊୨ SERVER INFO ୧₊‿︵‧˚₊⊹',
   description: '₊˚⊹ᰔ A little guide to our shared space.\n\nEverything here updates from Discord, so it always reflects the server you are in.',
   extra_info: '♡ Please be kind, respect one another, and make yourself at home.',
 };
