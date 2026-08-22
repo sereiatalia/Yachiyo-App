@@ -37,15 +37,24 @@ function formatEvent(payload) {
   if (data.content !== undefined) embed.addFields({ name: 'Message', value: clip(data.content) || '*(empty message)*', inline: false });
   if (data.before !== undefined || data.after !== undefined) embed.addFields({ name: 'Before', value: clip(data.before) || '*(empty message)*', inline: true }, { name: 'After', value: clip(data.after) || '*(empty message)*', inline: true });
   if (data.attachments) embed.addFields({ name: 'Attachments', value: String(data.attachments), inline: true });
-  if (data.attachmentDetails?.length) embed.addFields({ name: 'Deleted attachments', value: data.attachmentDetails.map(file => {
-    const link = '[' + clip(file.name || 'attachment', 80) + '](' + file.url + ')';
-    return /^(image|video)\//i.test(file.contentType || '') ? '||' + link + '|| *(spoiler)*' : link;
-  }).join('\n').slice(0, 1024), inline: false });
+  const attachmentDetails = data.attachmentDetails ?? [];
+  const mediaFiles = attachmentDetails.filter(file => /^(image|video)\//i.test(file.contentType || '') || /\.(png|jpe?g|gif|webp|mp4|webm|mov|m4v)(\?|$)/i.test(file.url || ''));
+  const nonMediaFiles = attachmentDetails.filter(file => !mediaFiles.includes(file));
+  if (nonMediaFiles.length) {
+    embed.addFields({ name: 'Deleted attachments', value: nonMediaFiles.map(file => '[' + clip(file.name || 'attachment', 80) + '](' + file.url + ')').join('\n').slice(0, 1024), inline: false });
+  }
+  const mediaUrls = mediaFiles.map(file => file.url).filter(Boolean);
+  const image = mediaFiles.find(file => /^(image)\//i.test(file.contentType || '') || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(file.url || ''));
+  if (image) embed.setImage(image.url);
   if (data.attachmentUrls?.length) {
-    embed.addFields({ name: 'Saved attachment links', value: data.attachmentUrls.map((url, index) => '[' + (index + 1) + '](' + url + ')').join('\\n').slice(0, 1024), inline: false });
-    if (!data.attachmentDetails?.length) {
-      const image = data.attachmentUrls.find(url => /\\.(png|jpe?g|gif|webp)(\\?|$)/i.test(url));
-      if (image) embed.setImage(image);
+    const knownMediaUrls = new Set(mediaUrls);
+    const remainingUrls = data.attachmentUrls.filter(url => !knownMediaUrls.has(url));
+    if (!attachmentDetails.length) {
+      const fallbackImage = remainingUrls.find(url => /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url));
+      if (fallbackImage) embed.setImage(fallbackImage);
+    }
+    if (remainingUrls.length) {
+      embed.addFields({ name: 'Saved attachment links', value: remainingUrls.map((url, index) => '[' + (index + 1) + '](' + url + ')').join('\\n').slice(0, 1024), inline: false });
     }
   }
   if (data.previousAttachmentUrls?.length) embed.addFields({ name: 'Previous attachment links', value: data.previousAttachmentUrls.map((url, index) => '[' + (index + 1) + '](' + url + ')').join('\\n').slice(0, 1024), inline: false });
@@ -64,5 +73,18 @@ export async function sendAuditLog(client, guild, payload) {
   const channelId = payload.channelId ?? settings.audit_channels?.[category] ?? settings.log_channel_id;
   if (!channelId) return;
   const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (channel?.isTextBased()) await channel.send({ embeds: [formatEvent(payload)] }).catch(() => null);
+  if (channel?.isTextBased()) {
+    const mediaFiles = payload.data?.attachmentDetails?.filter(file =>
+      /^(image|video)\//i.test(file.contentType || '') ||
+      /\.(png|jpe?g|gif|webp|mp4|webm|mov|m4v)(\?|$)/i.test(file.url || '')
+    ) ?? [];
+    const videoUrls = mediaFiles
+      .filter(file => /^(video)\//i.test(file.contentType || '') || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(file.url || ''))
+      .map(file => file.url)
+      .filter(Boolean);
+    const message = { embeds: [formatEvent(payload)] };
+    // Discord renders direct video URLs as playable previews in the log channel.
+    if (videoUrls.length) message.content = videoUrls.join('\n');
+    await channel.send(message).catch(() => null);
+  }
 }
