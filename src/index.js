@@ -20,7 +20,7 @@ import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js
 import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket, getTicketAccessRoles } from './services/ticketService.js';
 import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
 import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpReminder, markBumpReminderNotified, pendingBumpReminders } from './services/bumpService.js';
-import { getServerInfo, saveServerInfoPanel, updateServerInfo, getServerInfoStaffRoles, getProfileStats, recordProfileMessage, replaceProfileMessageCounts } from './services/serverInfoService.js';
+import { getServerInfo, saveServerInfoPanel, updateServerInfoField, getServerInfoStaffRoles, getProfileStats, recordProfileMessage, replaceProfileMessageCounts } from './services/serverInfoService.js';
 import { getShopSettings, listPurchases } from './services/serverShopService.js';
 import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './services/offlineBrainService.js';
 import { startVoiceActivity, stopVoiceActivity } from './services/activityLeaderboardService.js';
@@ -465,17 +465,17 @@ client.recountProfiles=async guild => {
     return {messages,channels};
   } finally { profileRecounts.delete(guild.id); }
 };
-client.on('serverInfoPanelRefresh', async guildId => {
+client.on('serverInfoPanelRefresh', async (guildId, options = {}) => {
   const info=await getServerInfo(guildId).catch(()=>null); if(!info) return;
   const channel=await client.channels.fetch(info.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
   const buttons=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('server_info_staffs').setLabel('STAFFS ୨୧').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('server_info_profile').setLabel('YOUR PROFILE ♡').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('server_info_bot').setLabel('SERVER BOT ˚').setStyle(ButtonStyle.Secondary));
+  const existing=info.panel_message_id ? await channel.messages.fetch(info.panel_message_id).catch(()=>null) : null;
   const embed=await createServerInfoEmbed(channel.guild,info);
-  if(info.panel_message_id) {
-    const existing=await channel.messages.fetch(info.panel_message_id).catch(()=>null);
-    if(existing?.author?.id===client.user?.id) {
-      await existing.edit({embeds:[embed],components:[buttons]}).catch(console.error);
-      return;
-    }
+  if(existing?.author?.id===client.user?.id) {
+    const previousImage=existing.embeds?.[0]?.image?.url;
+    if(!options.refreshBanner && previousImage) embed.setImage(previousImage);
+    await existing.edit({embeds:[embed],components:[buttons]}).catch(console.error);
+    return;
   }
   const panel=await channel.send({embeds:[embed],components:[buttons]});
   await saveServerInfoPanel(guildId,panel.id);
@@ -801,9 +801,11 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isModalSubmit() && interaction.customId.startsWith('rules_edit:')) {
     const section=Number(interaction.customId.split(':')[1]); await updateRule(interaction.guildId,section,interaction.fields.getTextInputValue('title').trim(),interaction.fields.getTextInputValue('content').trim()); await interaction.reply({content:'✅ Rule section updated.',ephemeral:true}); return interaction.client.emit('rulesPanelRefresh',interaction.guildId);
   }
-  if (interaction.isModalSubmit() && interaction.customId === 'server_info_edit') {
-    await updateServerInfo(interaction.guildId,{title:interaction.fields.getTextInputValue('title').trim(),description:interaction.fields.getTextInputValue('description').trim(),extraInfo:interaction.fields.getTextInputValue('extra_info').trim()});
-    await interaction.reply({content:'✅ Server information panel updated.',ephemeral:true});
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('server_info_edit:')) {
+    const field=interaction.customId.split(':')[1];
+    const value=interaction.fields.getTextInputValue(field).trim();
+    await updateServerInfoField(interaction.guildId,field,value);
+    await interaction.reply({content:'✅ Server information '+({title:'title',description:'welcome text',extra_info:'extra information'}[field]||'field')+' updated. Other panel details were left unchanged.',ephemeral:true});
     return interaction.client.emit('serverInfoPanelRefresh',interaction.guildId);
   }
   if (interaction.isModalSubmit() && (interaction.customId === 'introduction_edit_template' || interaction.customId === 'introduction_edit_panel')) {
