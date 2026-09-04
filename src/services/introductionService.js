@@ -18,6 +18,13 @@ export function renderServerEmojis(content, guild) {
   });
 }
 
+// Inverse of renderServerEmojis, for reading a published panel back into stored settings.
+// Saving the rendered form would be self-corrupting: renderServerEmojis matches the `:name:` inside
+// an already-resolved `<:name:id>` and would wrap it again into `<<:name:id>id>` on the next render.
+export function unrenderServerEmojis(content) {
+  return String(content ?? '').replace(/<a?:([A-Za-z0-9_]{2,32}):\d+>/g, ':$1:');
+}
+
 const normalizeIntroductionLabel = value => String(value ?? '')
   .replace(/<a?:[A-Za-z0-9_]{2,32}:\d+>/g, '')
   .replace(/:[A-Za-z0-9_]{2,32}:/g, '')
