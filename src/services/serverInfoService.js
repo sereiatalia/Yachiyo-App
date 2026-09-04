@@ -15,6 +15,21 @@ export async function setupServerInfo(guildId, channelId, bannerUrl = null) {
   return getServerInfo(guildId);
 }
 
+// The published panel renders `description` followed by a generated block of live server stats and
+// then extra_info. Anything that reads a panel back off Discord must strip that generated tail:
+// storing it would make the description grow a stale duplicate every time the panel re-renders.
+const GENERATED_BLOCK_MARKER = '₊˚⊹ᰔ **Server Name:**';
+
+export function hasGeneratedServerInfo(description) {
+  return Boolean(description) && description.includes(GENERATED_BLOCK_MARKER);
+}
+
+export function stripGeneratedServerInfo(description) {
+  if (!description) return description;
+  const index = description.indexOf(GENERATED_BLOCK_MARKER);
+  return index === -1 ? description : description.slice(0, index).trimEnd();
+}
+
 export async function getServerInfo(guildId) {
   return (await query('SELECT * FROM server_info_settings WHERE guild_id=$1', [guildId])).rows[0] ?? null;
 }

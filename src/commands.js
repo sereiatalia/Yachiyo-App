@@ -245,6 +245,7 @@ export async function handleCommand(interaction) {
       const report=await interaction.client.refreshServerPanels(interaction.guild);
       const lines=[];
       if(report.updated.length) lines.push('**Updated in place**',...report.updated.map(item=>'• '+item.label+' — <#'+item.channelId+'>'));
+      if(report.repaired?.length) lines.push('','**Repaired**',...report.repaired.map(item=>'• '+item));
       if(report.removed?.length) lines.push('','**Removed from the server** (feature no longer exists)',...report.removed.map(item=>'• '+item.label+(item.channelId?' — was in <#'+item.channelId+'>':'')));
       if(report.verified.length) lines.push('','**Checked, left untouched**',...report.verified.map(item=>'• '+item.label+' — <#'+item.channelId+'>'));
       if(report.issues.length) lines.push('','**Needs attention**',...report.issues.map(item=>'• '+item.label+' — '+item.reason));
