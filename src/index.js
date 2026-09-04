@@ -28,11 +28,12 @@ import { getTruthOrDareSettings, saveTruthOrDarePanel, randomTruthOrDare, SAFE_T
 import { getAutoReacts } from './services/autoReactService.js';
 import { getTempVoiceSettings, saveTempVoicePanel, createTempVoiceChannel, getTempVoiceChannel, getTempVoiceForOwner, deleteTempVoiceChannel } from './services/tempVoiceService.js';
 import { getSpamSettings, recordSpamWarning, resetSpamWarnings } from './services/spamService.js';
-import { getRobloxPanel, setRobloxPanelMessage, getRobloxProfile, resolveRobloxUser } from './services/robloxService.js';
-import { getMlbbPanel, setMlbbPanelMessage, getMlbbProfile } from './services/mlbbService.js';
-import { getHsrPanel, setHsrPanelMessage, getHsrProfile, fetchHsrProfile } from './services/hsrService.js';
+import { RETIRED_PANELS, getRetiredPanel, clearRetiredPanel } from './services/retiredPanelsService.js';
+import { getRobloxProfile, resolveRobloxUser } from './services/robloxService.js';
+import { getMlbbProfile } from './services/mlbbService.js';
+import { getHsrProfile, fetchHsrProfile } from './services/hsrService.js';
 import { buildHsrProfileEmbed } from './ui/hsrProfile.js';
-import { getGenshinPanel, setGenshinPanelMessage, getGenshinProfile, fetchGenshinProfile } from './services/genshinService.js';
+import { getGenshinProfile, fetchGenshinProfile } from './services/genshinService.js';
 import { buildGenshinProfileEmbed } from './ui/genshinProfile.js';
 import { getActiveQuiz, joinQuiz, getPlayers, finishQuiz, nextQuestion, startRound, activateQuiz, answerQuiz, getCurrentRound } from './services/quizService.js';
 import { getReactionRolePanels, getReactionRolePanel, createReactionRolePanel, addReactionRoleOption, removeReactionRoleOption, setReactionRolePanelMessage, getReactionRoleByMessage, deleteReactionRolePanel } from './services/reactionRoleService.js';
@@ -72,10 +73,6 @@ const bumpReminderTimers = new Map();
 const profileRecounts = new Set();
 const pendingTimeQuestions = new Map();
 const tempVoiceDeleteTimers = new Map();
-const robloxPanelTimers = new Map();
-const mlbbPanelTimers = new Map();
-const hsrPanelTimers = new Map();
-const genshinPanelTimers = new Map();
 const spamMessageWindows = new Map();
 const spamBurstWarnings = new Map();
 
@@ -168,30 +165,6 @@ async function runReactionRoleWizard(interaction) {
   } finally { reactionRoleWizards.delete(key); }
 }
 
-async function scheduleRobloxPanelRefresh(guildId, channelId) {
-  const panel = await getRobloxPanel(guildId).catch(() => null);
-  if (panel?.channel_id !== channelId) return;
-  clearTimeout(robloxPanelTimers.get(guildId));
-  robloxPanelTimers.set(guildId, setTimeout(() => refreshRobloxPanel(guildId).catch(console.error), 8_000));
-}
-async function scheduleMlbbPanelRefresh(guildId, channelId) {
-  const panel = await getMlbbPanel(guildId).catch(() => null);
-  if (panel?.channel_id !== channelId) return;
-  clearTimeout(mlbbPanelTimers.get(guildId));
-  mlbbPanelTimers.set(guildId, setTimeout(() => refreshMlbbPanel(guildId).catch(console.error), 8_000));
-}
-async function scheduleHsrPanelRefresh(guildId, channelId) {
-  const panel = await getHsrPanel(guildId).catch(() => null);
-  if (panel?.channel_id !== channelId) return;
-  clearTimeout(hsrPanelTimers.get(guildId));
-  hsrPanelTimers.set(guildId, setTimeout(() => refreshHsrPanel(guildId).catch(console.error), 8_000));
-}
-async function scheduleGenshinPanelRefresh(guildId, channelId) {
-  const panel = await getGenshinPanel(guildId).catch(() => null);
-  if (panel?.channel_id !== channelId) return;
-  clearTimeout(genshinPanelTimers.get(guildId));
-  genshinPanelTimers.set(guildId, setTimeout(() => refreshGenshinPanel(guildId).catch(console.error), 8_000));
-}
 
 async function checkRapidSpam(message) {
   const settings = await getSpamSettings(message.guild.id).catch(() => ({enabled:false}));
@@ -380,54 +353,22 @@ async function sendRobloxProfile(interaction, user, ephemeral = true) {
   await interaction.deferReply({ephemeral});
   try { return interaction.editReply({embeds:[buildRobloxProfileEmbed(user,await resolveRobloxUser(saved.username),'Yachiyo • Roblox profile')]}); } catch(error) { return interaction.editReply({content:'⚠️ '+error.message}); }
 }
-async function refreshRobloxPanel(guildId) {
-  const settings=await getRobloxPanel(guildId).catch(()=>null); if(!settings) return;
-  const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
-  if(settings.panel_message_id) { const old=await channel.messages.fetch(settings.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
-  const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('ROBLOX PROFILE').setDescription('Save yours: `/roblox-user username`\nCheck a member: `/roblox-checkuser user`').setFooter({text:'Yachiyo • Roblox profiles'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('roblox_show_profile').setLabel('SHOW PROFILE').setStyle(ButtonStyle.Primary))]});
-  await setRobloxPanelMessage(guildId,panel.id);
-}
-client.on('robloxPanelRefresh', guildId => refreshRobloxPanel(guildId).catch(console.error));
 async function sendMlbbProfile(interaction, user, ephemeral = true) {
   const saved=await getMlbbProfile(interaction.guildId,user.id); if(!saved) return interaction.reply({content:'You have not saved an MLBB UID yet. Use `/mlbb uid` first.',ephemeral:true});
   return interaction.reply({embeds:[new EmbedBuilder().setColor(0x3d8ee8).setAuthor({name:user.globalName||user.username,iconURL:user.displayAvatarURL()}).setTitle('MOBILE LEGENDS: BANG BANG').setDescription('**Player UID**\n```\n'+saved.player_uid+'\n```').setFooter({text:'Yachiyo • MLBB profile'})],ephemeral});
 }
-async function refreshMlbbPanel(guildId) {
-  const settings=await getMlbbPanel(guildId).catch(()=>null); if(!settings) return;
-  const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
-  if(settings.panel_message_id) { const old=await channel.messages.fetch(settings.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
-  const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0x3d8ee8).setTitle('MOBILE LEGENDS').setDescription('Save UID: `/mlbb uid`\nCheck a member: `/mlbb-checkuser user`').setFooter({text:'Yachiyo • MLBB profiles'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('mlbb_show_profile').setLabel('SHOW PROFILE').setStyle(ButtonStyle.Primary))]});
-  await setMlbbPanelMessage(guildId,panel.id);
-}
-client.on('mlbbPanelRefresh', guildId => refreshMlbbPanel(guildId).catch(console.error));
 async function sendHsrProfile(interaction, user, ephemeral = true) {
   const saved=await getHsrProfile(interaction.guildId,user.id); if(!saved) return interaction.reply({content:'You have not saved an HSR UID yet. Use `/hsr uid` first.',ephemeral:true});
   await interaction.deferReply({ephemeral});
   try { return interaction.editReply({embeds:[buildHsrProfileEmbed(user,await fetchHsrProfile(saved.player_uid))]}); }
   catch(error) { return interaction.editReply({content:'⚠️ '+error.message}); }
 }
-async function refreshHsrPanel(guildId) {
-  const settings=await getHsrPanel(guildId).catch(()=>null); if(!settings) return;
-  const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
-  if(settings.panel_message_id) { const old=await channel.messages.fetch(settings.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
-  const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0x9b78e6).setTitle('HONKAI: STAR RAIL').setDescription('Save UID: `/hsr uid`\nView a profile: `/hsr-checkuser user`').setFooter({text:'Yachiyo • public HSR showcase'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hsr_show_profile').setLabel('SHOW PROFILE').setStyle(ButtonStyle.Primary))]});
-  await setHsrPanelMessage(guildId,panel.id);
-}
-client.on('hsrPanelRefresh', guildId => refreshHsrPanel(guildId).catch(console.error));
 async function sendGenshinProfile(interaction, user, ephemeral = true) {
   const saved = await getGenshinProfile(interaction.guildId, user.id); if (!saved) return interaction.reply({ content: 'You have not saved a Genshin UID yet. Use `/genshin uid` first.', ephemeral: true });
   await interaction.deferReply({ ephemeral });
   try { return interaction.editReply({ embeds: [buildGenshinProfileEmbed(user, await fetchGenshinProfile(saved.player_uid))] }); }
   catch (error) { return interaction.editReply({ content: '⚠️ ' + error.message }); }
 }
-async function refreshGenshinPanel(guildId) {
-  const settings = await getGenshinPanel(guildId).catch(() => null); if (!settings) return;
-  const channel = await client.channels.fetch(settings.channel_id).catch(() => null); if (!channel?.isTextBased()) return;
-  if (settings.panel_message_id) { const old = await channel.messages.fetch(settings.panel_message_id).catch(() => null); if (old?.author?.id === client.user?.id) await old.delete().catch(() => null); }
-  const panel = await channel.send({ embeds: [new EmbedBuilder().setColor(0x79c9b8).setTitle('GENSHIN IMPACT').setDescription('Save UID: `/genshin uid`\nView a profile: `/genshin-checkuser user`').setFooter({ text: 'Yachiyo • Genshin public profiles' })], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('genshin_show_profile').setLabel('SHOW PROFILE').setStyle(ButtonStyle.Primary))] });
-  await setGenshinPanelMessage(guildId, panel.id);
-}
-client.on('genshinPanelRefresh', guildId => refreshGenshinPanel(guildId).catch(console.error));
 client.on('tempVoicePanelRefresh', async guildId => {
   const settings = await getTempVoiceSettings(guildId).catch(() => null); if (!settings) return;
   const channel = await client.channels.fetch(settings.panel_channel_id).catch(() => null); if (!channel?.isTextBased()) return;
@@ -482,6 +423,7 @@ client.refreshServerPanels = async guild => {
   const updated = [];
   const verified = [];
   const issues = [];
+  const removed = [];
 
   const info = await getServerInfo(guild.id).catch(() => null);
   if (!info) {
@@ -514,10 +456,6 @@ client.refreshServerPanels = async guild => {
     ['Truth or Dare panel', await getTruthOrDareSettings(guild.id).catch(() => null)],
     ['Temp voice panel', await getTempVoiceSettings(guild.id).catch(() => null)],
     ['Bump panel', await getBumpPanel(guild.id).catch(() => null)],
-    ['Roblox panel', await getRobloxPanel(guild.id).catch(() => null)],
-    ['Mobile Legends panel', await getMlbbPanel(guild.id).catch(() => null)],
-    ['Honkai: Star Rail panel', await getHsrPanel(guild.id).catch(() => null)],
-    ['Genshin panel', await getGenshinPanel(guild.id).catch(() => null)],
   ];
   for (const [label, settings] of panels) {
     if (!settings) continue;
@@ -540,7 +478,23 @@ client.refreshServerPanels = async guild => {
     else verified.push({ label, channelId: panel.channel_id });
   }
 
-  return { updated, verified, issues };
+  // Panels whose feature no longer exists in the bot. Their message is still sitting in the server
+  // with buttons that now do nothing, so remove the message and forget the row.
+  for (const panel of RETIRED_PANELS) {
+    const settings = await getRetiredPanel(panel.table, guild.id).catch(() => null);
+    if (!settings) continue;
+    const channelId = settings.channel_id ?? settings.panel_channel_id;
+    const channel = channelId ? await client.channels.fetch(channelId).catch(() => null) : null;
+    if (channel?.isTextBased() && settings.panel_message_id) {
+      const message = await channel.messages.fetch(settings.panel_message_id).catch(() => null);
+      // Only ever delete Yachiyo's own message.
+      if (message?.author?.id === client.user?.id) await message.delete().catch(() => null);
+    }
+    await clearRetiredPanel(panel.table, guild.id).catch(() => null);
+    removed.push({ label: panel.label, channelId });
+  }
+
+  return { updated, verified, issues, removed };
 };
 
 client.on('serverInfoPanelRefresh', async (guildId, options = {}) => {
@@ -671,10 +625,6 @@ async function publishQuizRound(session) {
   await activateQuiz(session.id,round,session.panel_message_id,panel.id);
 }
 client.on('interactionCreate', async interaction => {
-  if (interaction.guildId && interaction.isChatInputCommand()) await scheduleRobloxPanelRefresh(interaction.guildId, interaction.channelId);
-  if (interaction.guildId && interaction.isChatInputCommand()) await scheduleMlbbPanelRefresh(interaction.guildId, interaction.channelId);
-  if (interaction.guildId && interaction.isChatInputCommand()) await scheduleHsrPanelRefresh(interaction.guildId, interaction.channelId);
-  if (interaction.guildId && interaction.isChatInputCommand()) await scheduleGenshinPanelRefresh(interaction.guildId, interaction.channelId);
   if (interaction.isButton() && interaction.customId==='games_quiz') return interaction.reply({content:'Use `/quiz start` to open a Quiz Bee with rounds, difficulty, and topics.',ephemeral:true});
   if (interaction.isButton() && interaction.customId==='games_question') return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('☾ Question of the moment').setDescription('If you could instantly master one school subject, which would you choose and why?')]});
   if (interaction.isButton() && interaction.customId==='games_daily') return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('☾ DAILY QUESTION').setDescription('What is one small achievement you are proud of this week?')],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('daily_question_next').setLabel('New Question').setStyle(ButtonStyle.Secondary))]});
@@ -703,10 +653,6 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isModalSubmit() && interaction.customId.startsWith('quiz_answer_modal:')) { const [,sessionId,round]=interaction.customId.split(':'), session=await getActiveQuiz(interaction.guildId,interaction.channelId); if(!session || String(session.id)!==sessionId) return interaction.reply({content:'This Quiz Bee is no longer active.',ephemeral:true}); const result=await answerQuiz(session.id,Number(round),interaction.user.id,interaction.fields.getTextInputValue('answer')); if(!result) return interaction.reply({content:'That round already has a winner.',ephemeral:true}); if(result.wrong) return interaction.reply({content:'Not quite—your answer was not correct. Try again while the round is open.',ephemeral:true}); const players=await getPlayers(session.id); await interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('✦ Correct answer!').setDescription('<@'+interaction.user.id+'> was first and earned **1 point**.\n\nAnswer: **'+result.answer+'**\n\n'+players.map((p,i)=>`${i<3?['🥇','🥈','🥉'][i]:'✦'} <@${p.user_id}> — **${p.score}**`).join('\n'))]}); if(Number(round)<Number(session.rounds)) setTimeout(()=>publishQuizRound({...session,current_round:Number(round)}).catch(console.error),2500); else setTimeout(()=>finishQuiz(session.id).catch(console.error),2500); return; }
   if (interaction.isButton() && interaction.customId === 'server_shop_inventory') return interaction.reply({content:'Use `/server-inventory` to view your purchased server roles.',ephemeral:true});
   if (interaction.isButton() && interaction.customId === 'server_shop_unequip_premium') { const settings=await getShopSettings(interaction.guildId); const owned=await listPurchases(interaction.guildId,interaction.user.id); let removed=0; if(settings.one_premium_only) for(const item of owned) if(item.premium && interaction.member.roles.cache.has(item.role_id)) { await interaction.member.roles.remove(item.role_id,'Member unequipped premium shop role'); removed++; } return interaction.reply({content:removed?'Unequipped your premium role. You can now equip another premium role from your inventory.':'You do not currently have an equipped premium role.',ephemeral:true}); }
-  if (interaction.isButton() && interaction.customId === 'roblox_show_profile') return sendRobloxProfile(interaction, interaction.user, true);
-  if (interaction.isButton() && interaction.customId === 'mlbb_show_profile') return sendMlbbProfile(interaction, interaction.user, true);
-  if (interaction.isButton() && interaction.customId === 'hsr_show_profile') return sendHsrProfile(interaction, interaction.user, true);
-  if (interaction.isButton() && interaction.customId === 'genshin_show_profile') return sendGenshinProfile(interaction, interaction.user, true);
   if (interaction.isButton() && interaction.customId === 'temp_vc_create') {
     return interaction.reply({content:'Join the configured **Create your own VC** voice channel to receive your room.',ephemeral:true});
   }
@@ -1153,10 +1099,6 @@ client.on('messageCreate', async message => {
       }
     }
   }
-  await scheduleRobloxPanelRefresh(message.guild.id, message.channelId);
-  await scheduleMlbbPanelRefresh(message.guild.id, message.channelId);
-  await scheduleHsrPanelRefresh(message.guild.id, message.channelId);
-  await scheduleGenshinPanelRefresh(message.guild.id, message.channelId);
   if (await checkRapidSpam(message)) return;
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   const timeKey=message.guild.id+':'+message.author.id;

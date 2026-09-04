@@ -8,10 +8,6 @@ import { saveIntroductionSettings, setIntroductionPanelMessage, DEFAULT_INTRODUC
 import { saveTruthOrDareSettings, saveTruthOrDarePanel } from './truthOrDareService.js';
 import { saveTempVoiceSettings, saveTempVoicePanel } from './tempVoiceService.js';
 import { saveBumpPanel, setBumpPanelMessage } from './bumpService.js';
-import { saveRobloxPanel, setRobloxPanelMessage } from './robloxService.js';
-import { saveMlbbPanel, setMlbbPanelMessage } from './mlbbService.js';
-import { saveHsrPanel, setHsrPanelMessage } from './hsrService.js';
-import { saveGenshinPanel, setGenshinPanelMessage } from './genshinService.js';
 import { createReactionRolePanel, addReactionRoleOption, setReactionRolePanelMessage, getReactionRolePanels, deleteReactionRolePanel } from './reactionRoleService.js';
 import { setConfessionChannel } from './confessionService.js';
 
@@ -132,46 +128,6 @@ const PANEL_KINDS = [
     async restore({ guildId, channelId }) {
       await setConfessionChannel(guildId, channelId);
       return 'confession channel';
-    },
-  },
-  {
-    key: 'roblox',
-    label: 'Roblox profile panel',
-    matches: ids => ids.includes('roblox_show_profile'),
-    async restore({ guildId, channelId, message }) {
-      await saveRobloxPanel(guildId, channelId);
-      await setRobloxPanelMessage(guildId, message.id);
-      return 'panel';
-    },
-  },
-  {
-    key: 'mlbb',
-    label: 'Mobile Legends panel',
-    matches: ids => ids.includes('mlbb_show_profile'),
-    async restore({ guildId, channelId, message }) {
-      await saveMlbbPanel(guildId, channelId);
-      await setMlbbPanelMessage(guildId, message.id);
-      return 'panel';
-    },
-  },
-  {
-    key: 'hsr',
-    label: 'Honkai: Star Rail panel',
-    matches: ids => ids.includes('hsr_show_profile'),
-    async restore({ guildId, channelId, message }) {
-      await saveHsrPanel(guildId, channelId);
-      await setHsrPanelMessage(guildId, message.id);
-      return 'panel';
-    },
-  },
-  {
-    key: 'genshin',
-    label: 'Genshin profile panel',
-    matches: ids => ids.includes('genshin_show_profile'),
-    async restore({ guildId, channelId, message }) {
-      await saveGenshinPanel(guildId, channelId);
-      await setGenshinPanelMessage(guildId, message.id);
-      return 'panel';
     },
   },
   {
