@@ -20,7 +20,7 @@ import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js
 import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket, getTicketAccessRoles } from './services/ticketService.js';
 import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
 import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpReminder, markBumpReminderNotified, pendingBumpReminders } from './services/bumpService.js';
-import { getServerInfo, saveServerInfoPanel, updateServerInfoField, getServerInfoStaffRoles, getProfileStats, recordProfileMessage, replaceProfileMessageCounts } from './services/serverInfoService.js';
+import { getServerInfo, saveServerInfoPanel, updateServerInfoField, recordProfileMessage, replaceProfileMessageCounts } from './services/serverInfoService.js';
 import { getShopSettings, listPurchases } from './services/serverShopService.js';
 import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './services/offlineBrainService.js';
 import { startVoiceActivity, stopVoiceActivity } from './services/activityLeaderboardService.js';
@@ -469,10 +469,84 @@ client.recountProfiles=async guild => {
     return {messages,channels};
   } finally { profileRecounts.delete(guild.id); }
 };
+/**
+ * Refresh the published panels in place.
+ *
+ * Server Info is the only panel whose content actually goes stale (member count, owner, channel
+ * counts all come from Discord), and the only one that can be edited without republishing, so it is
+ * the only one rewritten here. The rest are verified and reported on but never touched: their
+ * refresh paths delete and repost, which changes the message ID and breaks pins, links, and the
+ * saved panel_message_id. A refresh should not do that.
+ */
+client.refreshServerPanels = async guild => {
+  const updated = [];
+  const verified = [];
+  const issues = [];
+
+  const info = await getServerInfo(guild.id).catch(() => null);
+  if (!info) {
+    issues.push({ label: 'Server Info', reason: 'not set up' });
+  } else {
+    const channel = await client.channels.fetch(info.channel_id).catch(() => null);
+    const existing = channel?.isTextBased() && info.panel_message_id
+      ? await channel.messages.fetch(info.panel_message_id).catch(() => null)
+      : null;
+    if (!channel?.isTextBased()) issues.push({ label: 'Server Info', reason: 'channel is unavailable' });
+    else if (!existing) issues.push({ label: 'Server Info', reason: 'panel message is gone — republish with `/server-info-setup`' });
+    else if (existing.author?.id !== client.user?.id) issues.push({ label: 'Server Info', reason: 'saved message was not sent by Yachiyo' });
+    else {
+      const embed = await createServerInfoEmbed(guild, info);
+      // Carry the existing banner across untouched; only /server-info-banner should change it.
+      const previousImage = existing.embeds?.[0]?.image?.url;
+      if (previousImage) embed.setImage(previousImage);
+      const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('server_info_profile').setLabel('YOUR PROFILE ♡').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('server_info_bot').setLabel('SERVER BOT ˚').setStyle(ButtonStyle.Secondary));
+      await existing.edit({ embeds: [embed], components: [buttons] });
+      updated.push({ label: 'Server Info', channelId: channel.id });
+    }
+  }
+
+  const panels = [
+    ['Rule Book', await getRules(guild.id).catch(() => null)],
+    ['Ticket panel', await getTicketSettings(guild.id).catch(() => null)],
+    ['Introduction panel', await getIntroductionSettings(guild.id).catch(() => null)],
+    ['Truth or Dare panel', await getTruthOrDareSettings(guild.id).catch(() => null)],
+    ['Temp voice panel', await getTempVoiceSettings(guild.id).catch(() => null)],
+    ['Bump panel', await getBumpPanel(guild.id).catch(() => null)],
+    ['Roblox panel', await getRobloxPanel(guild.id).catch(() => null)],
+    ['Mobile Legends panel', await getMlbbPanel(guild.id).catch(() => null)],
+    ['Honkai: Star Rail panel', await getHsrPanel(guild.id).catch(() => null)],
+    ['Genshin panel', await getGenshinPanel(guild.id).catch(() => null)],
+  ];
+  for (const [label, settings] of panels) {
+    if (!settings) continue;
+    const channelId = settings.channel_id ?? settings.panel_channel_id;
+    if (!channelId || !settings.panel_message_id) { issues.push({ label, reason: 'set up but never published' }); continue; }
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel?.isTextBased()) { issues.push({ label, reason: 'channel is unavailable' }); continue; }
+    const message = await channel.messages.fetch(settings.panel_message_id).catch(() => null);
+    if (!message) issues.push({ label, reason: 'panel message is gone — republish it to restore the buttons' });
+    else verified.push({ label, channelId });
+  }
+
+  for (const panel of await getReactionRolePanels(guild.id).catch(() => [])) {
+    const label = 'Reaction roles: ' + (panel.title ?? 'untitled');
+    if (!panel.message_id) { issues.push({ label, reason: 'created but never published' }); continue; }
+    const channel = await client.channels.fetch(panel.channel_id).catch(() => null);
+    if (!channel?.isTextBased()) { issues.push({ label, reason: 'channel is unavailable' }); continue; }
+    const message = await channel.messages.fetch(panel.message_id).catch(() => null);
+    if (!message) issues.push({ label, reason: 'panel message is gone — republish it' });
+    else verified.push({ label, channelId: panel.channel_id });
+  }
+
+  return { updated, verified, issues };
+};
+
 client.on('serverInfoPanelRefresh', async (guildId, options = {}) => {
   const info=await getServerInfo(guildId).catch(()=>null); if(!info) return;
   const channel=await client.channels.fetch(info.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
-  const buttons=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('server_info_staffs').setLabel('STAFFS ୨୧').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('server_info_profile').setLabel('YOUR PROFILE ♡').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('server_info_bot').setLabel('SERVER BOT ˚').setStyle(ButtonStyle.Secondary));
+  const buttons=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('server_info_profile').setLabel('YOUR PROFILE ♡').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('server_info_bot').setLabel('SERVER BOT ˚').setStyle(ButtonStyle.Secondary));
   const existing=info.panel_message_id ? await channel.messages.fetch(info.panel_message_id).catch(()=>null) : null;
   const embed=await createServerInfoEmbed(channel.guild,info);
   if(existing?.author?.id===client.user?.id) {
@@ -744,26 +818,18 @@ client.on('interactionCreate', async interaction => {
     const member=await interaction.guild.members.fetch(interaction.user.id); const has=member.roles.cache.has(role.id);
     await member.roles[has?'remove':'add'](role,'Reaction role panel selection'); return interaction.reply({content:(has?'➖ Removed ':'✅ Added ')+role+' '+option.emoji,ephemeral:true});
   }
+  // The staff roster was removed for privacy. Panels published before that change still carry a
+  // clickable STAFFS button until they are refreshed, so this handler stays as a stub rather than
+  // being deleted — otherwise those stale buttons would keep serving the member list.
   if (interaction.isButton() && interaction.customId === 'server_info_staffs') {
-    const configured=await getServerInfoStaffRoles(interaction.guildId);
-    if(!configured.length) return interaction.reply({content:'No staff roles have been added yet.',ephemeral:true});
-    await interaction.guild.members.fetch().catch(()=>null);
-    const groups=[];
-    for(const item of configured) {
-      const role=interaction.guild.roles.cache.get(item.role_id) ?? await interaction.guild.roles.fetch(item.role_id).catch(()=>null);
-      if(!role) continue;
-      const members=[...role.members.values()].filter(member=>!member.user.bot).map(member=>'<@'+member.id+'>');
-      const visible=members.slice(0,40);
-      groups.push('₊˚⊹ᰔ **'+role.name+'**\n'+(visible.length?visible.join(' • ')+(members.length>visible.length?'\n*+'+(members.length-visible.length)+' more members*':''):'*No members currently hold this role.*'));
-    }
-    return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('°❀⋆.ೃ࿔*:･  STAFFS  °❀⋆.ೃ࿔*:･').setDescription(groups.join('\n\n')||'*No available staff roles.*').setFooter({text:'♡ This list updates automatically when roles change.'})],ephemeral:true});
+    return interaction.reply({content:'The staff list is no longer shown here. Ask a staff member directly, or open a ticket if you need help.',ephemeral:true});
   }
   if (interaction.isButton() && interaction.customId === 'server_info_profile') {
-    const member=await interaction.guild.members.fetch(interaction.user.id).catch(()=>null); const stats=await getProfileStats(interaction.guildId,interaction.user.id);
+    const member=await interaction.guild.members.fetch(interaction.user.id).catch(()=>null);
     if(!member) return interaction.reply({content:'I could not load your server profile.',ephemeral:true});
     const roles=[...member.roles.cache.values()].filter(role=>role.id!==interaction.guild.id);
     const joined=Math.floor(member.joinedTimestamp/1000), created=Math.floor(member.user.createdTimestamp/1000);
-    return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setAuthor({name:member.displayName,iconURL:member.user.displayAvatarURL({extension:'png',size:128})}).setTitle('₊˚⊹ᰔ Your Profile').setDescription(`♡ **Name:** ${member.user.username}\n⭑.ᐟ **Display Name:** ${member.displayName}\n˚. ᵎᵎ **Joined Server:** <t:${joined}:D>\n⊹ ࣪ ˖ **Discord Account:** <t:${created}:D>\n₊˚⊹ᰔ **Messages Sent:** ${Number(stats.message_count).toLocaleString()}\n♡ **Roles:** ${roles.length}\n⸝⸝ **Highest Role:** ${member.roles.highest.id===interaction.guild.id?'None':member.roles.highest}\n⋆.˚ **User ID:** ${member.id}`).setFooter({text:'‎ꫂ᭪݁ Your profile is visible only to you.'})],ephemeral:true});
+    return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setAuthor({name:member.displayName,iconURL:member.user.displayAvatarURL({extension:'png',size:128})}).setTitle('₊˚⊹ᰔ Your Profile').setDescription(`♡ **Name:** ${member.user.username}\n⭑.ᐟ **Display Name:** ${member.displayName}\n˚. ᵎᵎ **Joined Server:** <t:${joined}:D>\n⊹ ࣪ ˖ **Discord Account:** <t:${created}:D>\n♡ **Roles:** ${roles.length}\n⸝⸝ **Highest Role:** ${member.roles.highest.id===interaction.guild.id?'None':member.roles.highest}\n⋆.˚ **User ID:** ${member.id}`).setFooter({text:'‎ꫂ᭪݁ Your profile is visible only to you.'})],ephemeral:true});
   }
   if (interaction.isButton() && interaction.customId === 'server_info_bot') return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('⭑.ᐟ Meet Yachiyo').setDescription('₊˚⊹ᰔ **Yachiyo** is this server’s cozy little guardian.\n\nShe helps with introductions, tickets, rulebooks, moderation logs, giveaways, reminders, server panels, and more.\n\n♡ Mention me for a small offline English/Filipino helper reply, or use `/help` to explore my commands.').setFooter({text:'Yachiyo • made with care for your community'})],ephemeral:true});
   if (interaction.isButton() && (interaction.customId === 'bump_remind' || interaction.customId === 'bump_my_status')) {
