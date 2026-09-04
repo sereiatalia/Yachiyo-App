@@ -20,7 +20,7 @@ import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js
 import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket, getTicketAccessRoles } from './services/ticketService.js';
 import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
 import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpReminder, markBumpReminderNotified, pendingBumpReminders } from './services/bumpService.js';
-import { getServerInfo, saveServerInfoPanel, updateServerInfoField, recordProfileMessage, replaceProfileMessageCounts } from './services/serverInfoService.js';
+import { getServerInfo, saveServerInfoPanel, updateServerInfoField, recordProfileMessage, replaceProfileMessageCounts, hasGeneratedServerInfo, stripGeneratedServerInfo } from './services/serverInfoService.js';
 import { getShopSettings, listPurchases } from './services/serverShopService.js';
 import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './services/offlineBrainService.js';
 import { startVoiceActivity, stopVoiceActivity } from './services/activityLeaderboardService.js';
@@ -424,6 +424,7 @@ client.refreshServerPanels = async guild => {
   const verified = [];
   const issues = [];
   const removed = [];
+  const repaired = [];
 
   const info = await getServerInfo(guild.id).catch(() => null);
   if (!info) {
@@ -437,6 +438,15 @@ client.refreshServerPanels = async guild => {
     else if (!existing) issues.push({ label: 'Server Info', reason: 'panel message is gone — republish with `/server-info-setup`' });
     else if (existing.author?.id !== client.user?.id) issues.push({ label: 'Server Info', reason: 'saved message was not sent by Yachiyo' });
     else {
+      // Self-heal: an earlier /recover-server stored the panel's rendered description, generated
+      // stats block and all. Left alone it duplicates that block on every render, so strip it back
+      // to the authored text once and save the clean version.
+      if (hasGeneratedServerInfo(info.description)) {
+        const clean = stripGeneratedServerInfo(info.description);
+        await updateServerInfoField(guild.id, 'description', clean);
+        info.description = clean;
+        repaired.push('Server Info description (removed a duplicated stats block)');
+      }
       const embed = await createServerInfoEmbed(guild, info);
       // Carry the existing banner across untouched; only /server-info-banner should change it.
       const previousImage = existing.embeds?.[0]?.image?.url;
@@ -494,7 +504,7 @@ client.refreshServerPanels = async guild => {
     removed.push({ label: panel.label, channelId });
   }
 
-  return { updated, verified, issues, removed };
+  return { updated, verified, issues, removed, repaired };
 };
 
 client.on('serverInfoPanelRefresh', async (guildId, options = {}) => {

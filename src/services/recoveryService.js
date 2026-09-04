@@ -3,8 +3,8 @@ import { query } from '../database/db.js';
 import { ensureGuild } from './guildService.js';
 import { setupRules, getRules, saveRulesPanel, updateRulesBanner } from './rulesService.js';
 import { saveTicketSettings, setTicketPanel } from './ticketService.js';
-import { setupServerInfo, saveServerInfoPanel, updateServerInfoField, updateServerInfoBanner } from './serverInfoService.js';
-import { saveIntroductionSettings, setIntroductionPanelMessage, DEFAULT_INTRODUCTION_TEMPLATE } from './introductionService.js';
+import { setupServerInfo, saveServerInfoPanel, updateServerInfoField, updateServerInfoBanner, stripGeneratedServerInfo } from './serverInfoService.js';
+import { saveIntroductionSettings, setIntroductionPanelMessage, unrenderServerEmojis, DEFAULT_INTRODUCTION_TEMPLATE } from './introductionService.js';
 import { saveTruthOrDareSettings, saveTruthOrDarePanel } from './truthOrDareService.js';
 import { saveTempVoiceSettings, saveTempVoicePanel } from './tempVoiceService.js';
 import { saveBumpPanel, setBumpPanelMessage } from './bumpService.js';
@@ -68,7 +68,10 @@ const PANEL_KINDS = [
       const embed = message.embeds?.[0];
       const recovered = [];
       if (embed?.title) { await updateServerInfoField(guildId, 'title', embed.title); recovered.push('title'); }
-      if (embed?.description) { await updateServerInfoField(guildId, 'description', embed.description); recovered.push('description'); }
+      // The panel's description is rendered output — stored text plus a generated stats block.
+      // Save only the stored half, or the block gets baked in and duplicates on the next render.
+      const description = stripGeneratedServerInfo(embed?.description);
+      if (description) { await updateServerInfoField(guildId, 'description', description); recovered.push('description'); }
       if (embed?.image?.url) { await updateServerInfoBanner(guildId, embed.image.url); recovered.push('banner'); }
       return recovered.length ? recovered.join(' + ') : 'panel only';
     },
@@ -83,8 +86,9 @@ const PANEL_KINDS = [
         guildId,
         channelId,
         template: DEFAULT_INTRODUCTION_TEMPLATE,
-        panelTitle: embed?.title ?? 'Introductions',
-        panelMessage: embed?.description ?? '',
+        // Custom emoji come back resolved; store them as :placeholders: again so re-rendering is stable.
+        panelTitle: unrenderServerEmojis(embed?.title) || 'Introductions',
+        panelMessage: unrenderServerEmojis(embed?.description) || '',
         rewardRoleId: null,
       });
       await setIntroductionPanelMessage(guildId, message.id);
