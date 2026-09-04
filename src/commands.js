@@ -8,7 +8,7 @@ import { runPullSequence } from './services/fishingPresentation.js';
 import { setLogChannel, setAuditCategoryChannel, setFishChannel, getFishChannel, ensureGuild, setVoiceChannel } from './services/guildService.js';
 import { createCase, warn, recentCases } from './services/moderationService.js';
 import { sendAuditLog } from './services/auditService.js';
-import { setConfessionChannel } from './services/confessionService.js';
+import { setConfessionChannel, setConfessionStartNumber, getConfessionNextNumber, highestConfessionNumber } from './services/confessionService.js';
 import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurseSettings, addCurseExemptRole, removeCurseExemptRole, getCurseExemptRoles } from './services/curseService.js';
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
@@ -82,7 +82,7 @@ export const commands = [
   new SlashCommandBuilder().setName('logs').setDescription('Set the audit-log channel.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addChannelOption(o=>o.setName('channel').setDescription('Text channel').setRequired(true))
   ,new SlashCommandBuilder().setName('logs-category').setDescription('Route an audit-log category to a channel.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addStringOption(o=>o.setName('category').setDescription('Event category').setRequired(true).addChoices({name:'Messages',value:'messages'},{name:'Members',value:'members'},{name:'Moderation',value:'moderation'},{name:'Curse warnings',value:'curse'},{name:'Channels and roles',value:'server'},{name:'Confessions',value:'confessions'})).addChannelOption(o=>o.setName('channel').setDescription('Destination channel').setRequired(true))
   ,new SlashCommandBuilder().setName('confession').setDescription('Submit an anonymous confession.').setDMPermission(false)
-  ,new SlashCommandBuilder().setName('confession-setup').setDescription('Set the channel where confessions are published.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Confession channel').setRequired(true))
+  ,new SlashCommandBuilder().setName('confession-setup').setDescription('Set the confession channel, and optionally the number to start counting from.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Confession channel').setRequired(true)).addIntegerOption(o=>o.setName('start_number').setDescription('Number the next confession should use. Leave empty to continue from where it is.').setRequired(false).setMinValue(1).setMaxValue(1000000))
   ,new SlashCommandBuilder().setName('introduction-setup').setDescription('Set up the member introduction channel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Introduction channel').setRequired(true)).addRoleOption(o=>o.setName('reward_role').setDescription('Role awarded after a valid introduction').setRequired(false))
   ,new SlashCommandBuilder().setName('introduction-panel').setDescription('Refresh or edit the introduction panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Panel action').setRequired(false).addChoices({name:'Refresh panel',value:'refresh'},{name:'Edit panel',value:'edit'}))
   ,new SlashCommandBuilder().setName('introduction-template').setDescription('View or edit the introduction template.').setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Template action').setRequired(false).addChoices({name:'View template',value:'view'},{name:'Edit template',value:'edit'}))
@@ -367,8 +367,18 @@ export async function handleCommand(interaction) {
   }
   if(name==='confession-setup') {
     const channel=interaction.options.getChannel('channel');
+    if(!channel?.isTextBased()) return interaction.reply({content:'Choose a text channel.',ephemeral:true});
+    const startNumber=interaction.options.getInteger('start_number');
+    if(startNumber!==null) {
+      // (guild_id, confession_number) is uniquely indexed, so starting at or below a number already
+      // used would make the next confession fail to post. Refuse instead of breaking it later.
+      const highest=await highestConfessionNumber(interaction.guildId);
+      if(highest!==null && startNumber<=highest) return interaction.reply({content:'Confession **#'+highest+'** already exists in this server, so numbering cannot restart at **#'+startNumber+'** — the numbers have to stay unique. Use **'+(highest+1)+'** or higher.',ephemeral:true});
+      await setConfessionStartNumber(interaction.guildId,startNumber);
+    }
     await setConfessionChannel(interaction.guildId,channel.id);
-    return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('💌 Confession chamber prepared').setDescription('Confessions will now be published in <#'+channel.id+'>.')]});
+    const next=await getConfessionNextNumber(interaction.guildId);
+    return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('💌 Confession chamber prepared').setDescription('Confessions will now be published in <#'+channel.id+'>.\n\n₊˚⊹ᰔ The next confession will be **#'+next+'**.'+(startNumber!==null?'':'\n\n♡ Pass `start_number` if you want to continue from a different number.'))]});
   }
   if (name === 'introduction-setup') {
     const channel = interaction.options.getChannel('channel');

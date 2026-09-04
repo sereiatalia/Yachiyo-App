@@ -24,6 +24,27 @@ export async function recentConfessions(guildId, limit = 25) {
   return result.rows;
 }
 
+// confession_counters.next_number is the number the next confession will be given.
+export async function getConfessionNextNumber(guildId) {
+  const result = await query('SELECT next_number FROM confession_counters WHERE guild_id=$1', [guildId]);
+  return result.rows[0]?.next_number ?? 1;
+}
+
+// The highest number already used, so a caller can avoid colliding with it. There is a unique index
+// on (guild_id, confession_number), so a collision would make the next confession fail to post.
+export async function highestConfessionNumber(guildId) {
+  const result = await query('SELECT MAX(confession_number) AS highest FROM confessions WHERE guild_id=$1', [guildId]);
+  return result.rows[0]?.highest ?? null;
+}
+
+export async function setConfessionStartNumber(guildId, startNumber) {
+  await query(
+    `INSERT INTO confession_counters (guild_id, next_number) VALUES ($1,$2)
+     ON CONFLICT (guild_id) DO UPDATE SET next_number=EXCLUDED.next_number`,
+    [guildId, startNumber]
+  );
+}
+
 export async function setConfessionChannel(guildId, channelId) {
   await query(
     'INSERT INTO guild_settings (guild_id, confession_channel_id) VALUES ($1,$2) ON CONFLICT (guild_id) DO UPDATE SET confession_channel_id=$2, updated_at=NOW()',
