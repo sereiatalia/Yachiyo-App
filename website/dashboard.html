@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yachiyo App Dashboard</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        discord: {
+                            blurple: '#5865F2',
+                            'blurple-hover': '#4752C4',
+                            dark: '#36393f',
+                            darker: '#2f3136',
+                            darkest: '#202225',
+                            text: '#dcddde',
+                            muted: '#72767d',
+                            green: '#3ba55d',
+                            red: '#ed4245'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #36393f;
+            color: #dcddde;
+            overflow-x: hidden;
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #202225; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #202225; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #5865F2; 
+        }
+
+        /* Discord Inputs */
+        .discord-input {
+            background-color: #202225;
+            color: #dcddde;
+            border: 1px solid transparent;
+            transition: border-color 0.2s ease;
+        }
+        .discord-input:focus {
+            outline: none;
+            border-color: #5865F2;
+        }
+        
+        /* Toggle Switch */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #3ba55d;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #3ba55d;
+        }
+        .toggle-checkbox {
+            right: 0;
+            z-index: 1;
+            border-color: #72767d;
+        }
+        .toggle-label {
+            width: 3rem;
+            background-color: #72767d;
+            transition: all 0.3s;
+        }
+        .toggle-dot {
+            top: -0.25rem;
+            left: -0.25rem;
+            transition: all 0.3s;
+        }
+        .toggle-checkbox:checked + .toggle-label .toggle-dot {
+            transform: translateX(100%);
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="antialiased h-screen flex flex-col">
+
+    <!-- Top Navbar -->
+    <nav class="bg-discord-darkest h-14 flex items-center px-6 border-b border-gray-900 shrink-0 shadow-sm z-20">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500 to-discord-blurple flex items-center justify-center text-white font-bold shadow-lg">
+                Y
+            </div>
+            <span class="font-bold text-lg text-white">Yachiyo App</span>
+        </div>
+        <div class="ml-auto flex items-center gap-4 hidden" id="user-profile">
+            <span class="text-sm font-medium text-discord-text" id="display-user-id">Admin</span>
+            <img src="https://placehold.co/100x100/5865F2/FFFFFF?text=A" class="w-8 h-8 rounded-full border border-gray-700" alt="User Avatar">
+            <button onclick="logout()" class="text-discord-muted hover:text-discord-red transition-colors" title="Logout">
+                <i class="fa-solid fa-right-from-bracket"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 relative overflow-hidden flex">
+        
+        <!-- View 1: Login -->
+        <div id="view-login" class="absolute inset-0 flex flex-col items-center justify-center fade-in bg-discord-dark z-10">
+            <div class="bg-discord-darker p-8 rounded-xl shadow-2xl max-w-md w-full border border-gray-800 text-center">
+                <div class="w-20 h-20 rounded-2xl bg-gradient-to-tr from-pink-500 to-discord-blurple flex items-center justify-center text-white font-bold shadow-lg mx-auto mb-6 text-4xl">
+                    <i class="fa-solid fa-star"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-white mb-2">Welcome to Yachiyo</h1>
+                <p class="text-discord-muted mb-8 text-sm">Manage your server's confessions, economy, and moderation settings all in one place.</p>
+                
+                <button onclick="simulateDiscordLogin()" class="w-full bg-discord-blurple hover:bg-discord-blurple-hover text-white font-medium py-3 px-4 rounded-[3px] transition-colors flex items-center justify-center gap-3 shadow-lg">
+                    <i class="fa-brands fa-discord text-xl"></i>
+                    Login with Discord
+                </button>
+                <div class="mt-4 text-xs text-discord-muted flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-lock text-green-500"></i> Secure OAuth2 Connection
+                </div>
+            </div>
+        </div>
+
+        <!-- View 2: Server Selection -->
+        <div id="view-servers" class="absolute inset-0 overflow-y-auto p-8 fade-in hidden bg-discord-dark z-10">
+            <div class="max-w-5xl mx-auto">
+                <h2 class="text-2xl font-bold text-white mb-2">Select a Server</h2>
+                <p class="text-discord-muted mb-8">Choose a server to configure Yachiyo App settings.</p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="server-list">
+                    <!-- Servers will be injected here via JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- View 3: Dashboard Workspace -->
+        <div id="view-dashboard" class="absolute inset-0 flex w-full h-full hidden fade-in z-10">
+            <!-- Sidebar -->
+            <aside class="w-64 bg-discord-darker h-full flex flex-col border-r border-gray-800 shrink-0">
+                <div class="p-4 border-b border-gray-800 flex items-center gap-3 cursor-pointer hover:bg-gray-800/50 transition-colors" onclick="showView('servers')">
+                    <div class="w-10 h-10 rounded-xl bg-gray-700 flex items-center justify-center" id="active-server-icon">
+                        <!-- Icon -->
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-white text-sm" id="active-server-name">Server Name</h3>
+                        <p class="text-xs text-discord-muted flex items-center gap-1"><i class="fa-solid fa-chevron-left"></i> Change</p>
+                    </div>
+                </div>
+
+                <div class="p-3 flex-1 overflow-y-auto space-y-1">
+                    <div class="text-xs font-bold text-discord-muted uppercase tracking-wider mb-2 mt-4 px-2">Services</div>
+                    
+                    <button onclick="switchTab('confession')" id="tab-confession" class="dashboard-tab w-full flex items-center gap-3 px-3 py-2 rounded text-sm font-medium bg-gray-700/50 text-white">
+                        <i class="fa-solid fa-envelope text-pink-400 w-5 text-center"></i> Confessions
+                    </button>
+                    
+                    <button onclick="switchTab('economy')" id="tab-economy" class="dashboard-tab w-full flex items-center gap-3 px-3 py-2 rounded text-sm font-medium text-discord-muted hover:bg-gray-800 hover:text-discord-text transition-colors">
+                        <i class="fa-solid fa-coins text-yellow-400 w-5 text-center"></i> Economy
+                    </button>
+                    
+                    <button onclick="switchTab('audit')" id="tab-audit" class="dashboard-tab w-full flex items-center gap-3 px-3 py-2 rounded text-sm font-medium text-discord-muted hover:bg-gray-800 hover:text-discord-text transition-colors">
+                        <i class="fa-solid fa-clipboard-list text-blue-400 w-5 text-center"></i> Audit Logs
+                    </button>
+
+                    <div class="text-xs font-bold text-discord-muted uppercase tracking-wider mb-2 mt-6 px-2">Advanced</div>
+                    
+                    <button onclick="switchTab('brain')" id="tab-brain" class="dashboard-tab w-full flex items-center gap-3 px-3 py-2 rounded text-sm font-medium text-discord-muted hover:bg-gray-800 hover:text-discord-text transition-colors">
+                        <i class="fa-solid fa-brain text-purple-400 w-5 text-center"></i> Brain Memory
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Content Area -->
+            <div class="flex-1 bg-discord-dark overflow-y-auto relative p-8">
+                <!-- Toast Notification -->
+                <div id="toast" class="fixed top-20 right-8 bg-discord-green text-white px-4 py-3 rounded shadow-lg transform translate-x-full opacity-0 transition-all duration-300 z-50 flex items-center gap-3">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span id="toast-message">Configuration saved successfully!</span>
+                </div>
+
+                <div class="max-w-3xl">
+                    <div class="flex items-center justify-between mb-8">
+                        <div>
+                            <h2 class="text-2xl font-bold text-white" id="panel-title">Confession Service</h2>
+                            <p class="text-discord-muted text-sm mt-1" id="panel-desc">Manage anonymous confessions routing and count logic.</p>
+                        </div>
+                        <button onclick="saveConfiguration()" class="bg-discord-green hover:bg-green-600 text-white px-5 py-2 rounded-[3px] font-medium transition-colors shadow-md flex items-center gap-2">
+                            <i class="fa-solid fa-floppy-disk"></i> Save Changes
+                        </button>
+                    </div>
+
+                    <div class="bg-discord-darker rounded-lg border border-gray-800 shadow-sm">
+                        <!-- Confession Settings Panel -->
+                        <div id="panel-confession" class="settings-panel p-6 space-y-6">
+                            
+                            <div class="border-b border-gray-700/50 pb-4 mb-4">
+                                <h3 class="text-lg font-semibold text-white mb-1"><i class="fa-solid fa-hashtag text-discord-muted mr-2"></i> Channel Setup</h3>
+                                <p class="text-sm text-discord-muted mb-4">Select where Yachiyo will post the anonymous confessions.</p>
+                                
+                                <div>
+                                    <label class="block text-xs font-bold text-[#b9bbbe] uppercase mb-2">Confession Channel ID</label>
+                                    <input type="text" id="confess-channel" class="discord-input w-full p-2.5 rounded-[3px] text-sm" placeholder="e.g., 1045192837465928374">
+                                    <p class="text-xs text-discord-muted mt-2">Right click a channel in Discord and click "Copy ID".</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 class="text-lg font-semibold text-white mb-1"><i class="fa-solid fa-arrow-up-1-9 text-discord-muted mr-2"></i> Sequence Numbering</h3>
+                                <p class="text-sm text-discord-muted mb-4">Configure the starting count for confessions. If you are migrating from another bot, set this to your last confession number.</p>
+                                
+                                <div>
+                                    <label class="block text-xs font-bold text-[#b9bbbe] uppercase mb-2">Starting Confession Count</label>
+                                    <input type="number" id="confess-count" class="discord-input w-full p-2.5 rounded-[3px] text-sm" placeholder="1" min="1">
+                                    <p class="text-xs text-discord-muted mt-2">The next confession will be #<span id="preview-count" class="font-bold text-white">1</span></p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between pt-4 border-t border-gray-700/50">
+                                <div>
+                                    <h4 class="text-white font-medium">Log Confession Authors</h4>
+                                    <p class="text-xs text-discord-muted">Send author IDs to a private admin channel for moderation.</p>
+                                </div>
+                                <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+                                    <input type="checkbox" name="toggle" id="confess-log-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                                    <label for="confess-log-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer">
+                                        <span class="toggle-dot absolute block w-6 h-6 bg-white rounded-full border-2 shadow inset-y-0 left-0"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Economy Settings Panel -->
+                        <div id="panel-economy" class="settings-panel p-6 space-y-6 hidden">
+                             <div class="border-b border-gray-700/50 pb-4 mb-4">
+                                <h3 class="text-lg font-semibold text-white mb-1">Global Currency</h3>
+                                <p class="text-sm text-discord-muted mb-4">Set up the base economy rules for this server.</p>
+                                
+                                <div>
+                                    <label class="block text-xs font-bold text-[#b9bbbe] uppercase mb-2">Currency Name / Symbol</label>
+                                    <input type="text" id="econ-symbol" class="discord-input w-full p-2.5 rounded-[3px] text-sm" placeholder="e.g., Star Coins ⭐️">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-[#b9bbbe] uppercase mb-2">Starting Balance for New Members</label>
+                                <input type="number" id="econ-start-bal" class="discord-input w-full p-2.5 rounded-[3px] text-sm" placeholder="500">
+                            </div>
+                        </div>
+
+                        <!-- Audit Settings Panel -->
+                        <div id="panel-audit" class="settings-panel p-6 space-y-6 hidden">
+                             <div class="border-b border-gray-700/50 pb-4 mb-4">
+                                <h3 class="text-lg font-semibold text-white mb-1">Audit Log Destination</h3>
+                                <div>
+                                    <label class="block text-xs font-bold text-[#b9bbbe] uppercase mb-2">Log Channel ID</label>
+                                    <input type="text" id="audit-channel" class="discord-input w-full p-2.5 rounded-[3px] text-sm" placeholder="ID of the mod-logs channel">
+                                </div>
+                            </div>
+                            
+                            <div class="space-y-4">
+                                <div class="flex items-center justify-between">
+                                    <div class="text-sm text-white">Log Deleted Messages</div>
+                                    <input type="checkbox" id="audit-msg-del" class="rounded bg-discord-darkest border-gray-600 text-discord-blurple focus:ring-discord-blurple h-4 w-4">
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <div class="text-sm text-white">Log Member Joins/Leaves</div>
+                                    <input type="checkbox" id="audit-member" class="rounded bg-discord-darkest border-gray-600 text-discord-blurple focus:ring-discord-blurple h-4 w-4">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Brain Settings Panel (Placeholder) -->
+                        <div id="panel-brain" class="settings-panel p-6 hidden">
+                            <div class="text-center py-10">
+                                <i class="fa-solid fa-brain text-5xl text-discord-muted mb-4"></i>
+                                <h3 class="text-xl font-bold text-white">Brain Memory Engine</h3>
+                                <p class="text-discord-muted mt-2">Advanced memory and custom utility variables are configured via bot commands.</p>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Firebase Imports & Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Environment Variables
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'yachiyo-dashboard-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            // Fallback mock configuration for visual structure when not deployed in the strict environment
+            apiKey: "mock-api-key",
+            authDomain: "mock.firebaseapp.com",
+            projectId: "mock-project",
+            storageBucket: "mock.appspot.com"
+        };
+        const customAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app, db, auth, currentUser, currentServerId;
+
+        // Mock Server Data for the Dashboard (simulating a Discord API /guilds fetch)
+        const mockServers = [
+            { id: '109823476', name: 'Anime Hangout', icon: 'AH', color: 'from-blue-500 to-purple-600' },
+            { id: '982734628', name: 'Genshin Impact PH', icon: 'GI', color: 'from-green-400 to-blue-500' },
+            { id: '564738291', name: 'Yachiyo Dev Server', icon: 'YD', color: 'from-pink-500 to-orange-400' }
+        ];
+
+        // Initialize App Functions
+        async function initApp() {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Set up UI listeners
+                setupUI();
+                
+                // In a real flow, the user authenticates right away. 
+                // We await manual click in 'simulateDiscordLogin'
+            } catch (error) {
+                console.error("Firebase init error:", error);
+            }
+        }
+
+        // --- AUTH FLOW ---
+        window.simulateDiscordLogin = async () => {
+            const btn = document.querySelector('#view-login button');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Authenticating...';
+            btn.disabled = true;
+
+            try {
+                if (customAuthToken) {
+                    await signInWithCustomToken(auth, customAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                // Auth state listener handles the view transition
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        currentUser = user;
+                        document.getElementById('user-profile').classList.remove('hidden');
+                        document.getElementById('display-user-id').textContent = user.uid.substring(0,6) + '...';
+                        renderServerList();
+                        showView('servers');
+                    }
+                });
+            } catch (error) {
+                console.error("Login failed:", error);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        };
+
+        window.logout = async () => {
+            if (auth) {
+                await signOut(auth);
+                currentUser = null;
+                document.getElementById('user-profile').classList.add('hidden');
+                showView('login');
+            }
+        }
+
+        // --- VIEW MANAGEMENT ---
+        window.showView = (viewName) => {
+            document.getElementById('view-login').classList.add('hidden');
+            document.getElementById('view-servers').classList.add('hidden');
+            document.getElementById('view-dashboard').classList.add('hidden');
+
+            document.getElementById(`view-${viewName}`).classList.remove('hidden');
+        };
+
+        window.renderServerList = () => {
+            const container = document.getElementById('server-list');
+            container.innerHTML = '';
+            
+            mockServers.forEach(server => {
+                const card = document.createElement('div');
+                card.className = "bg-discord-darker p-4 rounded-xl border border-gray-800 hover:border-discord-blurple cursor-pointer transition-all hover:-translate-y-1 group flex items-center gap-4";
+                card.onclick = () => selectServer(server);
+                
+                card.innerHTML = `
+                    <div class="w-14 h-14 rounded-[1rem] bg-gradient-to-br ${server.color} flex items-center justify-center text-white font-bold text-xl shadow-lg group-hover:rounded-[0.5rem] transition-all duration-300">
+                        ${server.icon}
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-white">${server.name}</h3>
+                        <p class="text-xs text-discord-muted mt-1">ID: ${server.id}</p>
+                    </div>
+                    <div class="ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i class="fa-solid fa-chevron-right text-discord-blurple"></i>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        };
+
+        // --- CONFIGURATION LOGIC ---
+        window.selectServer = async (server) => {
+            currentServerId = server.id;
+            
+            // Update UI with server info
+            document.getElementById('active-server-name').textContent = server.name;
+            const iconDiv = document.getElementById('active-server-icon');
+            iconDiv.className = `w-10 h-10 rounded-[0.5rem] bg-gradient-to-br ${server.color} flex items-center justify-center text-white font-bold`;
+            iconDiv.textContent = server.icon;
+            
+            // Default to Confession Tab
+            switchTab('confession');
+            
+            // Load data from Firebase
+            await loadServerConfig(server.id);
+            
+            showView('dashboard');
+        };
+
+        window.loadServerConfig = async (serverId) => {
+            if (!currentUser) return;
+            
+            try {
+                // Rule 1: Strict paths for user-specific data
+                const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'serverConfigs', serverId);
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    
+                    // Populate Confession
+                    if (data.confession) {
+                        document.getElementById('confess-channel').value = data.confession.channelId || '';
+                        document.getElementById('confess-count').value = data.confession.startCount || '1';
+                        document.getElementById('confess-log-toggle').checked = data.confession.logEnabled || false;
+                        document.getElementById('preview-count').textContent = data.confession.startCount || '1';
+                    }
+                    
+                    // Populate Economy
+                    if (data.economy) {
+                        document.getElementById('econ-symbol').value = data.economy.symbol || '';
+                        document.getElementById('econ-start-bal').value = data.economy.startBalance || '0';
+                    }
+                    
+                    // Populate Audit
+                    if (data.audit) {
+                        document.getElementById('audit-channel').value = data.audit.channelId || '';
+                        document.getElementById('audit-msg-del').checked = data.audit.logMessageDeletes || false;
+                        document.getElementById('audit-member').checked = data.audit.logMemberJoins || false;
+                    }
+                } else {
+                    // Reset to defaults if no config exists
+                    document.getElementById('confess-channel').value = '';
+                    document.getElementById('confess-count').value = '1';
+                    document.getElementById('confess-log-toggle').checked = false;
+                    document.getElementById('preview-count').textContent = '1';
+                    document.getElementById('econ-symbol').value = '';
+                    document.getElementById('econ-start-bal').value = '';
+                    document.getElementById('audit-channel').value = '';
+                    document.getElementById('audit-msg-del').checked = false;
+                    document.getElementById('audit-member').checked = false;
+                }
+            } catch (error) {
+                console.error("Error loading config:", error);
+            }
+        };
+
+        window.saveConfiguration = async () => {
+            if (!currentUser || !currentServerId) return;
+
+            // Gather data from inputs
+            const configData = {
+                confession: {
+                    channelId: document.getElementById('confess-channel').value,
+                    startCount: parseInt(document.getElementById('confess-count').value) || 1,
+                    logEnabled: document.getElementById('confess-log-toggle').checked
+                },
+                economy: {
+                    symbol: document.getElementById('econ-symbol').value,
+                    startBalance: parseInt(document.getElementById('econ-start-bal').value) || 0
+                },
+                audit: {
+                    channelId: document.getElementById('audit-channel').value,
+                    logMessageDeletes: document.getElementById('audit-msg-del').checked,
+                    logMemberJoins: document.getElementById('audit-member').checked
+                },
+                updatedAt: new Date().toISOString()
+            };
+
+            try {
+                // Rule 1: Strict Paths
+                const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'serverConfigs', currentServerId);
+                await setDoc(docRef, configData, { merge: true });
+                
+                showToast("Configuration saved successfully!");
+            } catch (error) {
+                console.error("Error saving config:", error);
+                showToast("Error saving configuration.", true);
+            }
+        };
+
+        // --- UI HELPERS ---
+        const panelData = {
+            'confession': { title: 'Confession Service', desc: 'Manage anonymous confessions routing and count logic.' },
+            'economy': { title: 'Global Economy', desc: 'Setup server currency, starting balances, and shop toggles.' },
+            'audit': { title: 'Audit Logging', desc: 'Keep track of deleted messages, joins, and moderation actions.' },
+            'brain': { title: 'Brain Memory', desc: 'Advanced AI and context settings for Yachiyo.' }
+        };
+
+        window.switchTab = (tabId) => {
+            // Update Sidebar Styling
+            document.querySelectorAll('.dashboard-tab').forEach(el => {
+                el.classList.remove('bg-gray-700/50', 'text-white');
+                el.classList.add('text-discord-muted', 'hover:bg-gray-800');
+            });
+            const activeTab = document.getElementById(`tab-${tabId}`);
+            activeTab.classList.remove('text-discord-muted', 'hover:bg-gray-800');
+            activeTab.classList.add('bg-gray-700/50', 'text-white');
+
+            // Hide all panels
+            document.querySelectorAll('.settings-panel').forEach(el => {
+                el.classList.add('hidden');
+            });
+
+            // Show target panel
+            document.getElementById(`panel-${tabId}`).classList.remove('hidden');
+            
+            // Update Headers
+            document.getElementById('panel-title').textContent = panelData[tabId].title;
+            document.getElementById('panel-desc').textContent = panelData[tabId].desc;
+        };
+
+        window.showToast = (message, isError = false) => {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-message');
+            
+            toastMsg.textContent = message;
+            if (isError) {
+                toast.classList.remove('bg-discord-green');
+                toast.classList.add('bg-discord-red');
+                toast.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <span id="toast-message">${message}</span>`;
+            } else {
+                toast.classList.remove('bg-discord-red');
+                toast.classList.add('bg-discord-green');
+                toast.innerHTML = `<i class="fa-solid fa-circle-check"></i> <span id="toast-message">${message}</span>`;
+            }
+
+            // Animate In
+            toast.classList.remove('translate-x-full', 'opacity-0');
+            
+            // Auto hide
+            setTimeout(() => {
+                toast.classList.add('translate-x-full', 'opacity-0');
+            }, 3000);
+        };
+
+        function setupUI() {
+            // Live preview for confession count
+            const countInput = document.getElementById('confess-count');
+            countInput.addEventListener('input', (e) => {
+                document.getElementById('preview-count').textContent = e.target.value || '1';
+            });
+        }
+
+        // Start app
+        initApp();
+    </script>
+</body>
+</html>
