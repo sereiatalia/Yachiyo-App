@@ -940,7 +940,10 @@ client.on('messageUpdate', async (oldMsg, newMsg) => {
   const message = newMsg.partial ? await newMsg.fetch().catch(() => newMsg) : newMsg;
   const author = message.author;
   if (!author || author.bot || author.id === client.user?.id) return;
-  sendAuditLog(client, message.guild, { eventType:'message.edit', actorId:author.id, targetId:message.channelId, data:{ channelName:message.channel?.name, messageId:message.id, authorId:author.id, createdTimestamp:message.createdTimestamp, before:oldMsg.content, after:message.content, attachmentUrls:[...message.attachments.values()].map(a => a.url), attachmentDetails:[...message.attachments.values()].map(a => ({name:a.name,url:a.url,contentType:a.contentType})), previousAttachmentUrls:[...(oldMsg.attachments?.values?.() ?? [])].map(a => a.url), summary:'A message was edited.' } }).catch(console.error);
+  await new Promise(resolve => setTimeout(resolve, 500));
+  const audit = await message.guild.fetchAuditLogs({ type: AuditLogEvent.MessageUpdate, limit: 10 }).catch(() => null);
+  const entry = audit?.entries.find(item => item.target?.id === author.id && (!item.extra?.channel?.id || item.extra.channel.id === message.channelId));
+  sendAuditLog(client, message.guild, { eventType:'message.edit', actorId:entry?.executor?.id ?? author.id, targetId:message.channelId, data:{ channelName:message.channel?.name, messageId:message.id, authorId:author.id, editorId:entry?.executor?.id ?? null, createdTimestamp:message.createdTimestamp, before:oldMsg.content, after:message.content, attachmentUrls:[...message.attachments.values()].map(a => a.url), attachmentDetails:[...message.attachments.values()].map(a => ({name:a.name,url:a.url,contentType:a.contentType})), previousAttachmentUrls:[...(oldMsg.attachments?.values?.() ?? [])].map(a => a.url), summary:'A message was edited.' } }).catch(console.error);
 });
 client.on('roleCreate', role => sendAuditLog(client,role.guild,{eventType:'role.create',targetId:role.id,data:{summary:`Role **${role.name}** was created.`}}).catch(console.error));
 client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.delete',targetId:role.id,data:{summary:`Role **${role.name}** was deleted.`}}).catch(console.error));
