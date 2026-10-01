@@ -38,6 +38,7 @@ import { buildGenshinProfileEmbed } from './ui/genshinProfile.js';
 import { getActiveQuiz, joinQuiz, getPlayers, finishQuiz, nextQuestion, startRound, activateQuiz, answerQuiz, getCurrentRound } from './services/quizService.js';
 import { getReactionRolePanels, getReactionRolePanel, createReactionRolePanel, addReactionRoleOption, removeReactionRoleOption, setReactionRolePanelMessage, getReactionRoleByMessage, deleteReactionRolePanel } from './services/reactionRoleService.js';
 import { buildRobloxProfileEmbed } from './ui/robloxProfile.js';
+import { db } from './database.js'; 
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -281,6 +282,18 @@ client.once('ready', async () => {
     activities: [{ name: 'Yachiyo', state: 'Managing Servers', type: ActivityType.Custom }],
     status: 'online',
   });
+
+  const currentServerIds = client.guilds.cache.map(guild => guild.id);
+  try {
+      await db.collection('system').doc('botInfo').set({
+          activeServers: currentServerIds,
+          lastUpdated: new Date()
+      }, { merge: true });
+      console.log("Synced active server list to Firebase!");
+  } catch (error) {
+      console.error("Failed to sync servers to Firebase:", error);
+  }
+
   for (const voice of await getVoiceChannels().catch(() => [])) keepVoiceConnection(voice.guild_id, voice.voice_channel_id).catch(console.error);
   for (const reminder of await pendingBumpReminders().catch(() => [])) scheduleBumpReminder(reminder.guild_id,reminder.user_id,reminder.remind_at);
   for (const guild of client.guilds.cache.values()) {
@@ -774,9 +787,6 @@ client.on('interactionCreate', async interaction => {
     const member=await interaction.guild.members.fetch(interaction.user.id); const has=member.roles.cache.has(role.id);
     await member.roles[has?'remove':'add'](role,'Reaction role panel selection'); return interaction.reply({content:(has?'➖ Removed ':'✅ Added ')+role+' '+option.emoji,ephemeral:true});
   }
-  // The staff roster was removed for privacy. Panels published before that change still carry a
-  // clickable STAFFS button until they are refreshed, so this handler stays as a stub rather than
-  // being deleted — otherwise those stale buttons would keep serving the member list.
   if (interaction.isButton() && interaction.customId === 'server_info_staffs') {
     return interaction.reply({content:'The staff list is no longer shown here. Ask a staff member directly, or open a ticket if you need help.',ephemeral:true});
   }
