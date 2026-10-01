@@ -40,6 +40,7 @@ import { getReactionRolePanels, getReactionRolePanel, createReactionRolePanel, a
 import { buildRobloxProfileEmbed } from './ui/robloxProfile.js';
 import { db, query } from './database/db.js';
 import { startFirebaseBackups } from './services/firebaseBackupService.js';
+import { listGuildBackups, getGuildBackup } from './services/firebaseBackupService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -107,6 +108,22 @@ const websiteServer = createServer(async (request, response) => {
     } catch (error) {
       console.error('[DASHBOARD_IMPORT]', error);
       return sendJson(response, error.statusCode || 500, { error: error.message || 'Import failed.' });
+    }
+  }
+  if (route.match(/^\/api\/guilds\/[^/]+\/backups(?:\/[^/]+)?$/)) {
+    const parts = route.split('/');
+    const guildId = parts[3];
+    const snapshotId = parts[5];
+    if (request.method === 'OPTIONS') return sendJson(response, 204, null);
+    try {
+      await authorizeDashboardRequest(request, guildId);
+      if (request.method !== 'GET') return sendJson(response, 405, { error: 'Method not allowed.' });
+      if (!snapshotId) return sendJson(response, 200, { backups: await listGuildBackups(guildId) });
+      const backup = await getGuildBackup(guildId, snapshotId);
+      return backup ? sendJson(response, 200, backup) : sendJson(response, 404, { error: 'Backup not found.' });
+    } catch (error) {
+      console.error('[DASHBOARD_BACKUPS]', error);
+      return sendJson(response, error.statusCode || 500, { error: error.message || 'Could not load backups.' });
     }
   }
   if (route === '/api/bot/guilds') {
