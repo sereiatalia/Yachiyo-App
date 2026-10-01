@@ -1,4 +1,3 @@
-warning: in the working copy of 'src/index.js', LF will be replaced by CRLF the next time Git touches it
 import 'dotenv/config';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
