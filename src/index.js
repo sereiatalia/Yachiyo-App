@@ -930,7 +930,10 @@ client.on('messageDelete', async msg => {
   const deletedMessage = msg.partial ? await msg.fetch().catch(() => msg) : msg;
   if (!deletedMessage.author || deletedMessage.author.bot || deletedMessage.author.id === client.user?.id) return;
   const attachments = [...(deletedMessage.attachments?.values?.() ?? [])];
-  sendAuditLog(client, msg.guild, { eventType:'message.delete', actorId:deletedMessage.author.id, targetId:msg.channelId, data:{ channelName:msg.channel?.name, messageId:msg.id, authorId:deletedMessage.author.id, createdTimestamp:deletedMessage.createdTimestamp, content:deletedMessage.content, attachments:attachments.length, attachmentUrls:attachments.map(a => a.url), attachmentDetails:attachments.map(a => ({name:a.name,url:a.url,contentType:a.contentType})), summary:'A message was deleted.' } }).catch(console.error);
+  await new Promise(resolve => setTimeout(resolve, 500));
+  const audit = await msg.guild.fetchAuditLogs({ type: AuditLogEvent.MessageDelete, limit: 10 }).catch(() => null);
+  const entry = audit?.entries.find(item => item.target?.id === deletedMessage.author.id && (!item.extra?.channel?.id || item.extra.channel.id === msg.channelId));
+  sendAuditLog(client, msg.guild, { eventType:'message.delete', actorId:entry?.executor?.id ?? deletedMessage.author.id, targetId:msg.channelId, data:{ channelName:msg.channel?.name, messageId:msg.id, authorId:deletedMessage.author.id, deleterId:entry?.executor?.id ?? null, createdTimestamp:deletedMessage.createdTimestamp, content:deletedMessage.content, attachments:attachments.length, attachmentUrls:attachments.map(a => a.url), attachmentDetails:attachments.map(a => ({name:a.name,url:a.url,contentType:a.contentType})), summary:'A message was deleted.' } }).catch(console.error);
 });
 client.on('messageUpdate', async (oldMsg, newMsg) => {
   if (!newMsg.guild || (oldMsg.content === newMsg.content && oldMsg.attachments?.size === newMsg.attachments?.size)) return;
