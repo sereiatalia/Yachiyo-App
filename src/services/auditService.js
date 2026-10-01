@@ -101,6 +101,10 @@ export async function recordAudit({ guildId, eventType, actorId = null, targetId
 export async function sendAuditLog(client, guild, payload) {
   if (payload.actorId && payload.actorId === client.user?.id) return;
   if (payload.data?.isBotEvent) return;
+  if (payload.eventType === 'moderation.action' && /completed a kick action/i.test(payload.data?.summary || '') && payload.targetId) {
+    const kickedUser = await client.users.fetch(payload.targetId).catch(() => null);
+    if (kickedUser) payload.data = { ...payload.data, targetUsername: kickedUser.tag, kickedAt: new Date().toISOString() };
+  }
   await recordAudit({ guildId: guild.id, ...payload });
   const settings = (await query('SELECT log_channel_id, audit_channels FROM guild_settings WHERE guild_id=$1', [guild.id])).rows[0] ?? {};
   const category = payload.eventType === 'moderation.curse_warning' ? 'curse' : payload.eventType === 'message.delete' ? 'message-deleted' : payload.eventType === 'message.edit' ? 'message-edited' : payload.eventType === 'member.leave' ? 'member-leave' : payload.eventType === 'moderation.kick' || (payload.eventType === 'moderation.action' && /completed a kick action/i.test(payload.data?.summary || '')) ? 'kick' : payload.eventType.startsWith('message.') ? 'messages' : payload.eventType.startsWith('member.') ? 'members' : payload.eventType.startsWith('moderation.') ? 'moderation' : payload.eventType.startsWith('confession.') ? 'confessions' : ['role.create','role.delete','channel.create','channel.delete'].includes(payload.eventType) ? 'server' : null;
