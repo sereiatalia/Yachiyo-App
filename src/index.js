@@ -38,7 +38,7 @@ import { buildGenshinProfileEmbed } from './ui/genshinProfile.js';
 import { getActiveQuiz, joinQuiz, getPlayers, finishQuiz, nextQuestion, startRound, activateQuiz, answerQuiz, getCurrentRound } from './services/quizService.js';
 import { getReactionRolePanels, getReactionRolePanel, createReactionRolePanel, addReactionRoleOption, removeReactionRoleOption, setReactionRolePanelMessage, getReactionRoleByMessage, deleteReactionRolePanel } from './services/reactionRoleService.js';
 import { buildRobloxProfileEmbed } from './ui/robloxProfile.js';
-import { db } from './database.js'; 
+import { db } from './database/database.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
