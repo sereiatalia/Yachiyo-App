@@ -30,6 +30,20 @@ export async function backupGuildToFirebase(guildId) {
   return { skipped: false, exportedAt: snapshot.exportedAt, tableCount: tableNames.length };
 }
 
+export async function listGuildBackups(guildId) {
+  const store = getBackupStore();
+  if (!store) return [];
+  const snapshot = await store.collection('yachiyo_backups').doc(guildId).collection('snapshots').orderBy('exportedAt', 'desc').limit(30).get();
+  return snapshot.docs.map(doc => ({ id: doc.id, exportedAt: doc.data().exportedAt, tableCount: Object.keys(doc.data().tables || {}).length }));
+}
+
+export async function getGuildBackup(guildId, snapshotId) {
+  const store = getBackupStore();
+  if (!store) return null;
+  const doc = await store.collection('yachiyo_backups').doc(guildId).collection('snapshots').doc(snapshotId).get();
+  return doc.exists ? doc.data() : null;
+}
+
 export function startFirebaseBackups(client, intervalMs = 15 * 60 * 1000) {
   const run = async () => {
     for (const guild of client.guilds.cache.values()) {
