@@ -50,7 +50,24 @@ const websiteServer = createServer(async (request, response) => {
   const route = request.url?.split('?')[0] ?? '/';
   if (route.startsWith('/api/guilds/') && route.endsWith('/server-info')) {
     const guildId = route.split('/')[3];
-    if (request.method === 'OPTIONS') return sendJson(response, 204, null);
+  if (request.method === 'OPTIONS') return sendJson(response, 204, null);
+  if (route === '/api/auth/discord/token' && request.method === 'POST') {
+    try {
+      if (!process.env.DISCORD_CLIENT_SECRET) return sendJson(response, 503, { error: 'Discord OAuth is not configured on the bot service.' });
+      const body = await readJsonBody(request);
+      const params = new URLSearchParams({
+        client_id: process.env.DISCORD_CLIENT_ID,
+        client_secret: process.env.DISCORD_CLIENT_SECRET,
+        grant_type: body.grant_type === 'refresh_token' ? 'refresh_token' : 'authorization_code',
+        redirect_uri: process.env.DISCORD_REDIRECT_URI || 'https://sereiatalia.github.io/Yachiyo-Website/',
+        ...(body.grant_type === 'refresh_token' ? { refresh_token: body.refresh_token } : { code: body.code })
+      });
+      const discordResponse = await fetch('https://discord.com/api/oauth2/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: params });
+      const payload = await discordResponse.json();
+      if (!discordResponse.ok) return sendJson(response, 401, { error: payload.error_description || 'Discord login could not be completed.' });
+      return sendJson(response, 200, payload);
+    } catch (error) { console.error('[DISCORD_OAUTH]', error); return sendJson(response, 500, { error: 'Discord login could not be completed.' }); }
+  }
     try {
       const auth = await authorizeDashboardRequest(request, guildId);
       if (request.method === 'GET') return sendJson(response, 200, await getServerInfo(guildId));
@@ -165,7 +182,7 @@ const websiteServer = createServer(async (request, response) => {
     try {
       await authorizeDashboardRequest(request, guildId);
       if (request.method !== 'GET') return sendJson(response, 405, { error: 'Method not allowed.' });
-      return sendJson(response, 200, { commands: registeredCommands.map(command => command.toJSON()) });
+      return sendJson(response, 200, { commands: registeredCommands.map(command => typeof command?.toJSON === 'function' ? command.toJSON() : command) });
     } catch (error) { console.error('[DASHBOARD_COMMANDS]', error); return sendJson(response, error.statusCode || 500, { error: error.message || 'Could not load commands.' }); }
   }
   if (route.startsWith('/api/guilds/') && route.endsWith('/audit-logs')) {
