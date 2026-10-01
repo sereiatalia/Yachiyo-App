@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes, ChannelType, ActivityType } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes, ChannelType, ActivityType, AuditLogEvent } from 'discord.js';
 import { commands, handleCommand, buildHelpView, GUESS_CHARACTERS } from './commands.js';
 import { ensureGuild, getFishChannel, getVoiceChannels } from './services/guildService.js';
 import { sendAuditLog } from './services/auditService.js';
@@ -920,8 +920,10 @@ client.on('messageDelete', async msg => {
     }
     await sendAuditLog(client, msg.guild, { eventType:'moderation.introduction_deleted', actorId:intro.user_id, targetId:msg.channelId, data:{messageId:msg.id, summary:'An introduction was deleted; its reward role was removed.'} }).catch(console.error);
   }
-  if (!msg.author || msg.author.bot || msg.author.id === client.user?.id) return;
-  sendAuditLog(client, msg.guild, { eventType:'message.delete', actorId:msg.author.id, targetId:msg.channelId, data:{ channelName:msg.channel?.name, messageId:msg.id, authorId:msg.author.id, createdTimestamp:msg.createdTimestamp, content:msg.content, attachments:msg.attachments?.size, attachmentUrls:[...msg.attachments.values()].map(a => a.url), attachmentDetails:[...msg.attachments.values()].map(a => ({name:a.name,url:a.url,contentType:a.contentType})), summary:'A message was deleted.' } }).catch(console.error);
+  const deletedMessage = msg.partial ? await msg.fetch().catch(() => msg) : msg;
+  if (!deletedMessage.author || deletedMessage.author.bot || deletedMessage.author.id === client.user?.id) return;
+  const attachments = [...(deletedMessage.attachments?.values?.() ?? [])];
+  sendAuditLog(client, msg.guild, { eventType:'message.delete', actorId:deletedMessage.author.id, targetId:msg.channelId, data:{ channelName:msg.channel?.name, messageId:msg.id, authorId:deletedMessage.author.id, createdTimestamp:deletedMessage.createdTimestamp, content:deletedMessage.content, attachments:attachments.length, attachmentUrls:attachments.map(a => a.url), attachmentDetails:attachments.map(a => ({name:a.name,url:a.url,contentType:a.contentType})), summary:'A message was deleted.' } }).catch(console.error);
 });
 client.on('messageUpdate', async (oldMsg, newMsg) => {
   if (!newMsg.guild || (oldMsg.content === newMsg.content && oldMsg.attachments?.size === newMsg.attachments?.size)) return;
@@ -933,7 +935,14 @@ client.on('messageUpdate', async (oldMsg, newMsg) => {
 client.on('roleCreate', role => sendAuditLog(client,role.guild,{eventType:'role.create',targetId:role.id,data:{summary:`Role **${role.name}** was created.`}}).catch(console.error));
 client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.delete',targetId:role.id,data:{summary:`Role **${role.name}** was deleted.`}}).catch(console.error));
 client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.create',targetId:channel.id,data:{summary:`Channel **${channel.name}** was created.`}}).catch(console.error); });
-client.on('channelDelete', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.delete',targetId:channel.id,data:{summary:`Channel **${channel.name}** was deleted.`}}).catch(console.error); });
+client.on('channelDelete', async channel => {
+  if (!channel.guild) return;
+  await new Promise(resolve => setTimeout(resolve, 500));
+  const audit = await channel.guild.fetchAuditLogs({ type: AuditLogEvent.ChannelDelete, limit: 8 }).catch(() => null);
+  const entry = audit?.entries.find(item => item.target?.id === channel.id);
+  const deletedBy = entry?.executor ? `${entry.executor.tag} (<@${entry.executor.id}>)` : 'Unknown moderator';
+  sendAuditLog(client, channel.guild, { eventType:'channel.delete', actorId:entry?.executor?.id ?? null, targetId:channel.id, data:{channelName:channel.name, deletedBy, summary:`Channel **${channel.name}** was deleted by **${entry?.executor?.tag ?? 'an unknown moderator'}**.`}}).catch(console.error);
+});
 client.on('reactionRoleWizardStart', interaction => runReactionRoleWizard(interaction).catch(error => console.error('[REACTION_ROLE_WIZARD]', error)));
 async function publishQuizRound(session) {
   const channel=await client.channels.fetch(session.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
