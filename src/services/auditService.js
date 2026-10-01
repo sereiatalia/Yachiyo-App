@@ -42,6 +42,13 @@ function formatEvent(payload) {
       { name: 'Message Sender', value: data.authorId ? '<@' + data.authorId + '>' : 'Unknown', inline: false },
       { name: 'Message Created', value: data.createdTimestamp ? '<t:' + Math.floor(data.createdTimestamp / 1000) + ':R>' : 'Unknown', inline: false }
     );
+  } else if (payload.eventType === 'member.leave') {
+    embed.addFields(
+      { name: 'Member Who Leave', value: data.displayName || 'Unknown member', inline: false },
+      { name: 'Username', value: data.username || 'Unknown username', inline: false },
+      { name: 'When', value: data.leftAt ? new Date(data.leftAt).toLocaleDateString() : 'Unknown date', inline: false },
+      { name: 'Time', value: data.leftAt ? new Date(data.leftAt).toLocaleTimeString() : 'Unknown time', inline: false }
+    );
   } else if (data.actorLabel || payload.actorId) embed.addFields({ name: data.actorLabel ?? 'Sender', value: data.actorLabel ? clip(data.actorLabel) : '<@' + payload.actorId + '>', inline: false });
   if (data.messageId && !['message.delete','message.edit'].includes(payload.eventType)) embed.addFields({ name: 'Message ID', value: '`' + data.messageId + '`', inline: false });
   if (data.authorId && !['message.delete','message.edit'].includes(payload.eventType)) embed.addFields({ name: 'Message author', value: '<@' + data.authorId + '>', inline: false });
@@ -88,7 +95,7 @@ export async function sendAuditLog(client, guild, payload) {
   if (payload.data?.isBotEvent) return;
   await recordAudit({ guildId: guild.id, ...payload });
   const settings = (await query('SELECT log_channel_id, audit_channels FROM guild_settings WHERE guild_id=$1', [guild.id])).rows[0] ?? {};
-  const category = payload.eventType === 'moderation.curse_warning' ? 'curse' : payload.eventType === 'message.delete' ? 'message-deleted' : payload.eventType === 'message.edit' ? 'message-edited' : payload.eventType.startsWith('message.') ? 'messages' : payload.eventType.startsWith('member.') ? 'members' : payload.eventType.startsWith('moderation.') ? 'moderation' : payload.eventType.startsWith('confession.') ? 'confessions' : ['role.create','role.delete','channel.create','channel.delete'].includes(payload.eventType) ? 'server' : null;
+  const category = payload.eventType === 'moderation.curse_warning' ? 'curse' : payload.eventType === 'message.delete' ? 'message-deleted' : payload.eventType === 'message.edit' ? 'message-edited' : payload.eventType === 'member.leave' ? 'member-leave' : payload.eventType.startsWith('message.') ? 'messages' : payload.eventType.startsWith('member.') ? 'members' : payload.eventType.startsWith('moderation.') ? 'moderation' : payload.eventType.startsWith('confession.') ? 'confessions' : ['role.create','role.delete','channel.create','channel.delete'].includes(payload.eventType) ? 'server' : null;
   const channelId = payload.channelId ?? settings.audit_channels?.[category] ?? settings.log_channel_id;
   if (!channelId) return;
   const channel = await client.channels.fetch(channelId).catch(() => null);
