@@ -27,6 +27,7 @@ function formatEvent(payload) {
   if (payload.eventType !== 'message.delete' && payload.eventType !== 'channel.delete' && (data.channelName || payload.targetId)) embed.addFields({ name: 'Channel', value: data.channelName ? '#' + data.channelName : '<#' + payload.targetId + '>', inline: false });
   if (payload.eventType === 'channel.delete' && data.channelName) embed.addFields({ name: 'Deleted channel', value: '#' + clip(data.channelName), inline: false });
   if (payload.eventType === 'channel.delete' && data.deletedBy) embed.addFields({ name: 'Deleted by', value: data.deletedBy, inline: false });
+  if (payload.eventType === 'channel.create' && data.createdBy) embed.addFields({ name: 'Created by', value: data.createdBy, inline: false });
   if (payload.eventType === 'message.delete') {
     embed.addFields(
       { name: 'Message Sender', value: data.authorId ? '<@' + data.authorId + '>' : 'Unknown', inline: false },
