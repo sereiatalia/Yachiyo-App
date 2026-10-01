@@ -110,6 +110,18 @@ const websiteServer = createServer(async (request, response) => {
       return sendJson(response, error.statusCode || 500, { error: error.message || 'Import failed.' });
     }
   }
+  if (route.startsWith('/api/guilds/') && route.endsWith('/validate-import')) {
+    const guildId = route.split('/')[3];
+    if (request.method === 'OPTIONS') return sendJson(response, 204, null);
+    try {
+      await authorizeDashboardRequest(request, guildId);
+      if (request.method !== 'POST') return sendJson(response, 405, { error: 'Method not allowed.' });
+      return sendJson(response, 200, await validateGuildBackup(guildId, await readJsonBody(request)));
+    } catch (error) {
+      console.error('[DASHBOARD_VALIDATE_IMPORT]', error);
+      return sendJson(response, error.statusCode || 500, { valid: false, error: error.message || 'Validation failed.' });
+    }
+  }
   if (route.match(/^\/api\/guilds\/[^/]+\/backups(?:\/[^/]+)?$/)) {
     const parts = route.split('/');
     const guildId = parts[3];
@@ -254,6 +266,23 @@ async function importGuildData(guildId, tables) {
     return imported;
   } catch (error) { await connection.query('ROLLBACK'); throw error; }
   finally { connection.release(); }
+}
+
+async function validateGuildBackup(guildId, backup) {
+  const errors = [], warnings = [];
+  if (!backup || typeof backup !== 'object') errors.push('Backup must be a JSON object.');
+  if (backup?.guildId !== guildId) errors.push('Backup server ID does not match the selected server.');
+  if (backup?.schemaVersion !== 1) errors.push('Unsupported or missing backup schema version.');
+  if (!backup?.tables || typeof backup.tables !== 'object') errors.push('Backup has no tables object.');
+  if (errors.length) return { valid: false, errors, warnings, tables: [] };
+  const existing = new Set((await query(`SELECT table_name FROM information_schema.tables WHERE table_schema='public'`)).rows.map(row => row.table_name));
+  const tables = Object.entries(backup.tables).map(([name, rows]) => ({ name, records: Array.isArray(rows) ? rows.length : 0, available: existing.has(name) }));
+  for (const table of tables) {
+    if (!table.available) warnings.push(`Table ${table.name} is not present and will be skipped.`);
+    if (table.records > 0 && table.available && backup.tables[table.name].some(row => String(row.guild_id) !== String(guildId))) errors.push(`Table ${table.name} contains another server’s records.`);
+  }
+  if (!tables.some(table => table.records > 0)) warnings.push('This backup contains no records.');
+  return { valid: errors.length === 0, errors, warnings, tables, totalRecords: tables.reduce((sum, table) => sum + table.records, 0) };
 }
 
 function reactionRoleManager(panel = null) {
