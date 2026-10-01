@@ -20,7 +20,7 @@ import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js
 import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket, getTicketAccessRoles } from './services/ticketService.js';
 import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
 import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpReminder, markBumpReminderNotified, pendingBumpReminders } from './services/bumpService.js';
-import { getServerInfo, saveServerInfoPanel, updateServerInfoField, recordProfileMessage, replaceProfileMessageCounts, hasGeneratedServerInfo, stripGeneratedServerInfo } from './services/serverInfoService.js';
+import { getServerInfo, saveServerInfoPanel, updateServerInfoField, updateServerInfoBanner, recordProfileMessage, replaceProfileMessageCounts, hasGeneratedServerInfo, stripGeneratedServerInfo } from './services/serverInfoService.js';
 import { getShopSettings, listPurchases } from './services/serverShopService.js';
 import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './services/offlineBrainService.js';
 import { startVoiceActivity, stopVoiceActivity } from './services/activityLeaderboardService.js';
@@ -46,6 +46,28 @@ const websiteRoot = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'we
 const websiteTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 const websiteServer = createServer(async (request, response) => {
   const route = request.url?.split('?')[0] ?? '/';
+  if (route.startsWith('/api/guilds/') && route.endsWith('/server-info')) {
+    const guildId = route.split('/')[3];
+    if (request.method === 'OPTIONS') return sendJson(response, 204, null);
+    try {
+      const auth = await authorizeDashboardRequest(request, guildId);
+      if (request.method === 'GET') return sendJson(response, 200, await getServerInfo(guildId));
+      if (request.method !== 'PUT') return sendJson(response, 405, { error: 'Method not allowed.' });
+      const body = await readJsonBody(request);
+      const allowed = ['title', 'description', 'extra_info', 'banner_url'];
+      for (const field of allowed) {
+        if (Object.prototype.hasOwnProperty.call(body, field)) {
+          if (field === 'banner_url') await updateServerInfoBanner(guildId, body[field] || null);
+          else await updateServerInfoField(guildId, field, String(body[field] ?? '').trim());
+        }
+      }
+      client.emit('serverInfoPanelRefresh', guildId);
+      return sendJson(response, 200, await getServerInfo(guildId));
+    } catch (error) {
+      console.error('[DASHBOARD_SERVER_INFO]', error);
+      return sendJson(response, error.statusCode || 500, { error: error.message || 'Dashboard request failed.' });
+    }
+  }
   if (route === '/api/bot/guilds') {
     response.writeHead(200, {
       'content-type': 'application/json; charset=utf-8',
@@ -86,6 +108,42 @@ const pendingTimeQuestions = new Map();
 const tempVoiceDeleteTimers = new Map();
 const spamMessageWindows = new Map();
 const spamBurstWarnings = new Map();
+
+function sendJson(response, status, body) {
+  response.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'access-control-allow-origin': 'https://sereiatalia.github.io',
+    'access-control-allow-headers': 'Authorization, Content-Type',
+    'access-control-allow-methods': 'GET, PUT, OPTIONS',
+    'cache-control': 'no-store',
+  });
+  response.end(body === null ? '' : JSON.stringify(body));
+}
+
+function readJsonBody(request) {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    request.setEncoding('utf8');
+    request.on('data', chunk => { raw += chunk; if (raw.length > 100_000) reject(new Error('Request body is too large.')); });
+    request.on('end', () => { try { resolve(raw ? JSON.parse(raw) : {}); } catch { reject(new Error('Invalid JSON body.')); } });
+    request.on('error', reject);
+  });
+}
+
+async function authorizeDashboardRequest(request, guildId) {
+  const token = request.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!token) { const error = new Error('Discord authorization is required.'); error.statusCode = 401; throw error; }
+  const discordResponse = await fetch('https://discord.com/api/users/@me/guilds', { headers: { authorization: `Bearer ${token}` } });
+  if (!discordResponse.ok) { const error = new Error('Discord authorization expired. Please log in again.'); error.statusCode = 401; throw error; }
+  const guilds = await discordResponse.json();
+  const guild = guilds.find(item => item.id === guildId);
+  const permissions = BigInt(guild?.permissions ?? 0);
+  if (!guild || (permissions & 0x8n) !== 0x8n && (permissions & 0x20n) !== 0x20n && !guild.owner) {
+    const error = new Error('You do not have permission to manage this server.'); error.statusCode = 403; throw error;
+  }
+  if (!client.guilds.cache.has(guildId)) { const error = new Error('Yachiyo is not installed in this server.'); error.statusCode = 404; throw error; }
+  return guild;
+}
 
 function reactionRoleManager(panel = null) {
   const rows = [];
