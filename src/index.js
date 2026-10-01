@@ -911,7 +911,7 @@ client.on('guildMemberAdd', m => {
   client.emit('serverInfoPanelRefresh',m.guild.id);
 });
 client.on('guildMemberRemove', m => {
-  sendAuditLog(client,m.guild,{eventType:'member.leave',targetId:m.id,data:{summary:m.user.tag+' left the server.'}}).catch(console.error);
+  sendAuditLog(client,m.guild,{eventType:'member.leave',targetId:m.id,data:{displayName:m.displayName || m.user.globalName || m.user.username,username:m.user.username,leftAt:new Date().toISOString(),summary:m.user.tag+' left the server.'}}).catch(console.error);
   client.emit('serverInfoPanelRefresh',m.guild.id);
 });
 client.on('messageDelete', async msg => {
