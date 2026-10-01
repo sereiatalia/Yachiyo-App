@@ -953,7 +953,14 @@ client.on('messageUpdate', async (oldMsg, newMsg) => {
 });
 client.on('roleCreate', role => sendAuditLog(client,role.guild,{eventType:'role.create',targetId:role.id,data:{summary:`Role **${role.name}** was created.`}}).catch(console.error));
 client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.delete',targetId:role.id,data:{summary:`Role **${role.name}** was deleted.`}}).catch(console.error));
-client.on('channelCreate', channel => { if(channel.guild) sendAuditLog(client,channel.guild,{eventType:'channel.create',targetId:channel.id,data:{summary:`Channel **${channel.name}** was created.`}}).catch(console.error); });
+client.on('channelCreate', async channel => {
+  if (!channel.guild) return;
+  await new Promise(resolve => setTimeout(resolve, 500));
+  const audit = await channel.guild.fetchAuditLogs({ type: AuditLogEvent.ChannelCreate, limit: 8 }).catch(() => null);
+  const entry = audit?.entries.find(item => (item.target?.id ?? item.targetId) === channel.id);
+  const createdBy = entry?.executor ? `${entry.executor.tag} (<@${entry.executor.id}>)` : 'Unknown creator';
+  sendAuditLog(client,channel.guild,{eventType:'channel.create',actorId:entry?.executor?.id ?? null,targetId:channel.id,data:{createdBy,summary:`Channel **${channel.name}** was created by **${entry?.executor?.tag ?? 'an unknown user'}**.`}}).catch(console.error);
+});
 client.on('channelDelete', async channel => {
   if (!channel.guild) return;
   await new Promise(resolve => setTimeout(resolve, 500));
