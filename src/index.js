@@ -39,6 +39,7 @@ import { getActiveQuiz, joinQuiz, getPlayers, finishQuiz, nextQuestion, startRou
 import { getReactionRolePanels, getReactionRolePanel, createReactionRolePanel, addReactionRoleOption, removeReactionRoleOption, setReactionRolePanelMessage, getReactionRoleByMessage, deleteReactionRolePanel } from './services/reactionRoleService.js';
 import { buildRobloxProfileEmbed } from './ui/robloxProfile.js';
 import { db, query } from './database/db.js';
+import { startFirebaseBackups } from './services/firebaseBackupService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -439,6 +440,7 @@ client.once('ready', async () => {
     console.error('[COMMAND_DEPLOY]', error?.rawError ? JSON.stringify(error.rawError, null, 2) : (error?.stack || error));
   }
   console.log(`Yachiyo is online as ${client.user.tag}`);
+  startFirebaseBackups(client);
   client.user.setPresence({
     activities: [{ name: 'Yachiyo', state: 'Managing Servers', type: ActivityType.Custom }],
     status: 'online',
