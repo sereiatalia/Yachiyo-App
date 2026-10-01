@@ -900,7 +900,14 @@ async function refreshIntroductionPanel(guildId) {
 }
 client.on('guildCreate', guild => ensureGuild(guild.id).catch(console.error));
 client.on('guildMemberAdd', m => {
-  sendAuditLog(client,m.guild,{eventType:'member.join',targetId:m.id,data:{summary:m.user.tag+' joined the server.'}}).catch(console.error);
+  (async () => {
+    const settings = (await query('SELECT audit_channels FROM guild_settings WHERE guild_id=$1', [m.guild.id])).rows[0] ?? {};
+    const welcomeChannelId = settings.audit_channels?.welcome;
+    if (welcomeChannelId) {
+      const channel = await m.guild.channels.fetch(welcomeChannelId).catch(() => null);
+      if (channel?.isTextBased()) await channel.send({ content:`🌷 Welcome <@${m.id}>! We’re happy to have you here. ♡`, allowedMentions:{ users:[m.id] } }).catch(console.error);
+    }
+  })().catch(console.error);
   client.emit('serverInfoPanelRefresh',m.guild.id);
 });
 client.on('guildMemberRemove', m => {
