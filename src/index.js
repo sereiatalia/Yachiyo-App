@@ -122,6 +122,28 @@ const websiteServer = createServer(async (request, response) => {
       return sendJson(response, error.statusCode || 500, { valid: false, error: error.message || 'Validation failed.' });
     }
   }
+  if (route.startsWith('/api/guilds/') && route.endsWith('/dashboard')) {
+    const guildId = route.split('/')[3];
+    if (request.method === 'OPTIONS') return sendJson(response, 204, null);
+    try {
+      await authorizeDashboardRequest(request, guildId);
+      if (request.method !== 'GET') return sendJson(response, 405, { error: 'Method not allowed.' });
+      const guild = client.guilds.cache.get(guildId);
+      const me = guild.members.me ?? await guild.members.fetch(client.user.id).catch(() => null);
+      const required = ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels', 'ManageRoles', 'ModerateMembers', 'AddReactions'];
+      const permissions = me ? required.filter(permission => me.permissions.has(PermissionFlagsBits[permission])) : [];
+      return sendJson(response, 200, {
+        status: client.ws.status === 0 ? 'online' : 'degraded',
+        server: { id: guild.id, name: guild.name, icon: guild.iconURL({ extension: 'png', size: 128 }), memberCount: guild.memberCount },
+        channels: { total: guild.channels.cache.size, text: guild.channels.cache.filter(channel => channel.isTextBased()).size, voice: guild.channels.cache.filter(channel => channel.isVoiceBased()).size },
+        roles: { total: guild.roles.cache.size, manageable: guild.roles.cache.filter(role => role.editable).size },
+        yachiyo: { id: client.user.id, permissions, missingPermissions: required.filter(permission => !permissions.includes(permission)) },
+      });
+    } catch (error) {
+      console.error('[DASHBOARD_SERVER]', error);
+      return sendJson(response, error.statusCode || 500, { error: error.message || 'Could not load server dashboard.' });
+    }
+  }
   if (route.match(/^\/api\/guilds\/[^/]+\/backups(?:\/[^/]+)?$/)) {
     const parts = route.split('/');
     const guildId = parts[3];
