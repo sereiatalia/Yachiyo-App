@@ -27,10 +27,18 @@ function formatEvent(payload) {
   if (payload.eventType !== 'message.delete' && payload.eventType !== 'channel.delete' && (data.channelName || payload.targetId)) embed.addFields({ name: 'Channel', value: data.channelName ? '#' + data.channelName : '<#' + payload.targetId + '>', inline: false });
   if (payload.eventType === 'channel.delete' && data.channelName) embed.addFields({ name: 'Deleted channel', value: '#' + clip(data.channelName), inline: false });
   if (payload.eventType === 'channel.delete' && data.deletedBy) embed.addFields({ name: 'Deleted by', value: data.deletedBy, inline: false });
-  if (data.actorLabel || payload.actorId) embed.addFields({ name: data.actorLabel ?? 'Sender', value: data.actorLabel ? clip(data.actorLabel) : '<@' + payload.actorId + '>', inline: false });
-  if (data.messageId) embed.addFields({ name: 'Message ID', value: '`' + data.messageId + '`', inline: false });
-  if (data.authorId) embed.addFields({ name: 'Message author', value: '<@' + data.authorId + '>', inline: false });
-  if (data.createdTimestamp) embed.addFields({ name: 'Message created', value: '<t:' + Math.floor(data.createdTimestamp / 1000) + ':R>', inline: false });
+  if (payload.eventType === 'message.delete') {
+    embed.addFields(
+      { name: 'Message Sender', value: data.authorId ? '<@' + data.authorId + '>' : 'Unknown', inline: false },
+      { name: 'Message Deleter', value: data.deleterId ? '<@' + data.deleterId + '>' : 'Unknown / automatic deletion', inline: false },
+      { name: 'Message ID', value: data.messageId ? '`' + data.messageId + '`' : 'Unknown', inline: false },
+      { name: 'Message Created', value: data.createdTimestamp ? '<t:' + Math.floor(data.createdTimestamp / 1000) + ':R>' : 'Unknown', inline: false },
+      { name: 'Channel Where it Deleted', value: data.channelName ? '#' + clip(data.channelName) : 'Unknown', inline: false }
+    );
+  } else if (data.actorLabel || payload.actorId) embed.addFields({ name: data.actorLabel ?? 'Sender', value: data.actorLabel ? clip(data.actorLabel) : '<@' + payload.actorId + '>', inline: false });
+  if (data.messageId && payload.eventType !== 'message.delete') embed.addFields({ name: 'Message ID', value: '`' + data.messageId + '`', inline: false });
+  if (data.authorId && payload.eventType !== 'message.delete') embed.addFields({ name: 'Message author', value: '<@' + data.authorId + '>', inline: false });
+  if (data.createdTimestamp && payload.eventType !== 'message.delete') embed.addFields({ name: 'Message created', value: '<t:' + Math.floor(data.createdTimestamp / 1000) + ':R>', inline: false });
   if (data.serverName || data.confessionId) embed.addFields({ name: 'Confession context', value: (data.serverName ? '**' + clip(data.serverName) + '**' : '') + (data.confessionId ? ' • Confession #' + data.confessionId : ''), inline: false });
   if (data.summary) embed.setDescription(data.summary);
   if (data.reason) embed.addFields({ name: 'Reason', value: clip(data.reason), inline: false });
