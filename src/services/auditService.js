@@ -35,10 +35,18 @@ function formatEvent(payload) {
       { name: 'Message Created', value: data.createdTimestamp ? '<t:' + Math.floor(data.createdTimestamp / 1000) + ':R>' : 'Unknown', inline: false },
       { name: 'Channel Where it Deleted', value: data.channelName ? '#' + clip(data.channelName) : 'Unknown', inline: false }
     );
+  } else if (payload.eventType === 'message.edit') {
+    embed.addFields(
+      { name: 'Message Before', value: clip(data.before) || '*(empty message)*', inline: true },
+      { name: 'Message After', value: clip(data.after) || '*(empty message)*', inline: true },
+      { name: 'Message Sender', value: data.authorId ? '<@' + data.authorId + '>' : 'Unknown', inline: false },
+      { name: 'Message Editor', value: data.editorId ? '<@' + data.editorId + '>' : 'Unknown / automatic edit', inline: false },
+      { name: 'Message Created', value: data.createdTimestamp ? '<t:' + Math.floor(data.createdTimestamp / 1000) + ':R>' : 'Unknown', inline: false }
+    );
   } else if (data.actorLabel || payload.actorId) embed.addFields({ name: data.actorLabel ?? 'Sender', value: data.actorLabel ? clip(data.actorLabel) : '<@' + payload.actorId + '>', inline: false });
-  if (data.messageId && payload.eventType !== 'message.delete') embed.addFields({ name: 'Message ID', value: '`' + data.messageId + '`', inline: false });
-  if (data.authorId && payload.eventType !== 'message.delete') embed.addFields({ name: 'Message author', value: '<@' + data.authorId + '>', inline: false });
-  if (data.createdTimestamp && payload.eventType !== 'message.delete') embed.addFields({ name: 'Message created', value: '<t:' + Math.floor(data.createdTimestamp / 1000) + ':R>', inline: false });
+  if (data.messageId && !['message.delete','message.edit'].includes(payload.eventType)) embed.addFields({ name: 'Message ID', value: '`' + data.messageId + '`', inline: false });
+  if (data.authorId && !['message.delete','message.edit'].includes(payload.eventType)) embed.addFields({ name: 'Message author', value: '<@' + data.authorId + '>', inline: false });
+  if (data.createdTimestamp && !['message.delete','message.edit'].includes(payload.eventType)) embed.addFields({ name: 'Message created', value: '<t:' + Math.floor(data.createdTimestamp / 1000) + ':R>', inline: false });
   if (data.serverName || data.confessionId) embed.addFields({ name: 'Confession context', value: (data.serverName ? '**' + clip(data.serverName) + '**' : '') + (data.confessionId ? ' • Confession #' + data.confessionId : ''), inline: false });
   if (data.summary) embed.setDescription(data.summary);
   if (data.reason) embed.addFields({ name: 'Reason', value: clip(data.reason), inline: false });
@@ -47,7 +55,7 @@ function formatEvent(payload) {
   if (data.timeoutApplied) embed.addFields({ name: 'Action', value: '1-minute timeout applied', inline: true });
   if (data.confession) embed.addFields({ name: 'Confession', value: clip(data.confession), inline: false });
   if (data.content !== undefined) embed.addFields({ name: 'Message', value: clip(data.content) || '*(empty message)*', inline: false });
-  if (data.before !== undefined || data.after !== undefined) embed.addFields({ name: 'Before', value: clip(data.before) || '*(empty message)*', inline: true }, { name: 'After', value: clip(data.after) || '*(empty message)*', inline: true });
+  if ((data.before !== undefined || data.after !== undefined) && payload.eventType !== 'message.edit') embed.addFields({ name: 'Before', value: clip(data.before) || '*(empty message)*', inline: true }, { name: 'After', value: clip(data.after) || '*(empty message)*', inline: true });
   if (data.attachments) embed.addFields({ name: 'Attachments', value: String(data.attachments), inline: true });
   const attachmentDetails = data.attachmentDetails ?? [];
   const mediaFiles = attachmentDetails.filter(file => /^(image|video)\//i.test(file.contentType || '') || /\.(png|jpe?g|gif|webp|mp4|webm|mov|m4v)(\?|$)/i.test(file.url || ''));
