@@ -200,12 +200,19 @@ async function importGuildData(guildId, tables) {
     const schema = (await connection.query(`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema='public' AND table_name = ANY($1::text[])`, [Object.keys(tables)])).rows;
     const allowed = new Map();
     for (const column of schema) { if (!allowed.has(column.table_name)) allowed.set(column.table_name, new Set()); allowed.get(column.table_name).add(column.column_name); }
-    for (const [table, rows] of Object.entries(tables)) {
-      if (!allowed.has(table) || !Array.isArray(rows) || !rows.length) continue;
+    const priority = ['guild_settings', 'confessions', 'confession_counters', 'confession_replies'];
+    const orderedTables = Object.keys(tables).filter(table => allowed.has(table)).sort((left, right) => (priority.indexOf(left) === -1 ? 999 : priority.indexOf(left)) - (priority.indexOf(right) === -1 ? 999 : priority.indexOf(right)));
+    for (const table of [...orderedTables].reverse()) {
+      if (!Array.isArray(tables[table]) || !tables[table].length || !allowed.get(table).has('guild_id')) continue;
+      const safeTable = table.replace(/"/g, '""');
+      await connection.query(`DELETE FROM "${safeTable}" WHERE guild_id=$1`, [guildId]);
+    }
+    for (const table of orderedTables) {
+      const rows = tables[table];
+      if (!Array.isArray(rows) || !rows.length) continue;
       const columns = [...allowed.get(table)];
       if (!columns.includes('guild_id')) continue;
       const safeTable = table.replace(/"/g, '""');
-      await connection.query(`DELETE FROM "${safeTable}" WHERE guild_id=$1`, [guildId]);
       let count = 0;
       for (const row of rows) {
         const keys = Object.keys(row).filter(key => columns.includes(key));
@@ -216,6 +223,14 @@ async function importGuildData(guildId, tables) {
         count++;
       }
       imported[table] = count;
+    }
+    for (const table of orderedTables) {
+      const safeTable = table.replace(/"/g, '""');
+      const serialColumns = (await connection.query(`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND column_default LIKE 'nextval(%'`, [table])).rows;
+      for (const { column_name: column } of serialColumns) {
+        const sequence = (await connection.query('SELECT pg_get_serial_sequence($1,$2) AS sequence', [table, column])).rows[0]?.sequence;
+        if (sequence) await connection.query(`SELECT setval($1, COALESCE((SELECT MAX("${column.replace(/"/g, '""')}") FROM "${safeTable}"), 1), EXISTS (SELECT 1 FROM "${safeTable}"))`, [sequence]);
+      }
     }
     await connection.query('COMMIT');
     return imported;
