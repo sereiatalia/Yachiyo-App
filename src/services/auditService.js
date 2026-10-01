@@ -50,6 +50,13 @@ function formatEvent(payload) {
       { name: 'When', value: data.leftAt ? new Date(data.leftAt).toLocaleDateString() : 'Unknown date', inline: false },
       { name: 'Time', value: data.leftAt ? new Date(data.leftAt).toLocaleTimeString() : 'Unknown time', inline: false }
     );
+  } else if (payload.eventType === 'moderation.kick' || (payload.eventType === 'moderation.action' && /completed a kick action/i.test(data.summary || ''))) {
+    embed.addFields(
+      { name: 'Username Kicked', value: data.targetUsername || (payload.targetId ? '<@' + payload.targetId + '>' : 'Unknown username'), inline: false },
+      { name: 'Responsible Moderator', value: payload.actorId ? '<@' + payload.actorId + '>' : 'Unknown moderator', inline: false },
+      { name: 'Date', value: data.kickedAt ? new Date(data.kickedAt).toLocaleDateString() : new Date().toLocaleDateString(), inline: false },
+      { name: 'Time', value: data.kickedAt ? new Date(data.kickedAt).toLocaleTimeString() : new Date().toLocaleTimeString(), inline: false }
+    );
   } else if (data.actorLabel || payload.actorId) embed.addFields({ name: data.actorLabel ?? 'Sender', value: data.actorLabel ? clip(data.actorLabel) : '<@' + payload.actorId + '>', inline: false });
   if (data.messageId && !['message.delete','message.edit'].includes(payload.eventType)) embed.addFields({ name: 'Message ID', value: '`' + data.messageId + '`', inline: false });
   if (data.authorId && !['message.delete','message.edit'].includes(payload.eventType)) embed.addFields({ name: 'Message author', value: '<@' + data.authorId + '>', inline: false });
@@ -96,7 +103,7 @@ export async function sendAuditLog(client, guild, payload) {
   if (payload.data?.isBotEvent) return;
   await recordAudit({ guildId: guild.id, ...payload });
   const settings = (await query('SELECT log_channel_id, audit_channels FROM guild_settings WHERE guild_id=$1', [guild.id])).rows[0] ?? {};
-  const category = payload.eventType === 'moderation.curse_warning' ? 'curse' : payload.eventType === 'message.delete' ? 'message-deleted' : payload.eventType === 'message.edit' ? 'message-edited' : payload.eventType === 'member.leave' ? 'member-leave' : payload.eventType.startsWith('message.') ? 'messages' : payload.eventType.startsWith('member.') ? 'members' : payload.eventType.startsWith('moderation.') ? 'moderation' : payload.eventType.startsWith('confession.') ? 'confessions' : ['role.create','role.delete','channel.create','channel.delete'].includes(payload.eventType) ? 'server' : null;
+  const category = payload.eventType === 'moderation.curse_warning' ? 'curse' : payload.eventType === 'message.delete' ? 'message-deleted' : payload.eventType === 'message.edit' ? 'message-edited' : payload.eventType === 'member.leave' ? 'member-leave' : payload.eventType === 'moderation.kick' || (payload.eventType === 'moderation.action' && /completed a kick action/i.test(payload.data?.summary || '')) ? 'kick' : payload.eventType.startsWith('message.') ? 'messages' : payload.eventType.startsWith('member.') ? 'members' : payload.eventType.startsWith('moderation.') ? 'moderation' : payload.eventType.startsWith('confession.') ? 'confessions' : ['role.create','role.delete','channel.create','channel.delete'].includes(payload.eventType) ? 'server' : null;
   const channelId = payload.channelId ?? settings.audit_channels?.[category] ?? settings.log_channel_id;
   if (!channelId) return;
   const channel = await client.channels.fetch(channelId).catch(() => null);
