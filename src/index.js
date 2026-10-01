@@ -93,6 +93,21 @@ const websiteServer = createServer(async (request, response) => {
       return sendJson(response, error.statusCode || 500, { error: error.message || 'Could not load server data.' });
     }
   }
+  if (route.startsWith('/api/guilds/') && route.endsWith('/import')) {
+    const guildId = route.split('/')[3];
+    if (request.method === 'OPTIONS') return sendJson(response, 204, null);
+    try {
+      await authorizeDashboardRequest(request, guildId);
+      if (request.method !== 'POST') return sendJson(response, 405, { error: 'Method not allowed.' });
+      const backup = await readJsonBody(request);
+      if (backup.guildId !== guildId || !backup.tables || typeof backup.tables !== 'object') return sendJson(response, 400, { error: 'Invalid backup or server ID mismatch.' });
+      const imported = await importGuildData(guildId, backup.tables);
+      return sendJson(response, 200, { ok: true, imported });
+    } catch (error) {
+      console.error('[DASHBOARD_IMPORT]', error);
+      return sendJson(response, error.statusCode || 500, { error: error.message || 'Import failed.' });
+    }
+  }
   if (route === '/api/bot/guilds') {
     response.writeHead(200, {
       'content-type': 'application/json; charset=utf-8',
@@ -139,7 +154,7 @@ function sendJson(response, status, body) {
     'content-type': 'application/json; charset=utf-8',
     'access-control-allow-origin': 'https://sereiatalia.github.io',
     'access-control-allow-headers': 'Authorization, Content-Type',
-    'access-control-allow-methods': 'GET, PUT, OPTIONS',
+    'access-control-allow-methods': 'GET, PUT, POST, OPTIONS',
     'cache-control': 'no-store',
   });
   response.end(body === null ? '' : JSON.stringify(body));
@@ -175,6 +190,37 @@ async function exportGuildData(guildId) {
   const data = {};
   for (const table of tables) data[table] = (await query(`SELECT * FROM "${table.replace(/"/g, '""')}" WHERE guild_id=$1`, [guildId])).rows;
   return { schemaVersion: 1, exportedAt: new Date().toISOString(), guildId, tables: data };
+}
+
+async function importGuildData(guildId, tables) {
+  const connection = await db.connect();
+  const imported = {};
+  try {
+    await connection.query('BEGIN');
+    const schema = (await connection.query(`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema='public' AND table_name = ANY($1::text[])`, [Object.keys(tables)])).rows;
+    const allowed = new Map();
+    for (const column of schema) { if (!allowed.has(column.table_name)) allowed.set(column.table_name, new Set()); allowed.get(column.table_name).add(column.column_name); }
+    for (const [table, rows] of Object.entries(tables)) {
+      if (!allowed.has(table) || !Array.isArray(rows) || !rows.length) continue;
+      const columns = [...allowed.get(table)];
+      if (!columns.includes('guild_id')) continue;
+      const safeTable = table.replace(/"/g, '""');
+      await connection.query(`DELETE FROM "${safeTable}" WHERE guild_id=$1`, [guildId]);
+      let count = 0;
+      for (const row of rows) {
+        const keys = Object.keys(row).filter(key => columns.includes(key));
+        if (!keys.includes('guild_id') || String(row.guild_id) !== String(guildId)) continue;
+        const values = keys.map(key => row[key]);
+        const placeholders = values.map((_, index) => `$${index + 1}`).join(',');
+        await connection.query(`INSERT INTO "${safeTable}" (${keys.map(key => `"${key.replace(/"/g, '""')}"`).join(',')}) VALUES (${placeholders})`, values);
+        count++;
+      }
+      imported[table] = count;
+    }
+    await connection.query('COMMIT');
+    return imported;
+  } catch (error) { await connection.query('ROLLBACK'); throw error; }
+  finally { connection.release(); }
 }
 
 function reactionRoleManager(panel = null) {
