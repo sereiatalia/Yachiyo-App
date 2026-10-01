@@ -81,6 +81,19 @@ const websiteServer = createServer(async (request, response) => {
       return sendJson(response, error.statusCode || 500, { error: error.message || 'Export failed.' });
     }
   }
+  if (route.startsWith('/api/guilds/') && route.endsWith('/overview')) {
+    const guildId = route.split('/')[3];
+    if (request.method === 'OPTIONS') return sendJson(response, 204, null);
+    try {
+      await authorizeDashboardRequest(request, guildId);
+      if (request.method !== 'GET') return sendJson(response, 405, { error: 'Method not allowed.' });
+      const backup = await exportGuildData(guildId);
+      return sendJson(response, 200, { guildId, exportedAt: backup.exportedAt, tables: backup.tables });
+    } catch (error) {
+      console.error('[DASHBOARD_OVERVIEW]', error);
+      return sendJson(response, error.statusCode || 500, { error: error.message || 'Could not load server data.' });
+    }
+  }
   if (route === '/api/bot/guilds') {
     response.writeHead(200, {
       'content-type': 'application/json; charset=utf-8',
