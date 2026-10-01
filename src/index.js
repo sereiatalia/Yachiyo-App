@@ -168,6 +168,21 @@ const websiteServer = createServer(async (request, response) => {
       return sendJson(response, 200, { commands: registeredCommands.map(command => command.toJSON()) });
     } catch (error) { console.error('[DASHBOARD_COMMANDS]', error); return sendJson(response, error.statusCode || 500, { error: error.message || 'Could not load commands.' }); }
   }
+  if (route.startsWith('/api/guilds/') && route.endsWith('/audit-logs')) {
+    const guildId = route.split('/')[3];
+    if (request.method === 'OPTIONS') return sendJson(response, 204, null);
+    try {
+      await authorizeDashboardRequest(request, guildId);
+      if (request.method !== 'GET') return sendJson(response, 405, { error: 'Method not allowed.' });
+      const url = new URL(request.url, 'http://localhost');
+      const search = (url.searchParams.get('search') || '').trim();
+      const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 100), 1), 250);
+      const result = search
+        ? await query(`SELECT id,guild_id,event_type,actor_user_id,target_id,data,created_at FROM audit_logs WHERE guild_id=$1 AND (event_type ILIKE $2 OR actor_user_id ILIKE $2 OR target_id ILIKE $2 OR data::text ILIKE $2) ORDER BY created_at DESC LIMIT $3`, [guildId, `%${search}%`, limit])
+        : await query(`SELECT id,guild_id,event_type,actor_user_id,target_id,data,created_at FROM audit_logs WHERE guild_id=$1 ORDER BY created_at DESC LIMIT $2`, [guildId, limit]);
+      return sendJson(response, 200, { logs: result.rows });
+    } catch (error) { console.error('[DASHBOARD_AUDIT_LOGS]', error); return sendJson(response, error.statusCode || 500, { error: error.message || 'Could not load audit logs.' }); }
+  }
   if (route.match(/^\/api\/guilds\/[^/]+\/backups(?:\/[^/]+)?$/)) {
     const parts = route.split('/');
     const guildId = parts[3];
