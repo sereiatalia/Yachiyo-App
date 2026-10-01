@@ -46,6 +46,16 @@ const websiteRoot = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'we
 const websiteTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 const websiteServer = createServer(async (request, response) => {
   const route = request.url?.split('?')[0] ?? '/';
+  if (route === '/api/bot/guilds') {
+    response.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'access-control-allow-origin': '*',
+      'cache-control': 'no-store',
+    });
+    return response.end(JSON.stringify({
+      guilds: [...client.guilds.cache.values()].map(guild => ({ id: guild.id, name: guild.name })),
+    }));
+  }
   const file = route === '/' ? 'index.html' : route === '/terms' ? 'terms.html' : route === '/privacy' ? 'privacy.html' : route.slice(1);
   if (!['index.html', 'terms.html', 'privacy.html', 'styles.css'].includes(file)) {
     response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
@@ -60,7 +70,7 @@ const websiteServer = createServer(async (request, response) => {
     response.end('Website unavailable');
   }
 });
-const websitePort = 3000;
+const websitePort = Number(process.env.PORT || 3000);
 websiteServer.listen(websitePort, '0.0.0.0', () => console.log(`[WEB] Yachiyo website is online on port ${websitePort}`));
 
 const filteredMessageIds = new Set();
@@ -1207,3 +1217,4 @@ client.on('messageCreate', async message => {
 client.on('error', error => console.error('[DISCORD]', error));
 
 client.login(process.env.DISCORD_TOKEN);
+
