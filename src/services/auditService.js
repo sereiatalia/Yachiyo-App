@@ -37,10 +37,9 @@ function formatEvent(payload) {
     );
   } else if (payload.eventType === 'message.edit') {
     embed.addFields(
-      { name: 'Message Before', value: clip(data.before) || '*(empty message)*', inline: true },
-      { name: 'Message After', value: clip(data.after) || '*(empty message)*', inline: true },
+      { name: 'Message Before', value: clip(data.before) || '*(empty message)*', inline: false },
+      { name: 'Message After', value: clip(data.after) || '*(empty message)*', inline: false },
       { name: 'Message Sender', value: data.authorId ? '<@' + data.authorId + '>' : 'Unknown', inline: false },
-      { name: 'Message Editor', value: data.editorId ? '<@' + data.editorId + '>' : 'Unknown / automatic edit', inline: false },
       { name: 'Message Created', value: data.createdTimestamp ? '<t:' + Math.floor(data.createdTimestamp / 1000) + ':R>' : 'Unknown', inline: false }
     );
   } else if (data.actorLabel || payload.actorId) embed.addFields({ name: data.actorLabel ?? 'Sender', value: data.actorLabel ? clip(data.actorLabel) : '<@' + payload.actorId + '>', inline: false });
