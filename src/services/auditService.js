@@ -30,7 +30,7 @@ function formatEvent(payload) {
   if (payload.eventType === 'message.delete') {
     embed.addFields(
       { name: 'Message Sender', value: data.authorId ? '<@' + data.authorId + '>' : 'Unknown', inline: false },
-      { name: 'Message Deleter', value: data.deleterId ? '<@' + data.deleterId + '>' : 'Unknown / automatic deletion', inline: false },
+      { name: 'Message Deleter', value: data.deleterId ? '<@' + data.deleterId + '>' + (data.deleterFallback ? ' *(self-deleted or Discord audit entry unavailable)*' : '') : 'Automatic deletion', inline: false },
       { name: 'Message ID', value: data.messageId ? '`' + data.messageId + '`' : 'Unknown', inline: false },
       { name: 'Message Created', value: data.createdTimestamp ? '<t:' + Math.floor(data.createdTimestamp / 1000) + ':R>' : 'Unknown', inline: false },
       { name: 'Channel Where it Deleted', value: data.channelName ? '#' + clip(data.channelName) : 'Unknown', inline: false }
