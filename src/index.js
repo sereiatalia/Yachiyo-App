@@ -144,6 +144,21 @@ const websiteServer = createServer(async (request, response) => {
       return sendJson(response, error.statusCode || 500, { error: error.message || 'Could not load server dashboard.' });
     }
   }
+  if (route.startsWith('/api/guilds/') && route.endsWith('/checklist')) {
+    const guildId = route.split('/')[3];
+    if (request.method === 'OPTIONS') return sendJson(response, 204, null);
+    try {
+      await authorizeDashboardRequest(request, guildId);
+      if (request.method !== 'GET') return sendJson(response, 405, { error: 'Method not allowed.' });
+      const settings = {};
+      for (const table of ['server_info_settings','rules_settings','ticket_settings','introduction_settings','curse_settings','spam_settings','truth_or_dare_settings','auto_react_settings','temp_voice_settings']) settings[table] = (await query(`SELECT * FROM "${table}" WHERE guild_id=$1 LIMIT 1`, [guildId])).rows[0] ?? null;
+      const latestBackup = (await listGuildBackups(guildId))[0] ?? null;
+      const guild = client.guilds.cache.get(guildId), me = guild.members.me;
+      const required = ['ViewChannel','SendMessages','ReadMessageHistory','ManageChannels','ManageRoles','ModerateMembers','AddReactions'];
+      const missingPermissions = required.filter(permission => !me?.permissions.has(PermissionFlagsBits[permission]));
+      return sendJson(response, 200, { checks: { yachiyoOnline: client.ws.status === 0, permissions: missingPermissions.length === 0, serverInfo: Boolean(settings.server_info_settings), rules: Boolean(settings.rules_settings), tickets: Boolean(settings.ticket_settings), introduction: Boolean(settings.introduction_settings), moderation: Boolean(settings.curse_settings || settings.spam_settings), backup: Boolean(latestBackup) }, missingPermissions, latestBackup, settings });
+    } catch (error) { console.error('[DASHBOARD_CHECKLIST]', error); return sendJson(response, error.statusCode || 500, { error: error.message || 'Could not load checklist.' }); }
+  }
   if (route.match(/^\/api\/guilds\/[^/]+\/backups(?:\/[^/]+)?$/)) {
     const parts = route.split('/');
     const guildId = parts[3];
