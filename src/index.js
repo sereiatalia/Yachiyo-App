@@ -283,15 +283,23 @@ client.once('ready', async () => {
     status: 'online',
   });
 
-  const currentServerIds = client.guilds.cache.map(guild => guild.id);
+const currentServerIds = client.guilds.cache.map(guild => guild.id);
   try {
-      await db.collection('system').doc('botInfo').set({
-          activeServers: currentServerIds,
-          lastUpdated: new Date()
-      }, { merge: true });
-      console.log("Synced active server list to Firebase!");
+      await db.query(`
+          CREATE TABLE IF NOT EXISTS bot_metadata (
+              key TEXT PRIMARY KEY,
+              value JSONB,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+      `);
+      await db.query(`
+          INSERT INTO bot_metadata (key, value, updated_at)
+          VALUES ($1, $2, CURRENT_TIMESTAMP)
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP
+      `, ['activeServers', JSON.stringify(currentServerIds)]);
+      console.log("Synced active server list to PostgreSQL!");
   } catch (error) {
-      console.error("Failed to sync servers to Firebase:", error);
+      console.error("Failed to sync servers to PostgreSQL:", error);
   }
 
   for (const voice of await getVoiceChannels().catch(() => [])) keepVoiceConnection(voice.guild_id, voice.voice_channel_id).catch(console.error);
