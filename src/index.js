@@ -930,10 +930,16 @@ client.on('messageDelete', async msg => {
   const deletedMessage = msg.partial ? await msg.fetch().catch(() => msg) : msg;
   if (!deletedMessage.author || deletedMessage.author.bot || deletedMessage.author.id === client.user?.id) return;
   const attachments = [...(deletedMessage.attachments?.values?.() ?? [])];
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 1200));
   const audit = await msg.guild.fetchAuditLogs({ type: AuditLogEvent.MessageDelete, limit: 10 }).catch(() => null);
-  const entry = audit?.entries.find(item => item.target?.id === deletedMessage.author.id && (!item.extra?.channel?.id || item.extra.channel.id === msg.channelId));
-  sendAuditLog(client, msg.guild, { eventType:'message.delete', actorId:entry?.executor?.id ?? deletedMessage.author.id, targetId:msg.channelId, data:{ channelName:msg.channel?.name, messageId:msg.id, authorId:deletedMessage.author.id, deleterId:entry?.executor?.id ?? null, createdTimestamp:deletedMessage.createdTimestamp, content:deletedMessage.content, attachments:attachments.length, attachmentUrls:attachments.map(a => a.url), attachmentDetails:attachments.map(a => ({name:a.name,url:a.url,contentType:a.contentType})), summary:'A message was deleted.' } }).catch(console.error);
+  const entry = audit?.entries.find(item => {
+    const targetId = item.target?.id ?? item.targetId;
+    const entryChannelId = item.extra?.channel?.id ?? item.extra?.channel_id ?? item.extra?.channelId;
+    const recent = Date.now() - item.createdTimestamp < 10_000;
+    return targetId === deletedMessage.author.id && (!entryChannelId || entryChannelId === msg.channelId) && recent;
+  });
+  const deleterId = entry?.executor?.id ?? deletedMessage.author.id;
+  sendAuditLog(client, msg.guild, { eventType:'message.delete', actorId:entry?.executor?.id ?? deletedMessage.author.id, targetId:msg.channelId, data:{ channelName:msg.channel?.name, messageId:msg.id, authorId:deletedMessage.author.id, deleterId, deleterFallback:!entry, createdTimestamp:deletedMessage.createdTimestamp, content:deletedMessage.content, attachments:attachments.length, attachmentUrls:attachments.map(a => a.url), attachmentDetails:attachments.map(a => ({name:a.name,url:a.url,contentType:a.contentType})), summary:'A message was deleted.' } }).catch(console.error);
 });
 client.on('messageUpdate', async (oldMsg, newMsg) => {
   if (!newMsg.guild || (oldMsg.content === newMsg.content && oldMsg.attachments?.size === newMsg.attachments?.size)) return;
