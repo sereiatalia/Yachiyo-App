@@ -1,3 +1,4 @@
+warning: in the working copy of 'src/index.js', LF will be replaced by CRLF the next time Git touches it
 import 'dotenv/config';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -38,7 +39,7 @@ import { buildGenshinProfileEmbed } from './ui/genshinProfile.js';
 import { getActiveQuiz, joinQuiz, getPlayers, finishQuiz, nextQuestion, startRound, activateQuiz, answerQuiz, getCurrentRound } from './services/quizService.js';
 import { getReactionRolePanels, getReactionRolePanel, createReactionRolePanel, addReactionRoleOption, removeReactionRoleOption, setReactionRolePanelMessage, getReactionRoleByMessage, deleteReactionRolePanel } from './services/reactionRoleService.js';
 import { buildRobloxProfileEmbed } from './ui/robloxProfile.js';
-import { db } from './database/db.js';
+import { db, query } from './database/db.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -66,6 +67,18 @@ const websiteServer = createServer(async (request, response) => {
     } catch (error) {
       console.error('[DASHBOARD_SERVER_INFO]', error);
       return sendJson(response, error.statusCode || 500, { error: error.message || 'Dashboard request failed.' });
+    }
+  }
+  if (route.startsWith('/api/guilds/') && route.endsWith('/export')) {
+    const guildId = route.split('/')[3];
+    if (request.method === 'OPTIONS') return sendJson(response, 204, null);
+    try {
+      await authorizeDashboardRequest(request, guildId);
+      if (request.method !== 'GET') return sendJson(response, 405, { error: 'Method not allowed.' });
+      return sendJson(response, 200, await exportGuildData(guildId));
+    } catch (error) {
+      console.error('[DASHBOARD_EXPORT]', error);
+      return sendJson(response, error.statusCode || 500, { error: error.message || 'Export failed.' });
     }
   }
   if (route === '/api/bot/guilds') {
@@ -143,6 +156,13 @@ async function authorizeDashboardRequest(request, guildId) {
   }
   if (!client.guilds.cache.has(guildId)) { const error = new Error('Yachiyo is not installed in this server.'); error.statusCode = 404; throw error; }
   return guild;
+}
+
+async function exportGuildData(guildId) {
+  const tables = (await query(`SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='guild_id' GROUP BY table_name ORDER BY table_name`)).rows.map(row => row.table_name);
+  const data = {};
+  for (const table of tables) data[table] = (await query(`SELECT * FROM "${table.replace(/"/g, '""')}" WHERE guild_id=$1`, [guildId])).rows;
+  return { schemaVersion: 1, exportedAt: new Date().toISOString(), guildId, tables: data };
 }
 
 function reactionRoleManager(panel = null) {
