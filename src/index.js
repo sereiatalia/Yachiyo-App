@@ -159,6 +159,15 @@ const websiteServer = createServer(async (request, response) => {
       return sendJson(response, 200, { checks: { yachiyoOnline: client.ws.status === 0, permissions: missingPermissions.length === 0, serverInfo: Boolean(settings.server_info_settings), rules: Boolean(settings.rules_settings), tickets: Boolean(settings.ticket_settings), introduction: Boolean(settings.introduction_settings), moderation: Boolean(settings.curse_settings || settings.spam_settings), backup: Boolean(latestBackup) }, missingPermissions, latestBackup, settings });
     } catch (error) { console.error('[DASHBOARD_CHECKLIST]', error); return sendJson(response, error.statusCode || 500, { error: error.message || 'Could not load checklist.' }); }
   }
+  if (route.startsWith('/api/guilds/') && route.endsWith('/commands')) {
+    const guildId = route.split('/')[3];
+    if (request.method === 'OPTIONS') return sendJson(response, 204, null);
+    try {
+      await authorizeDashboardRequest(request, guildId);
+      if (request.method !== 'GET') return sendJson(response, 405, { error: 'Method not allowed.' });
+      return sendJson(response, 200, { commands: registeredCommands.map(command => command.toJSON()) });
+    } catch (error) { console.error('[DASHBOARD_COMMANDS]', error); return sendJson(response, error.statusCode || 500, { error: error.message || 'Could not load commands.' }); }
+  }
   if (route.match(/^\/api\/guilds\/[^/]+\/backups(?:\/[^/]+)?$/)) {
     const parts = route.split('/');
     const guildId = parts[3];
