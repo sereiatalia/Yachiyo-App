@@ -272,7 +272,9 @@ function readJsonBody(request) {
   return new Promise((resolve, reject) => {
     let raw = '';
     request.setEncoding('utf8');
-    request.on('data', chunk => { raw += chunk; if (raw.length > 100_000) reject(new Error('Request body is too large.')); });
+    // Backups can contain message history and attachments metadata. Keep a generous
+    // limit while still rejecting unexpectedly massive requests.
+    request.on('data', chunk => { raw += chunk; if (raw.length > 15_000_000) reject(new Error('Request body is too large.')); });
     request.on('end', () => { try { resolve(raw ? JSON.parse(raw) : {}); } catch { reject(new Error('Invalid JSON body.')); } });
     request.on('error', reject);
   });
