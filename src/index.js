@@ -331,9 +331,10 @@ async function importGuildData(guildId, tables) {
         const values = keys.map(key => {
           const value = row[key];
           const type = columnTypes.get(table)?.get(key);
-          if ((type === 'json' || type === 'jsonb') && typeof value === 'string') {
-            try { return JSON.parse(value); } catch { return value; }
-          }
+          // node-postgres serializes JS objects as JSON, but passes strings
+          // through as raw SQL text. Explicitly stringify JSON columns so
+          // legacy exports containing JSON strings remain valid JSONB input.
+          if (type === 'json' || type === 'jsonb') return value == null ? null : JSON.stringify(typeof value === 'string' ? (() => { try { return JSON.parse(value); } catch { return value; } })() : value);
           return value;
         });
         const placeholders = values.map((_, index) => `$${index + 1}`).join(',');
