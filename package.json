@@ -6,7 +6,7 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "npm run db:migrate && node src/index.js",
     "dev": "node --watch src/index.js",
     "db:migrate": "node src/database/migrate.js",
     "commands:deploy": "node src/deploy-commands.js"
