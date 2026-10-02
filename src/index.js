@@ -307,9 +307,10 @@ async function importGuildData(guildId, tables) {
   const imported = {};
   try {
     await connection.query('BEGIN');
-    const schema = (await connection.query(`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema='public' AND table_name = ANY($1::text[])`, [Object.keys(tables)])).rows;
+    const schema = (await connection.query(`SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema='public' AND table_name = ANY($1::text[])`, [Object.keys(tables)])).rows;
     const allowed = new Map();
-    for (const column of schema) { if (!allowed.has(column.table_name)) allowed.set(column.table_name, new Set()); allowed.get(column.table_name).add(column.column_name); }
+    const columnTypes = new Map();
+    for (const column of schema) { if (!allowed.has(column.table_name)) allowed.set(column.table_name, new Set()); allowed.get(column.table_name).add(column.column_name); if (!columnTypes.has(column.table_name)) columnTypes.set(column.table_name, new Map()); columnTypes.get(column.table_name).set(column.column_name, column.data_type); }
     const priority = ['guild_settings', 'confessions', 'confession_counters', 'confession_replies'];
     const orderedTables = Object.keys(tables).filter(table => allowed.has(table)).sort((left, right) => (priority.indexOf(left) === -1 ? 999 : priority.indexOf(left)) - (priority.indexOf(right) === -1 ? 999 : priority.indexOf(right)));
     for (const table of [...orderedTables].reverse()) {
@@ -327,9 +328,17 @@ async function importGuildData(guildId, tables) {
       for (const row of rows) {
         const keys = Object.keys(row).filter(key => columns.includes(key));
         if (!keys.includes('guild_id') || String(row.guild_id) !== String(guildId)) continue;
-        const values = keys.map(key => row[key]);
+        const values = keys.map(key => {
+          const value = row[key];
+          const type = columnTypes.get(table)?.get(key);
+          if ((type === 'json' || type === 'jsonb') && typeof value === 'string') {
+            try { return JSON.parse(value); } catch { return value; }
+          }
+          return value;
+        });
         const placeholders = values.map((_, index) => `$${index + 1}`).join(',');
-        await connection.query(`INSERT INTO "${safeTable}" (${keys.map(key => `"${key.replace(/"/g, '""')}"`).join(',')}) VALUES (${placeholders})`, values);
+        try { await connection.query(`INSERT INTO "${safeTable}" (${keys.map(key => `"${key.replace(/"/g, '""')}"`).join(',')}) VALUES (${placeholders})`, values); }
+        catch (error) { error.message = `Table ${table}, row ${count + 1}: ${error.message}`; throw error; }
         count++;
       }
       imported[table] = count;
