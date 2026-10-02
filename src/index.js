@@ -40,7 +40,7 @@ import { getReactionRolePanels, getReactionRolePanel, createReactionRolePanel, a
 import { buildRobloxProfileEmbed } from './ui/robloxProfile.js';
 import { db, query } from './database/db.js';
 import { startFirebaseBackups } from './services/firebaseBackupService.js';
-import { listGuildBackups, getGuildBackup } from './services/firebaseBackupService.js';
+import { backupGuildToFirebase, listGuildBackups, getGuildBackup } from './services/firebaseBackupService.js';
 
 if (!process.env.DISCORD_TOKEN) throw new Error('DISCORD_TOKEN is required');
 
@@ -135,6 +135,34 @@ const websiteServer = createServer(async (request, response) => {
     } catch (error) {
       console.error('[DASHBOARD_IMPORT]', error);
       return sendJson(response, error.statusCode || 500, { error: error.message || 'Import failed.' });
+    }
+  }
+  if (route.startsWith('/api/guilds/') && route.endsWith('/auto-redeploy')) {
+    const guildId = route.split('/')[3];
+    if (request.method === 'OPTIONS') return sendJson(response, 204, null);
+    try {
+      await authorizeDashboardRequest(request, guildId);
+      if (request.method !== 'POST') return sendJson(response, 405, { error: 'Method not allowed.' });
+      const latest = (await listGuildBackups(guildId))[0];
+      if (!latest) return sendJson(response, 404, { error: 'No Firebase backup exists for this server yet.' });
+      const storedBackup = await getGuildBackup(guildId, latest.id);
+      if (!storedBackup) return sendJson(response, 404, { error: 'The latest Firebase backup could not be found.' });
+      const backup = { ...storedBackup, schemaVersion: storedBackup.schemaVersion ?? 1 };
+      const validation = await validateGuildBackup(guildId, backup);
+      if (!validation.valid) return sendJson(response, 400, { error: validation.errors.join(' '), validation });
+      const safetyBackup = await backupGuildToFirebase(guildId);
+      if (safetyBackup.skipped) return sendJson(response, 503, { error: safetyBackup.reason || 'Could not save a recovery copy before restoring.' });
+      const imported = await importGuildData(guildId, backup.tables);
+      let voiceReconnected = false;
+      const savedVoiceChannelId = (await query('SELECT voice_channel_id FROM guild_settings WHERE guild_id=$1', [guildId])).rows[0]?.voice_channel_id;
+      if (savedVoiceChannelId) {
+        try { await keepVoiceConnection(guildId, savedVoiceChannelId); voiceReconnected = true; }
+        catch (error) { console.warn(`[AUTO_REDEPLOY_VOICE] ${guildId}:`, error.message); }
+      }
+      return sendJson(response, 200, { ok: true, guildId, sourceExportedAt: backup.exportedAt, safetyBackupAt: safetyBackup.exportedAt, imported, voiceReconnected });
+    } catch (error) {
+      console.error('[AUTO_REDEPLOY]', guildId, error);
+      return sendJson(response, error.statusCode || 500, { error: error.message || 'Auto redeploy failed.' });
     }
   }
   if (route.startsWith('/api/guilds/') && route.endsWith('/validate-import')) {
