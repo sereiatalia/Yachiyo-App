@@ -121,7 +121,17 @@ const websiteServer = createServer(async (request, response) => {
       const backup = await readJsonBody(request);
       if (backup.guildId !== guildId || !backup.tables || typeof backup.tables !== 'object') return sendJson(response, 400, { error: 'Invalid backup or server ID mismatch.' });
       const imported = await importGuildData(guildId, backup.tables);
-      return sendJson(response, 200, { ok: true, imported });
+      let voiceReconnected = false;
+      const savedVoiceChannelId = (await query('SELECT voice_channel_id FROM guild_settings WHERE guild_id=$1', [guildId])).rows[0]?.voice_channel_id;
+      if (savedVoiceChannelId) {
+        try {
+          await keepVoiceConnection(guildId, savedVoiceChannelId);
+          voiceReconnected = true;
+        } catch (error) {
+          console.warn(`[DASHBOARD_IMPORT_VOICE] Could not reconnect in ${guildId} to ${savedVoiceChannelId}:`, error.message);
+        }
+      }
+      return sendJson(response, 200, { ok: true, imported, voiceReconnected });
     } catch (error) {
       console.error('[DASHBOARD_IMPORT]', error);
       return sendJson(response, error.statusCode || 500, { error: error.message || 'Import failed.' });
