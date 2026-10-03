@@ -955,11 +955,17 @@ async function recoverReactionRoleOptions(panel, guild, sourceMessage = null, fo
     if (!roleMention) continue;
     const role = await guild.roles.fetch(roleMention[1]).catch(() => null);
     if (!role) continue;
-    const lineTokens = [...line.slice(0, roleMention.index).matchAll(emojiPattern)].map(match => match[0]);
+    const beforeMention = line.slice(0, roleMention.index);
+    const afterMention = line.slice(roleMention.index + roleMention[0].length);
+    const beforeTokens = [...beforeMention.matchAll(emojiPattern)].map(match => match[0]);
+    const afterTokens = [...afterMention.matchAll(emojiPattern)].map(match => match[0]);
     const roleNameTokens = [...role.name.matchAll(emojiPattern)].map(match => match[0]);
+    // Support both panel styles: a reaction emoji in the line before the role
+    // mention (Pronouns) or the emoji embedded in the role name (Age Range).
     const roleNameEmoji = roleNameTokens.map(token => byEmoji.get(reactionEmojiKey(token))).find(Boolean);
-    const lineEmoji = lineTokens.map(token => byEmoji.get(reactionEmojiKey(token))).filter(Boolean).at(-1);
-    const emoji = roleNameEmoji ?? lineEmoji ?? roleNameTokens[0] ?? lineTokens.at(-1);
+    const beforeEmoji = beforeTokens.map(token => byEmoji.get(reactionEmojiKey(token))).filter(Boolean).at(-1);
+    const afterEmoji = afterTokens.map(token => byEmoji.get(reactionEmojiKey(token))).find(Boolean);
+    const emoji = roleNameEmoji ?? beforeEmoji ?? afterEmoji ?? roleNameTokens[0] ?? beforeTokens.at(-1) ?? afterTokens[0];
     if (!emoji) continue;
     pairs.push({ roleId: role.id, emoji });
   }
