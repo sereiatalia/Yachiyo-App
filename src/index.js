@@ -516,7 +516,7 @@ async function runReactionRoleWizard(interaction) {
         throw new Error('Discord would not add '+option.emoji+' to the role panel. Check Yachiyo’s Add Reactions permission and confirm the server emoji is available to Yachiyo. The unfinished panel was removed.');
       }
     }
- The panel has been published in '+channel+'.');
+ await interaction.channel.send('✅ The panel has been published in '+channel+'.');
   } catch (error) {
     await interaction.channel.send('⚠️ '+error.message).catch(() => null);
   } finally { reactionRoleWizards.delete(key); }
