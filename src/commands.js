@@ -152,7 +152,7 @@ export const commands = [
   ,new SlashCommandBuilder().setName('leaderboard').setDescription('View this server’s chat or voice leaderboard.').setDMPermission(false).addStringOption(o=>o.setName('type').setDescription('Choose Chat or Voice').setRequired(false).addChoices({name:'Chat • 1 XP per message',value:'chat'},{name:'Voice • time in channel',value:'voice'}))
   ,new SlashCommandBuilder().setName('leaderboard-reward-setup').setDescription('Choose reward roles for chat XP and voice-time milestones.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addRoleOption(o=>o.setName('chat_role').setDescription('Role awarded at 10,000 chat XP').setRequired(true)).addRoleOption(o=>o.setName('voice_role').setDescription('Role awarded at 100 voice hours').setRequired(true))
   ,new SlashCommandBuilder().setName('announcement-reward').setDescription('Manage announcements for earned role rewards.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
-    .addSubcommand(s=>s.setName('add').setDescription('Save a role reward announcement.').addStringOption(o=>o.setName('title').setDescription('Optional; defaults to a cute title for the selected category').setRequired(false).setMaxLength(100)).addRoleOption(o=>o.setName('role').setDescription('Optional for default rewards; uses the configured role').setRequired(false)).addStringOption(o=>o.setName('condition').setDescription('Choose a default reward category or another role reward').setRequired(true).addChoices({name:'Default Chat Reward • 10,000 XP',value:'leaderboard_chat'},{name:'Default Voice Reward • 100 hours',value:'leaderboard_voice'},{name:'Introduction reward',value:'introduction'},{name:'Server shop purchase',value:'server_shop'})).addChannelOption(o=>o.setName('channel').setDescription('Where Yachiyo should announce it').setRequired(true).addChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement)).addStringOption(o=>o.setName('message').setDescription('Optional custom message; supports {user} and {role}').setRequired(false).setMaxLength(1200)))
+    .addSubcommand(s=>s.setName('add').setDescription('Choose a default reward announcement or create your own.').addStringOption(o=>o.setName('category').setDescription('Use a preset or create a custom announcement').setRequired(true).addChoices({name:'Use default',value:'default'},{name:'Make one',value:'custom'})).addStringOption(o=>o.setName('default_reward').setDescription('Pick which leaderboard default to use').setRequired(false).addChoices({name:'Chat • 10,000 XP',value:'leaderboard_chat'},{name:'Voice • 100 hours',value:'leaderboard_voice'})).addStringOption(o=>o.setName('condition').setDescription('For Make one: what earns this reward').setRequired(false).addChoices({name:'Chat leaderboard • 10,000 XP',value:'leaderboard_chat'},{name:'Voice leaderboard • 100 hours',value:'leaderboard_voice'},{name:'Introduction reward',value:'introduction'},{name:'Server shop purchase',value:'server_shop'})).addStringOption(o=>o.setName('title').setDescription('For Make one: announcement title').setRequired(false).setMaxLength(100)).addRoleOption(o=>o.setName('role').setDescription('For Make one: the role being awarded; defaults use configured role').setRequired(false)).addChannelOption(o=>o.setName('channel').setDescription('Where Yachiyo should announce it').setRequired(true).addChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement)).addStringOption(o=>o.setName('message').setDescription('For Make one: message; supports {user} and {role}').setRequired(false).setMaxLength(1200)))
     .addSubcommand(s=>s.setName('list').setDescription('View your saved role reward announcements.'))
     .addSubcommand(s=>s.setName('remove').setDescription('Remove a saved announcement by its ID.').addIntegerOption(o=>o.setName('id').setDescription('ID shown by /announcement-reward list').setRequired(true).setMinValue(1)))
   ,new SlashCommandBuilder().setName('level').setDescription('View your chat level and XP.').setDMPermission(false)
@@ -610,9 +610,17 @@ if(name==='fishalmanac') {
   if(name==='announcement-reward') {
     const action=interaction.options.getSubcommand();
     if(action==='add') {
+      const category=interaction.options.getString('category');
+      const defaultReward=interaction.options.getString('default_reward');
+      const isDefault=category==='default';
+      if(isDefault && !defaultReward) return interaction.reply({content:'Choose which default announcement to use: Chat or Voice. ♡',ephemeral:true});
+      if(!isDefault && category!=='custom') return interaction.reply({content:'Choose **Use default** or **Make one**. ♡',ephemeral:true});
       const customTitle=interaction.options.getString('title')?.trim();
       const selectedRole=interaction.options.getRole('role');
-      const conditionKey=interaction.options.getString('condition');
+      const conditionKey=isDefault ? defaultReward : interaction.options.getString('condition');
+      if(!isDefault && !conditionKey) return interaction.reply({content:'For **Make one**, choose the reward condition. ♡',ephemeral:true});
+      if(!isDefault && !customTitle) return interaction.reply({content:'For **Make one**, add an announcement title. ♡',ephemeral:true});
+      if(!isDefault && !selectedRole) return interaction.reply({content:'For **Make one**, choose the role being awarded. ♡',ephemeral:true});
       const channel=interaction.options.getChannel('channel');
       const settings=await getActivityLeaderboardSettings(interaction.guildId);
       const introSettings=conditionKey==='introduction' ? await getIntroductionSettings(interaction.guildId) : null;
@@ -638,10 +646,10 @@ if(name==='fishalmanac') {
         introduction:{title:'🌷 Introduction Reward!',message:'🌷 {user} shared their introduction and earned the **{role}** role! Give them a warm welcome. ♡'},
         server_shop:{title:'🛍️ Server Shop Reward!',message:'🛍️ {user} earned the **{role}** role from the server shop. Enjoy your new little treasure! ♡'},
       };
-      const title=customTitle || defaults[conditionKey].title;
-      const messageTemplate=interaction.options.getString('message')?.trim() || defaults[conditionKey].message;
+      const title=isDefault ? defaults[conditionKey].title : customTitle;
+      const messageTemplate=isDefault ? defaults[conditionKey].message : interaction.options.getString('message')?.trim() || defaults[conditionKey].message;
       const saved=await createRewardAnnouncement({guildId:interaction.guildId,title,roleId:role.id,conditionKey,channelId:channel.id,messageTemplate});
-      return interaction.reply({content:`🎀 Saved announcement **#${saved.id} · ${title}** for <@&${role.id}> in <#${channel.id}>. Yachiyo will use the ${conditionKey.startsWith('leaderboard_')?'default leaderboard reward category':'selected reward category'} and its default message${customTitle?'':' and title'}. ♡`,ephemeral:true});
+      return interaction.reply({content:`🎀 Saved ${isDefault?'default':'custom'} announcement **#${saved.id} · ${title}** for <@&${role.id}> in <#${channel.id}>. ♡`,ephemeral:true});
     }
     if(action==='list') {
       const rows=await listRewardAnnouncements(interaction.guildId);
