@@ -24,6 +24,7 @@ import { getServerInfo, saveServerInfoPanel, updateServerInfoField, updateServer
 import { getShopSettings, listPurchases } from './services/serverShopService.js';
 import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './services/offlineBrainService.js';
 import { startVoiceActivity, stopVoiceActivity, addChatXp, eligibleActivityRewards, getActivityLeaderboardSettings } from './services/activityLeaderboardService.js';
+import { matchingRewardAnnouncements } from './services/rewardAnnouncementService.js';
 import { buildActivityLeaderboardEmbed, activityLeaderboardButtons } from './ui/activityLeaderboard.js';
 import { getTruthOrDareSettings, saveTruthOrDarePanel, randomTruthOrDare, SAFE_TRUTHS, SAFE_DARES } from './services/truthOrDareService.js';
 import { getAutoReacts } from './services/autoReactService.js';
@@ -628,6 +629,23 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
+async function announceActivityReward(guild, member, role, conditionKey) {
+  const announcements=await matchingRewardAnnouncements(guild.id,conditionKey,role.id);
+  for(const announcement of announcements) {
+    const channel=guild.channels.cache.get(announcement.channel_id) ?? await guild.channels.fetch(announcement.channel_id).catch(()=>null);
+    if(!channel?.isTextBased()) continue;
+    const message=announcement.message_template
+      .replaceAll('{user}',`<@${member.id}>`)
+      .replaceAll('{role}',role.name);
+    await channel.send({
+      embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle(announcement.title).setDescription(message).setTimestamp()],
+      allowedMentions:{users:[member.id]},
+    }).catch(error=>console.error(`[ACTIVITY_REWARD_ANNOUNCEMENT] Failed to post #${announcement.id} in ${guild.id}:`,error));
+  }
+}
+client.announceRoleReward=announceActivityReward;
+
+
 async function grantEligibleActivityRewards(guild) {
   const settings = await getActivityLeaderboardSettings(guild.id);
   if (!settings?.chat_reward_role_id && !settings?.voice_reward_role_id) return;
@@ -638,16 +656,21 @@ async function grantEligibleActivityRewards(guild) {
     const member = guild.members.cache.get(row.user_id) ?? await guild.members.fetch(row.user_id).catch(() => null);
     if (!member) continue;
     const rewards = [];
-    if (Number(row.chat_xp) >= 10000 && settings.chat_reward_role_id) rewards.push([settings.chat_reward_role_id, '10,000 chat XP']);
-    if (Number(row.total_voice_seconds) >= 360000 && settings.voice_reward_role_id) rewards.push([settings.voice_reward_role_id, '100 voice hours']);
-    for (const [roleId, reason] of rewards) {
+    if (Number(row.chat_xp) >= 10000 && settings.chat_reward_role_id) rewards.push([settings.chat_reward_role_id, '10,000 chat XP','leaderboard_chat']);
+    if (Number(row.total_voice_seconds) >= 360000 && settings.voice_reward_role_id) rewards.push([settings.voice_reward_role_id, '100 voice hours','leaderboard_voice']);
+    for (const [roleId, reason, conditionKey] of rewards) {
       if (member.roles.cache.has(roleId)) continue;
       const role = guild.roles.cache.get(roleId) ?? await guild.roles.fetch(roleId).catch(() => null);
       if (!role?.editable) {
         console.error(`[ACTIVITY_REWARD] Cannot assign role ${roleId} in ${guild.id}; check that it exists and is below Yachiyo's role.`);
         continue;
       }
-      await member.roles.add(role, `Yachiyo leaderboard reward: ${reason}`).catch(error => console.error(`[ACTIVITY_REWARD] Failed to give ${roleId} to ${member.id}:`, error));
+      try {
+        await member.roles.add(role, `Yachiyo leaderboard reward: ${reason}`);
+        await announceActivityReward(guild,member,role,conditionKey).catch(error=>console.error('[ACTIVITY_REWARD_ANNOUNCEMENT]',error));
+      } catch(error) {
+        console.error(`[ACTIVITY_REWARD] Failed to give ${roleId} to ${member.id}:`,error);
+      }
     }
   }
 }
@@ -1616,7 +1639,9 @@ client.on('interactionCreate', async interaction => {
       const role = settings.reward_role_id ? (interaction.guild.roles.cache.get(settings.reward_role_id) ?? await interaction.guild.roles.fetch(settings.reward_role_id).catch(() => null)) : null;
       if (!role) return interaction.reply({content:'✅ Your introduction was posted, but no reward role is configured. Ask an admin to use `/introduction-reward-role`.', ephemeral:true});
       if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles) || !role.editable) return interaction.reply({content:'✅ Your introduction was posted, but Yachiyo cannot assign <@&' + role.id + '>. Give Yachiyo Manage Roles and move its bot role above the reward role.', ephemeral:true});
+      const alreadyHadRewardRole=interaction.member.roles.cache.has(role.id);
       await interaction.member.roles.add(role, 'Introduction submitted');
+      if(!alreadyHadRewardRole) await interaction.client.announceRoleReward?.(interaction.guild,interaction.member,role,'introduction').catch(error=>console.error('[REWARD_ANNOUNCEMENT]',error));
       return interaction.reply({content:'✅ Your introduction was posted in <#' + settings.channel_id + '> and you received <@&' + role.id + '>!', ephemeral:true});
     } catch (error) {
       console.error('[INTRODUCTION_SUBMIT]', error);

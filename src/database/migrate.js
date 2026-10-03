@@ -212,6 +212,13 @@ CREATE TABLE IF NOT EXISTS activity_leaderboard_settings (
   guild_id TEXT PRIMARY KEY, chat_reward_role_id TEXT, voice_reward_role_id TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS reward_announcements (
+  id BIGSERIAL PRIMARY KEY, guild_id TEXT NOT NULL, title TEXT NOT NULL,
+  role_id TEXT NOT NULL, condition_key TEXT NOT NULL, channel_id TEXT NOT NULL,
+  message_template TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS reward_announcements_match_idx
+  ON reward_announcements (guild_id, condition_key, role_id);
 CREATE TABLE IF NOT EXISTS truth_or_dare_settings (
   guild_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, panel_message_id TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

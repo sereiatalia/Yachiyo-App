@@ -12,14 +12,15 @@ import { setConfessionChannel, setConfessionStartNumber, getConfessionNextNumber
 import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurseSettings, addCurseExemptRole, removeCurseExemptRole, getCurseExemptRoles } from './services/curseService.js';
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
-import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, resetIntroduction, saveIntroductionSettings, clearIntroductionRecords } from './services/introductionService.js';
+import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, getIntroductionSettings, resetIntroduction, saveIntroductionSettings, clearIntroductionRecords } from './services/introductionService.js';
 import { createGiveaway, setGiveawayMessage, getGiveaway, getGiveawayEntries, finishGiveaway } from './services/giveawayService.js';
 import { setupRules, getRules, updateRule, updateRulesBanner } from './services/rulesService.js';
 import { saveTicketSettings, addTicketAccessRole, removeTicketAccessRole, getTicketAccessRoles } from './services/ticketService.js';
 import { getBumpTimer, saveBumpPanel } from './services/bumpService.js';
 import { setupServerInfo, getServerInfo, updateServerInfoField, updateServerInfoBanner, addServerInfoStaffRole, removeServerInfoStaffRole, getServerInfoStaffRoles } from './services/serverInfoService.js';
 import { addBrainFaq, removeBrainFaq, getBrainFaqs, addRoleGuide, removeRoleGuide, getRoleGuides } from './services/brainMemoryService.js';
-import { chatLevelFromXp, chatXpForNextLevel, getChatXp, addChatXpAmount, saveActivityLeaderboardSettings } from './services/activityLeaderboardService.js';
+import { chatLevelFromXp, chatXpForNextLevel, getChatXp, addChatXpAmount, saveActivityLeaderboardSettings, getActivityLeaderboardSettings } from './services/activityLeaderboardService.js';
+import { createRewardAnnouncement, listRewardAnnouncements, removeRewardAnnouncement } from './services/rewardAnnouncementService.js';
 import { buildActivityLeaderboardEmbed, activityLeaderboardButtons } from './ui/activityLeaderboard.js';
 import { addShopItem, removeShopItem, listShopItems, getShopItem, getShopSettings, updateShopSettings, addPurchase, listPurchases, removePurchase } from './services/serverShopService.js';
 import { saveTruthOrDareSettings, getTruthOrDareSettings } from './services/truthOrDareService.js';
@@ -52,7 +53,7 @@ const HELP_CATEGORIES = {
   introductions: {label:'Introductions & Tickets',description:'Introduce yourself or contact staff.',body:'**Introductions & Tickets**\n\n`/introduction-template` — View the introduction template.\n`/introduction-panel` — Admin: refresh or edit the introduction panel.\n`/introduction-setup` — Admin: choose the introduction channel and reward role.\n`/ticket-setup` — Admin: set the ticket panel and category.\n`/ticket-role` — Admin: choose staff roles who can access tickets.\n\nUse the **Introduction** or ticket category button in the configured panel to begin.'},
   server: {label:'Server panels',description:'Rulebook, server info, logs, and emojis.',body:'**Server Panels & Setup**\n\n`/rules-setup`, `/rules-panel`, `/rules-edit`, `/rules-banner` — Build and edit the Rule Book.\n`/server-info-setup`, `/server-info-edit`, `/server-info-banner` — Build and style Server Info.\n`/server-info-staff` — Add staff roles in display order.\n`/reaction-role panel` — Admin: create and edit role panels in one manager.\n`/server-info-recount` — Admin: count readable message history.\n`/refresh-panels` — Admin: update Server Info in place and check the other panels.\n`/recover-server` — Admin: rebuild saved settings by re-reading Yachiyo’s own panels.\n`/emoji-upload` — Admin: turn image attachments into server emojis.\n`/auto-react-setup`, `/auto-react-list`, `/auto-react-clear` — Add emoji reactions to every message in selected channels.\n`/logs`, `/logs-category` — Admin: choose audit-log destinations.'},
   moderation: {label:'Moderation',description:'Warnings, filters, and channel controls.',body:'**Moderation Tools**\n\n`/warn`, `/warnings` — Staff: create or view moderation cases.\n`/kick`, `/ban`, `/unban` — Staff: manage server membership.\n`/timeout`, `/untimeout` — Staff: manage member timeouts.\n`/purge` — Staff: remove recent messages.\n`/lock`, `/unlock` — Staff: control the current channel.\n`/curse-setup`, `/curse`, `/curse-list` — Admin: manage the whole-word curse filter.\n`/spam-setup` — Admin: enable the server-wide 5-messages-per-second spam warnings.'},
-  events: {label:'Giveaways and voice',description:'Giveaways, games, and voice tools.',body:'**Events, Games, and Voice**\n\n`/giveaway start` — Staff: create a giveaway with prize, duration, winners, channel, and required role.\n`/giveaway repick` — Staff: choose replacement winners randomly.\n`/quiz start` — Start a public Quiz Bee with rounds, difficulty, and topics.\n`/games` — Open the button-based games hub.\n`/guess-character` — Start a character guessing game.\n`/daily-question` — Post a daily conversation prompt.\n`/rate user` — Give a playful, non-serious community rating.\n`/leaderboard` — Switch between server-wide Chat and Voice rankings.\n`/leaderboard-reward-setup` — Admin: set roles awarded at 10,000 chat XP and 100 voice hours.\n`/temp-vc-setup` — Admin: choose the Join to Create voice channel.\n`/my-vc` — Change the name or status of your current temporary VC.\n`/vc-join` — Admin: keep Yachiyo in a voice channel while she is online.'},
+  events: {label:'Giveaways and voice',description:'Giveaways, games, and voice tools.',body:'**Events, Games, and Voice**\n\n`/giveaway start` — Staff: create a giveaway with prize, duration, winners, channel, and required role.\n`/giveaway repick` — Staff: choose replacement winners randomly.\n`/quiz start` — Start a public Quiz Bee with rounds, difficulty, and topics.\n`/games` — Open the button-based games hub.\n`/guess-character` — Start a character guessing game.\n`/daily-question` — Post a daily conversation prompt.\n`/rate user` — Give a playful, non-serious community rating.\n`/leaderboard` — Switch between server-wide Chat and Voice rankings.\n`/leaderboard-reward-setup` — Admin: set roles awarded at 10,000 chat XP and 100 voice hours.\n`/announcement-reward add` — Admin: announce leaderboard, introduction, or server-shop role rewards.\n`/announcement-reward list|remove` — Admin: manage saved announcements.\n`/temp-vc-setup` — Admin: choose the Join to Create voice channel.\n`/my-vc` — Change the name or status of your current temporary VC.\n`/vc-join` — Admin: keep Yachiyo in a voice channel while she is online.'},
   economy: {label:'Server management',description:'Logs, panels, and configuration.',body:'**Server Management**\n\n`/logs`, `/logs-category` — Configure audit-log destinations.\n`/rules-setup`, `/rules-panel`, `/rules-edit`, `/rules-banner` — Manage the Rule Book.\n`/server-info-setup`, `/server-info-edit`, `/server-info-banner`, `/server-info-staff` — Manage Server Info.\n`/reaction-role panel` — Create and edit reaction-role panels.\n`/emoji-upload` — Create server emojis from images.'},
   brain: {label:'Yachiyo brain',description:'Offline helper, FAQ memory, and role guides.',body:'**Yachiyo’s Offline Brain**\n\nMention `@Yachiyo` for server facts, time by country, maths, public channel finding, quotes, fortunes, dice, coin flips, and more.\n\n`/brain-faq add|list|remove` — Admin: teach Yachiyo exact server answers.\n`/role-guide add|list|remove` — Admin: explain how members get roles.\n\nYachiyo answers in English, Filipino/Taglish, and selected basic language phrases. She does not use an AI API or credits.'},
 };
@@ -150,6 +151,10 @@ export const commands = [
   ,new SlashCommandBuilder().setName('withdraw').setDescription('Withdraw coins from your bank.').addIntegerOption(o=>o.setName('amount').setDescription('Amount').setRequired(true))
   ,new SlashCommandBuilder().setName('leaderboard').setDescription('View this server’s chat or voice leaderboard.').setDMPermission(false).addStringOption(o=>o.setName('type').setDescription('Choose Chat or Voice').setRequired(false).addChoices({name:'Chat • 1 XP per message',value:'chat'},{name:'Voice • time in channel',value:'voice'}))
   ,new SlashCommandBuilder().setName('leaderboard-reward-setup').setDescription('Choose reward roles for chat XP and voice-time milestones.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addRoleOption(o=>o.setName('chat_role').setDescription('Role awarded at 10,000 chat XP').setRequired(true)).addRoleOption(o=>o.setName('voice_role').setDescription('Role awarded at 100 voice hours').setRequired(true))
+  ,new SlashCommandBuilder().setName('announcement-reward').setDescription('Manage announcements for earned role rewards.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
+    .addSubcommand(s=>s.setName('add').setDescription('Save a role reward announcement.').addStringOption(o=>o.setName('title').setDescription('Announcement title').setRequired(true).setMaxLength(100)).addRoleOption(o=>o.setName('role').setDescription('Role awarded by the selected reward').setRequired(true)).addStringOption(o=>o.setName('condition').setDescription('Choose what earns this role').setRequired(true).addChoices({name:'Chat leaderboard • 10,000 XP',value:'leaderboard_chat'},{name:'Voice leaderboard • 100 hours',value:'leaderboard_voice'},{name:'Introduction reward',value:'introduction'},{name:'Server shop purchase',value:'server_shop'})).addChannelOption(o=>o.setName('channel').setDescription('Where Yachiyo should announce it').setRequired(true).addChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement)).addStringOption(o=>o.setName('message').setDescription('Optional message; supports {user} and {role}').setRequired(false).setMaxLength(1200)))
+    .addSubcommand(s=>s.setName('list').setDescription('View your saved role reward announcements.'))
+    .addSubcommand(s=>s.setName('remove').setDescription('Remove a saved announcement by its ID.').addIntegerOption(o=>o.setName('id').setDescription('ID shown by /announcement-reward list').setRequired(true).setMinValue(1)))
   ,new SlashCommandBuilder().setName('level').setDescription('View your chat level and XP.').setDMPermission(false)
   ,new SlashCommandBuilder().setName('unlock').setDescription('Unlock the current channel.').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
   ,new SlashCommandBuilder().setName('lock').setDescription('Lock the current channel.').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
@@ -207,7 +212,7 @@ export async function handleCommand(interaction) {
     if(action==='xp') { const xp=await addChatXpAmount(interaction.guildId,target.id,interaction.options.getInteger('amount')); return interaction.reply({content:'Added XP to '+target+'. Chat XP: **'+xp.toLocaleString()+'**.',ephemeral:true}); }
     const fishName=interaction.options.getString('fish'); const fish=FISH_TABLE.find(item=>item.name.toLowerCase()===fishName.toLowerCase()); if(!fish) return interaction.reply({content:'Fish not found. Use the exact name from `/fishalmanac`.',ephemeral:true}); await saveFish(target.id,fish); return interaction.reply({content:'Gave **'+fish.name+'** ('+fish.rarity+') to '+target+'.',ephemeral:true});
   }
-  const adminOnly=['economy-add','logs','confession-setup','introduction-setup','introduction-panel','introduction-reset','introduction-status','fish-setup','curse-setup','curse','curse-exempt-role','spam-setup','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout','vc-join','ticket-role','server-info-setup','server-info-edit','server-info-banner','server-info-staff','server-info-recount','refresh-panels','recover-server','brain-faq','role-guide','tod-setup','tod-panel','auto-react-setup','auto-react-list','auto-react-clear','temp-vc-setup','temp-vc-panel','reaction-role'];
+  const adminOnly=['economy-add','logs','announcement-reward','confession-setup','introduction-setup','introduction-panel','introduction-reset','introduction-status','fish-setup','curse-setup','curse','curse-exempt-role','spam-setup','warn','warnings','kick','ban','timeout','purge','lock','unlock','unban','untimeout','vc-join','ticket-role','server-info-setup','server-info-edit','server-info-banner','server-info-staff','server-info-recount','refresh-panels','recover-server','brain-faq','role-guide','tod-setup','tod-panel','auto-react-setup','auto-react-list','auto-react-clear','temp-vc-setup','temp-vc-panel','reaction-role'];
   if(name==='help') return interaction.reply(buildHelpView());
   if(name==='reaction-role' && interaction.options.getSubcommand()==='panel') return interaction.reply({content:'୨୧ Opening the Reaction Role Manager...',components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('rr_create').setLabel('Create Panel').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('rr_edit_choose').setLabel('Edit Panel').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('rr_list').setLabel('List Panels').setStyle(ButtonStyle.Secondary))],ephemeral:true});
   if(name==='reaction-role' && interaction.options.getSubcommand()==='setup') return interaction.client.emit('reactionRoleWizardStart', interaction);
@@ -218,7 +223,19 @@ export async function handleCommand(interaction) {
     if(action==='add') { const role=interaction.options.getRole('role'), price=interaction.options.getInteger('price'), level=interaction.options.getInteger('level'); if(!role.editable) return interaction.reply({content:'Yachiyo cannot assign that role. Move her bot role above it.',ephemeral:true}); await addShopItem(interaction.guildId,role.id,role.name,price,level); return interaction.reply({content:'✅ '+role+' was added to the server shop for **'+price.toLocaleString()+'** coins at **Level '+level+'**.',ephemeral:true}); }
     if(action==='remove') { const role=interaction.options.getRole('role'); await removeShopItem(interaction.guildId,role.id); return interaction.reply({content:'✅ '+role+' was removed from the server shop.',ephemeral:true}); }
     const items=await listShopItems(interaction.guildId); if(action==='view') return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('✦ Server Role Shop').setDescription(items.length?items.map(item=>'<@&'+item.role_id+'> — **'+Number(item.price).toLocaleString()+'** coins · requires **Level '+item.required_level+'**').join('\n'):'The server shop is currently empty.')]});
-    const item=await getShopItem(interaction.guildId,interaction.options.getRole('role').id); if(!item) return interaction.reply({content:'That role is not sold in the server shop.',ephemeral:true}); const level=chatLevelFromXp(await getChatXp(interaction.guildId,interaction.user.id)); if(level<Number(item.required_level)) return interaction.reply({content:'You need **Level '+item.required_level+'** to unlock that role. Your current level is **'+level+'**.',ephemeral:true}); const b=await balance(interaction.user.id); if(Number(b.wallet)<Number(item.price)) return interaction.reply({content:'You need **'+Number(item.price).toLocaleString()+'** coins. Your wallet has **'+Number(b.wallet).toLocaleString()+'**.',ephemeral:true}); const role=await interaction.guild.roles.fetch(item.role_id).catch(()=>null); if(!role?.editable) return interaction.reply({content:'Yachiyo cannot assign that role right now.',ephemeral:true}); await addMoney(interaction.user.id,-Number(item.price),'server_shop'); await interaction.member.roles.add(role,'Purchased server shop role'); return interaction.reply({content:'✅ You purchased '+role+' for **'+Number(item.price).toLocaleString()+'** coins!',ephemeral:true});
+    const item=await getShopItem(interaction.guildId,interaction.options.getRole('role').id);
+    if(!item) return interaction.reply({content:'That role is not sold in the server shop.',ephemeral:true});
+    const level=chatLevelFromXp(await getChatXp(interaction.guildId,interaction.user.id));
+    if(level<Number(item.required_level)) return interaction.reply({content:'You need **Level '+item.required_level+'** to unlock that role. Your current level is **'+level+'**.',ephemeral:true});
+    const b=await balance(interaction.user.id);
+    if(Number(b.wallet)<Number(item.price)) return interaction.reply({content:'You need **'+Number(item.price).toLocaleString()+'** coins. Your wallet has **'+Number(b.wallet).toLocaleString()+'**.',ephemeral:true});
+    const role=await interaction.guild.roles.fetch(item.role_id).catch(()=>null);
+    if(!role?.editable) return interaction.reply({content:'Yachiyo cannot assign that role right now.',ephemeral:true});
+    const alreadyHadRole=interaction.member.roles.cache.has(role.id);
+    await addMoney(interaction.user.id,-Number(item.price),'server_shop');
+    await interaction.member.roles.add(role,'Purchased server shop role');
+    if(!alreadyHadRole) await interaction.client.announceRoleReward?.(interaction.guild,interaction.member,role,'server_shop').catch(error=>console.error('[REWARD_ANNOUNCEMENT]',error));
+    return interaction.reply({content:'✅ You purchased '+role+' for **'+Number(item.price).toLocaleString()+'** coins!',ephemeral:true});
   }
   if(name==='tod-setup') { await saveTruthOrDareSettings(interaction.guildId,interaction.options.getChannel('channel').id); await interaction.reply({content:'✅ Truth or Dare panel saved and refreshed.',ephemeral:true}); return interaction.client.emit('truthOrDarePanelRefresh',interaction.guildId); }
   if(name==='tod-panel') { if(!await getTruthOrDareSettings(interaction.guildId)) return interaction.reply({content:'Run `/tod-setup` first.',ephemeral:true}); await interaction.reply({content:'✅ Refreshing the Truth or Dare panel.',ephemeral:true}); return interaction.client.emit('truthOrDarePanelRefresh',interaction.guildId); }
@@ -589,6 +606,57 @@ if(name==='fishalmanac') {
     await saveActivityLeaderboardSettings(interaction.guildId,{chatRoleId:chatRole.id,voiceRoleId:voiceRole.id});
     await interaction.client.checkActivityRewards?.(interaction.guild).catch(error=>console.error('[ACTIVITY_REWARDS]',error));
     return interaction.editReply({content:`🎀 Leaderboard rewards are set!\n🍓 Chat: <@&${chatRole.id}> at **10,000 XP**\n🎙️ Voice: <@&${voiceRole.id}> at **100 hours**\n\nCounts include chat messages and voice time from across this server. Existing profile message counts were carried forward as starting chat XP. ♡`});
+  }
+  if(name==='announcement-reward') {
+    const action=interaction.options.getSubcommand();
+    if(action==='add') {
+      const title=interaction.options.getString('title').trim();
+      if(!title) return interaction.reply({content:'Please give this saved announcement a title.',ephemeral:true});
+      const role=interaction.options.getRole('role');
+      const conditionKey=interaction.options.getString('condition');
+      const channel=interaction.options.getChannel('channel');
+      const settings=await getActivityLeaderboardSettings(interaction.guildId);
+      const introSettings=conditionKey==='introduction' ? await getIntroductionSettings(interaction.guildId) : null;
+      const shopItem=conditionKey==='server_shop' ? await getShopItem(interaction.guildId,role.id) : null;
+      const expectedRole=conditionKey==='leaderboard_chat' ? settings?.chat_reward_role_id
+        : conditionKey==='leaderboard_voice' ? settings?.voice_reward_role_id
+        : conditionKey==='introduction' ? introSettings?.reward_role_id
+        : shopItem?.role_id;
+      if(!expectedRole) {
+        const setupHint=conditionKey==='leaderboard_chat' || conditionKey==='leaderboard_voice' ? 'Set up `/leaderboard-reward-setup` first.' : conditionKey==='introduction' ? 'Set the introduction reward with `/introduction-reward-role` first.' : 'Add that role to the server shop first.';
+        return interaction.reply({content:`Yachiyo couldn’t find a configured role for this condition. ${setupHint}`,ephemeral:true});
+      }
+      if(role.id!==expectedRole) return interaction.reply({content:`That role does not match the role configured for this leaderboard condition. The configured role is <@&${expectedRole}>.`,ephemeral:true});
+      if(role.id===interaction.guild.id || !role.editable) return interaction.reply({content:'Choose a regular reward role that Yachiyo can assign. Her bot role must be above it.',ephemeral:true});
+      const botMember=interaction.guild.members.me ?? await interaction.guild.members.fetch(interaction.client.user.id).catch(()=>null);
+      const permissions=channel?.permissionsFor(botMember);
+      if(!channel?.isTextBased() || !permissions?.has([PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.EmbedLinks])) return interaction.reply({content:'Yachiyo needs View Channel, Send Messages, and Embed Links in the announcement channel.',ephemeral:true});
+      const defaultMessages={
+        leaderboard_chat:'🍓 {user} reached **10,000 Chat XP** and earned the **{role}** role! Their messages have filled the garden with cheer. ♡',
+        leaderboard_voice:'🎙️ {user} reached **100 voice hours** and earned the **{role}** role! Thanks for sharing so many cozy conversations. ♡',
+        introduction:'🌷 {user} shared their introduction and earned the **{role}** role! Give them a warm welcome. ♡',
+        server_shop:'🛍️ {user} earned the **{role}** role from the server shop. Enjoy your new little treasure! ♡',
+      };
+      const messageTemplate=interaction.options.getString('message')?.trim() || defaultMessages[conditionKey];
+      const saved=await createRewardAnnouncement({guildId:interaction.guildId,title,roleId:role.id,conditionKey,channelId:channel.id,messageTemplate});
+      return interaction.reply({content:`🎀 Saved announcement **#${saved.id} · ${title}** for <@&${role.id}> in <#${channel.id}>. Yachiyo will post it when the matching leaderboard reward is granted. ♡`,ephemeral:true});
+    }
+    if(action==='list') {
+      const rows=await listRewardAnnouncements(interaction.guildId);
+      const conditionName={leaderboard_chat:'Chat • 10,000 XP',leaderboard_voice:'Voice • 100 hours',introduction:'Introduction reward',server_shop:'Server shop purchase'};
+      if(!rows.length) return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('🎀 Saved Reward Announcements').setDescription('No saved announcements yet. Use `/announcement-reward add` to create one. ♡')],ephemeral:true});
+      const embeds=[];
+      for(let index=0;index<rows.length && embeds.length<10;index+=15) {
+        const page=rows.slice(index,index+15);
+        const description=page.map(row=>`**#${row.id} · ${row.title}**\n${conditionName[row.condition_key] ?? row.condition_key} · <@&${row.role_id}> · <#${row.channel_id}>`).join('\n\n');
+        embeds.push(new EmbedBuilder().setColor(0xf3a6c7).setTitle(`🎀 Saved Reward Announcements (${index+1}–${index+page.length})`).setDescription(description));
+      }
+      if(rows.length>150) embeds[embeds.length-1].setFooter({text:`Showing the first 150 of ${rows.length}; remove old entries to see later ones.`});
+      return interaction.reply({embeds,ephemeral:true});
+    }
+    const id=interaction.options.getInteger('id');
+    const removed=await removeRewardAnnouncement(interaction.guildId,id);
+    return interaction.reply({content:removed?`Removed saved reward announcement **#${id}**. ♡`:`I couldn’t find announcement **#${id}** in this server.`,ephemeral:true});
   }
   if(name==='level') { const xp=await getChatXp(interaction.guildId,interaction.user.id), level=chatLevelFromXp(xp), next=chatXpForNextLevel(level); return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('✦ Your Chat Level').setDescription('**Level '+level+'**\n**'+xp.toLocaleString()+'** chat XP\n\n'+(level>=3?'Next level at **'+next.toLocaleString()+'** XP.':'Next level at **'+next.toLocaleString()+'** XP.')+'\n\nEvery message gives **1 chat XP** and **1 coin**.')],ephemeral:true}); }
   if(name==='lock'||name==='unlock') { await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone,{SendMessages:name==='unlock'}); await createCase({guildId:interaction.guildId,targetId:interaction.channelId,moderatorId:interaction.user.id,action:name,reason:`Channel ${name}ed`}); return interaction.reply({embeds:[yEmbed(name==='lock'?'🔒 Channel Sealed':'🔓 Channel Opened',`This channel has been ${name}ed by Yachiyo.`,0xe67e22)]}); }
