@@ -933,8 +933,8 @@ client.on('bumpPanelRefresh', async guildId => {
 });
 function reactionEmojiKey(value) {
   const emoji = String(value ?? '');
-  const custom = emoji.match(/^<a?:[^:]+:(\\d+)>$/);
-  return custom ? 'custom:' + custom[1] : emoji.normalize('NFC').replace(/[\\uFE0E\\uFE0F]/g, '');
+  const custom = emoji.match(/^<a?:[^:]+:(\d+)>$/);
+  return custom ? 'custom:' + custom[1] : emoji.normalize('NFC').replace(/[\uFE0E\uFE0F]/g, '');
 }
 async function recoverReactionRoleOptions(panel, guild) {
   if (!panel?.message_id || !guild) return 0;
@@ -944,13 +944,13 @@ async function recoverReactionRoleOptions(panel, guild) {
   if (!channel?.isTextBased()) return 0;
   const message = await channel.messages.fetch(existing.message_id).catch(() => null);
   if (!message || message.author.id !== client.user?.id) return 0;
-  const text = message.embeds.map(embed => [embed.description, ...(embed.fields ?? []).map(field => field.value)].filter(Boolean).join('\\n')).join('\\n');
+  const text = message.embeds.map(embed => [embed.description, ...(embed.fields ?? []).map(field => field.value)].filter(Boolean).join('\n')).join('\n');
   const reactions = [...message.reactions.cache.values()];
   const byEmoji = new Map(reactions.map(reaction => [reactionEmojiKey(reaction.emoji.toString()), reaction.emoji.toString()]));
-  const emojiPattern = /<a?:[A-Za-z0-9_]+:\\d{15,25}>|(?:\\p{Extended_Pictographic}|\\p{Regional_Indicator})[\\uFE0E\\uFE0F\\p{Emoji_Modifier}]*(?:\\u200D(?:\\p{Extended_Pictographic}|\\p{Regional_Indicator})[\\uFE0E\\uFE0F\\p{Emoji_Modifier}]*)*|\\p{Regional_Indicator}{2}/gu;
+  const emojiPattern = /<a?:[A-Za-z0-9_]+:\d{15,25}>|(?:\p{Extended_Pictographic}|\p{Regional_Indicator})[\uFE0E\uFE0F\p{Emoji_Modifier}]*(?:\u200D(?:\p{Extended_Pictographic}|\p{Regional_Indicator})[\uFE0E\uFE0F\p{Emoji_Modifier}]*)*|\p{Regional_Indicator}{2}/gu;
   let recovered = 0;
-  for (const line of text.split(/\\r?\\n/)) {
-    const roleMention = /<@&(\\d{15,25})>/.exec(line);
+  for (const line of text.split(/\r?\n/)) {
+    const roleMention = /<@&(\d{15,25})>/.exec(line);
     if (!roleMention) continue;
     const tokens = [...line.slice(0, roleMention.index).matchAll(emojiPattern)].map(match => match[0]);
     const emoji = tokens.map(token => byEmoji.get(reactionEmojiKey(token))).filter(Boolean).at(-1);
