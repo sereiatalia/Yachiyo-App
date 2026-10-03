@@ -345,6 +345,7 @@ async function exportGuildData(guildId) {
 }
 
 async function importGuildData(guildId, tables) {
+  await getReactionRolePanels(guildId);
   const connection = await db.connect();
   const imported = {};
   try {
@@ -936,32 +937,36 @@ function reactionEmojiKey(value) {
   const custom = emoji.match(/^<a?:[^:]+:(\d+)>$/);
   return custom ? 'custom:' + custom[1] : emoji.normalize('NFC').replace(/[\uFE0E\uFE0F]/g, '');
 }
-async function recoverReactionRoleOptions(panel, guild) {
-  if (!panel?.message_id || !guild) return 0;
-  const existing = await getReactionRolePanel(panel.id, guild.id).catch(() => null);
-  if (!existing || existing.options.length) return 0;
-  const channel = await guild.channels.fetch(existing.channel_id).catch(() => null);
+async function recoverReactionRoleOptions(panel, guild, sourceMessage = null) {
+  let existing = panel ? await getReactionRolePanel(panel.id, guild.id).catch(() => null) : null;
+  if (existing?.options.length) return 0;
+  const channel = sourceMessage?.channel ?? (existing ? await guild.channels.fetch(existing.channel_id).catch(() => null) : null);
   if (!channel?.isTextBased()) return 0;
-  const message = await channel.messages.fetch(existing.message_id).catch(() => null);
+  const message = sourceMessage ?? await channel.messages.fetch(existing.message_id).catch(() => null);
   if (!message || message.author.id !== client.user?.id) return 0;
   const text = message.embeds.map(embed => [embed.description, ...(embed.fields ?? []).map(field => field.value)].filter(Boolean).join('\n')).join('\n');
   const reactions = [...message.reactions.cache.values()];
   const byEmoji = new Map(reactions.map(reaction => [reactionEmojiKey(reaction.emoji.toString()), reaction.emoji.toString()]));
   const emojiPattern = /<a?:[A-Za-z0-9_]+:\d{15,25}>|(?:\p{Extended_Pictographic}|\p{Regional_Indicator})[\uFE0E\uFE0F\p{Emoji_Modifier}]*(?:\u200D(?:\p{Extended_Pictographic}|\p{Regional_Indicator})[\uFE0E\uFE0F\p{Emoji_Modifier}]*)*|\p{Regional_Indicator}{2}/gu;
-  let recovered = 0;
+  const pairs = [];
   for (const line of text.split(/\r?\n/)) {
     const roleMention = /<@&(\d{15,25})>/.exec(line);
     if (!roleMention) continue;
     const tokens = [...line.slice(0, roleMention.index).matchAll(emojiPattern)].map(match => match[0]);
     const emoji = tokens.map(token => byEmoji.get(reactionEmojiKey(token))).filter(Boolean).at(-1);
-    if (!emoji) continue;
-    const roleId = roleMention[1];
-    if (!await guild.roles.fetch(roleId).catch(() => null)) continue;
-    await addReactionRoleOption(existing.id, roleId, emoji);
-    recovered++;
+    if (!emoji || !await guild.roles.fetch(roleMention[1]).catch(() => null)) continue;
+    pairs.push({ roleId: roleMention[1], emoji });
   }
-  if (recovered) console.log('[REACTION_ROLE_RECOVERY] Restored ' + recovered + ' emoji-to-role mapping(s) from existing panel ' + existing.message_id + ' in guild ' + guild.id + '.');
-  return recovered;
+  if (!pairs.length) return 0;
+  if (!existing) {
+    const embed = message.embeds[0];
+    const recoveredPanel = await createReactionRolePanel(guild.id, channel.id, embed?.title || 'Recovered reaction roles', embed?.description || 'Recovered from the existing Yachiyo panel.', embed?.color ?? 0xf3a6c7);
+    await setReactionRolePanelMessage(recoveredPanel.id, message.id);
+    existing = { ...recoveredPanel, options: [] };
+  }
+  for (const pair of pairs) await addReactionRoleOption(existing.id, pair.roleId, pair.emoji);
+  console.log('[REACTION_ROLE_RECOVERY] Restored ' + pairs.length + ' emoji-to-role mapping(s) from existing panel ' + message.id + ' in guild ' + guild.id + '.');
+  return pairs.length;
 }
 async function findReactionRoleForEvent(reaction) {
   const messageId = reaction.message.id;
@@ -975,8 +980,7 @@ async function findReactionRoleForEvent(reaction) {
     console.error('[REACTION_ROLE_PANEL_LOOKUP]', error);
     return [];
   })).find(candidate => candidate.message_id === messageId);
-  if (!panel) return null;
-  await recoverReactionRoleOptions(panel, reaction.message.guild).catch(error => console.error('[REACTION_ROLE_RECOVERY]', error));
+  await recoverReactionRoleOptions(panel ?? null, reaction.message.guild, reaction.message).catch(error => console.error('[REACTION_ROLE_RECOVERY]', error));
   mapping = await getReactionRoleByMessage(messageId, emoji).catch(error => {
     console.error('[REACTION_ROLE_LOOKUP]', error);
     return null;
