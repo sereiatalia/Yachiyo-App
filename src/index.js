@@ -1017,6 +1017,7 @@ async function restoreExistingReactionRoles() {
             const member = await guild.members.fetch(user.id).catch(() => null);
             if (member && !member.roles.cache.has(role.id)) {
               await member.roles.add(role, 'Restore existing reaction-role selection').catch(error => console.error('[REACTION_ROLE_SYNC] Could not restore role ' + role.id + ' for ' + user.id + ':', error));
+            }
           }
         }
       } catch (error) {
