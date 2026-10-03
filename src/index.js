@@ -957,10 +957,9 @@ async function recoverReactionRoleOptions(panel, guild, sourceMessage = null, fo
     if (!role) continue;
     const lineTokens = [...line.slice(0, roleMention.index).matchAll(emojiPattern)].map(match => match[0]);
     const roleNameTokens = [...role.name.matchAll(emojiPattern)].map(match => match[0]);
-    const roleNameEmoji = roleNameTokens.map(token => byEmoji.get(reactionEmojiKey(token))).find(Boolean)
-      ?? roleNameTokens[0];
+    const roleNameEmoji = roleNameTokens.map(token => byEmoji.get(reactionEmojiKey(token))).find(Boolean);
     const lineEmoji = lineTokens.map(token => byEmoji.get(reactionEmojiKey(token))).filter(Boolean).at(-1);
-    const emoji = roleNameEmoji ?? lineEmoji ?? lineTokens.at(-1);
+    const emoji = roleNameEmoji ?? lineEmoji ?? roleNameTokens[0] ?? lineTokens.at(-1);
     if (!emoji) continue;
     pairs.push({ roleId: role.id, emoji });
   }
@@ -1221,7 +1220,7 @@ client.on('reactionRoleRepair', async interaction => {
     }
     await restoreExistingReactionRoles(interaction.guildId, messageId);
     const permissionNote = blockedRoles.length
-      ? '\\n\\nYachiyo cannot assign: **' + blockedRoles.join(', ') + '**. Enable **Manage Roles** and move Yachiyo’s bot role above these roles.'
+      ? '\n\nYachiyo cannot assign: **' + blockedRoles.join(', ') + '**. Enable **Manage Roles** and move Yachiyo’s bot role above these roles.'
       : '';
     return interaction.editReply('✨ Repaired the existing panel and restored ' + restoredCount + ' emoji-to-role link(s). Existing reactions were synced; no new panel was created.' + permissionNote);
   } catch (error) {
