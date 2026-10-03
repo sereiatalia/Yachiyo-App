@@ -953,10 +953,16 @@ async function recoverReactionRoleOptions(panel, guild, sourceMessage = null, fo
   for (const line of text.split(/\r?\n/)) {
     const roleMention = /<@&(\d{15,25})>/.exec(line);
     if (!roleMention) continue;
-    const tokens = [...line.slice(0, roleMention.index).matchAll(emojiPattern)].map(match => match[0]);
-    const emoji = tokens.map(token => byEmoji.get(reactionEmojiKey(token))).filter(Boolean).at(-1) ?? tokens.at(-1);
-    if (!emoji || !await guild.roles.fetch(roleMention[1]).catch(() => null)) continue;
-    pairs.push({ roleId: roleMention[1], emoji });
+    const role = await guild.roles.fetch(roleMention[1]).catch(() => null);
+    if (!role) continue;
+    const lineTokens = [...line.slice(0, roleMention.index).matchAll(emojiPattern)].map(match => match[0]);
+    const roleNameTokens = [...role.name.matchAll(emojiPattern)].map(match => match[0]);
+    const roleNameEmoji = roleNameTokens.map(token => byEmoji.get(reactionEmojiKey(token))).find(Boolean)
+      ?? roleNameTokens[0];
+    const lineEmoji = lineTokens.map(token => byEmoji.get(reactionEmojiKey(token))).filter(Boolean).at(-1);
+    const emoji = roleNameEmoji ?? lineEmoji ?? lineTokens.at(-1);
+    if (!emoji) continue;
+    pairs.push({ roleId: role.id, emoji });
   }
   if (!pairs.length) return 0;
   if (!existing) {
@@ -1057,9 +1063,22 @@ client.on('messageReactionAdd', async (reaction, user) => {
   if (reactionRole) {
     const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
     const role = await reaction.message.guild.roles.fetch(reactionRole.role_id).catch(() => null);
-    if (!member || !role) return console.error(`[REACTION_ROLE] Could not load member or role for guild ${reaction.message.guild.id}.`);
-    if (!role.editable) return console.error(`[REACTION_ROLE] Cannot assign role ${role.id} in guild ${reaction.message.guild.id}; check Manage Roles and role hierarchy.`);
-    await member.roles.add(role, 'Reaction role selection').catch(error => console.error(`[REACTION_ROLE] Failed to assign ${role.id} to ${user.id} in ${reaction.message.guild.id}:`, error));
+    if (!member || !role) {
+      console.error(`[REACTION_ROLE] Could not load member or role for guild ${reaction.message.guild.id}.`);
+      await user.send('Yachiyo could not load that role. Please ask a server admin to check the role panel.').catch(() => null);
+      return;
+    }
+    if (!role.editable) {
+      console.error(`[REACTION_ROLE] Cannot assign role ${role.id} in guild ${reaction.message.guild.id}; check Manage Roles and role hierarchy.`);
+      await user.send('Yachiyo cannot assign **' + role.name + '** yet. An admin needs to enable **Manage Roles** and move Yachiyo’s bot role above that role.').catch(() => null);
+      return;
+    }
+    try {
+      await member.roles.add(role, 'Reaction role selection');
+    } catch (error) {
+      console.error(`[REACTION_ROLE] Failed to assign ${role.id} to ${user.id} in ${reaction.message.guild.id}:`, error);
+      await user.send('Yachiyo could not add **' + role.name + '**. Please ask an admin to check Yachiyo’s role permissions.').catch(() => null);
+    }
     return;
   }
   const giveaway = await getGiveawayByMessage(reaction.message.id);
@@ -1195,8 +1214,16 @@ client.on('reactionRoleRepair', async interaction => {
         await message.react(option.emoji).catch(error => console.error('[REACTION_ROLE_REPAIR] Could not add reaction ' + option.emoji + ':', error));
       }
     }
+    const blockedRoles = [];
+    for (const option of restored?.options ?? []) {
+      const role = await interaction.guild.roles.fetch(option.role_id).catch(() => null);
+      if (!role?.editable) blockedRoles.push(role?.name ?? option.role_id);
+    }
     await restoreExistingReactionRoles(interaction.guildId, messageId);
-    return interaction.editReply('✨ Repaired the existing panel and restored ' + restoredCount + ' emoji-to-role link(s). Existing reactions were synced; no new panel was created.');
+    const permissionNote = blockedRoles.length
+      ? '\\n\\nYachiyo cannot assign: **' + blockedRoles.join(', ') + '**. Enable **Manage Roles** and move Yachiyo’s bot role above these roles.'
+      : '';
+    return interaction.editReply('✨ Repaired the existing panel and restored ' + restoredCount + ' emoji-to-role link(s). Existing reactions were synced; no new panel was created.' + permissionNote);
   } catch (error) {
     console.error('[REACTION_ROLE_REPAIR]', error);
     if (interaction.deferred || interaction.replied) return interaction.editReply('Yachiyo could not repair that panel. Check the bot’s Manage Roles, Add Reactions, View Channel, and role hierarchy permissions.');
