@@ -778,7 +778,7 @@ client.on('tempVoiceControlsRequest', async interaction => {
 async function createServerInfoEmbed(guild, info) {
   const owner=await guild.fetchOwner().catch(()=>null);
   const created=Math.floor(guild.createdTimestamp/1000);
-  const embed=new EmbedBuilder().setColor(0xf3a6c7).setTitle(info.title).setDescription(`${info.description}\n\n₊˚⊹ᰔ **Server Name:** ${guild.name}\n˚. ᵎᵎ **Date Created:** <t:${created}:D>\n⭑.ᐟ **Server Owner:** ${owner ? owner.user.tag : 'Unavailable'}\n⊹ ࣪ ˖ **Members:** ${guild.memberCount.toLocaleString()}\n\n♡ ${info.extra_info}`).setFooter({text:'‎ꫂ᭪݁ Yachiyo • server information'});
+  const embed=new EmbedBuilder().setColor(0xf3a6c7).setTitle(String(info.title ?? '').trim() || guild.name || 'Server Information').setDescription(`${info.description}\n\n₊˚⊹ᰔ **Server Name:** ${guild.name}\n˚. ᵎᵎ **Date Created:** <t:${created}:D>\n⭑.ᐟ **Server Owner:** ${owner ? owner.user.tag : 'Unavailable'}\n⊹ ࣪ ˖ **Members:** ${guild.memberCount.toLocaleString()}\n\n♡ ${info.extra_info}`).setFooter({text:'‎ꫂ᭪݁ Yachiyo • server information'});
   if(info.banner_url) embed.setImage(info.banner_url);
   return embed;
 }
@@ -938,9 +938,9 @@ function reactionEmojiKey(value) {
   const custom = emoji.match(/^<a?:[^:]+:(\d+)>$/);
   return custom ? 'custom:' + custom[1] : emoji.normalize('NFC').replace(/[\uFE0E\uFE0F]/g, '');
 }
-async function recoverReactionRoleOptions(panel, guild, sourceMessage = null) {
+async function recoverReactionRoleOptions(panel, guild, sourceMessage = null, force = false) {
   let existing = panel ? await getReactionRolePanel(panel.id, guild.id).catch(() => null) : null;
-  if (existing?.options.length) return 0;
+  if (existing?.options.length && !force) return 0;
   const channel = sourceMessage?.channel ?? (existing ? await guild.channels.fetch(existing.channel_id).catch(() => null) : null);
   if (!channel?.isTextBased()) return 0;
   const message = sourceMessage ?? await channel.messages.fetch(existing.message_id).catch(() => null);
@@ -954,7 +954,7 @@ async function recoverReactionRoleOptions(panel, guild, sourceMessage = null) {
     const roleMention = /<@&(\d{15,25})>/.exec(line);
     if (!roleMention) continue;
     const tokens = [...line.slice(0, roleMention.index).matchAll(emojiPattern)].map(match => match[0]);
-    const emoji = tokens.map(token => byEmoji.get(reactionEmojiKey(token))).filter(Boolean).at(-1);
+    const emoji = tokens.map(token => byEmoji.get(reactionEmojiKey(token))).filter(Boolean).at(-1) ?? tokens.at(-1);
     if (!emoji || !await guild.roles.fetch(roleMention[1]).catch(() => null)) continue;
     pairs.push({ roleId: roleMention[1], emoji });
   }
@@ -964,6 +964,9 @@ async function recoverReactionRoleOptions(panel, guild, sourceMessage = null) {
     const recoveredPanel = await createReactionRolePanel(guild.id, channel.id, embed?.title || 'Recovered reaction roles', embed?.description || 'Recovered from the existing Yachiyo panel.', embed?.color ?? 0xf3a6c7);
     await setReactionRolePanelMessage(recoveredPanel.id, message.id);
     existing = { ...recoveredPanel, options: [] };
+  }
+  if (force && existing.options?.length) {
+    for (const option of existing.options) await removeReactionRoleOption(existing.id, option.role_id);
   }
   for (const pair of pairs) await addReactionRoleOption(existing.id, pair.roleId, pair.emoji);
   console.log('[REACTION_ROLE_RECOVERY] Restored ' + pairs.length + ' emoji-to-role mapping(s) from existing panel ' + message.id + ' in guild ' + guild.id + '.');
@@ -988,13 +991,15 @@ async function findReactionRoleForEvent(reaction) {
   });
   return mapping;
 }
-async function restoreExistingReactionRoles() {
+async function restoreExistingReactionRoles(onlyGuildId = null, onlyMessageId = null) {
   for (const guild of client.guilds.cache.values()) {
+    if (onlyGuildId && guild.id !== onlyGuildId) continue;
     const panels = await getReactionRolePanels(guild.id).catch(error => {
       console.error('[REACTION_ROLE_STARTUP]', guild.id, error);
       return [];
     });
     for (const panel of panels) {
+      if (onlyMessageId && panel.message_id !== onlyMessageId) continue;
       try {
         await recoverReactionRoleOptions(panel, guild);
         const restored = await getReactionRolePanel(panel.id, guild.id);
@@ -1164,6 +1169,40 @@ client.on('channelDelete', async channel => {
   sendAuditLog(client, channel.guild, { eventType:'channel.delete', actorId:entry?.executor?.id ?? null, targetId:channel.id, data:{channelName:channel.name, deletedBy, summary:`Channel **${channel.name}** was deleted by **${entry?.executor?.tag ?? 'an unknown moderator'}**.`}}).catch(console.error);
 });
 client.on('reactionRoleWizardStart', interaction => runReactionRoleWizard(interaction).catch(error => console.error('[REACTION_ROLE_WIZARD]', error)));
+client.on('reactionRoleRepair', async interaction => {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    const input = interaction.options.getString('message', true).trim();
+    const link = input.match(/discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)/i);
+    const plainMessageId = input.match(/^\d{15,25}$/)?.[0] ?? null;
+    if (!link && !plainMessageId) return interaction.editReply('Send a Discord message link to the old reaction-role panel, or its saved message ID.');
+    if (link && link[1] !== interaction.guildId) return interaction.editReply('That message link points to a different server.');
+    const messageId = link?.[3] ?? plainMessageId;
+    let panel = (await getReactionRolePanels(interaction.guildId)).find(item => item.message_id === messageId) ?? null;
+    const channelId = link?.[2] ?? panel?.channel_id;
+    if (!channelId) return interaction.editReply('I could not find that saved panel. Please use its full Discord message link so I can locate the channel.');
+    const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+    if (!channel?.isTextBased()) return interaction.editReply('I cannot access the old panel channel. Check Yachiyo’s View Channel and Read Message History permissions.');
+    const message = await channel.messages.fetch(messageId).catch(() => null);
+    if (!message) return interaction.editReply('I could not find that message. Make sure the message link is from the existing Yachiyo panel.');
+    if (message.author.id !== client.user?.id) return interaction.editReply('That message was not posted by Yachiyo, so I left it unchanged.');
+    const restoredCount = await recoverReactionRoleOptions(panel, interaction.guild, message, true);
+    if (!restoredCount) return interaction.editReply('I found the panel, but could not read any emoji-to-role pairs from its embed. The panel was left untouched; please make sure each line has an emoji followed by a role mention.');
+    panel = (await getReactionRolePanels(interaction.guildId)).find(item => item.message_id === messageId) ?? panel;
+    const restored = panel ? await getReactionRolePanel(panel.id, interaction.guildId) : null;
+    for (const option of restored?.options ?? []) {
+      if (!message.reactions.cache.some(item => reactionEmojiKey(item.emoji.toString()) === reactionEmojiKey(option.emoji))) {
+        await message.react(option.emoji).catch(error => console.error('[REACTION_ROLE_REPAIR] Could not add reaction ' + option.emoji + ':', error));
+      }
+    }
+    await restoreExistingReactionRoles(interaction.guildId, messageId);
+    return interaction.editReply('✨ Repaired the existing panel and restored ' + restoredCount + ' emoji-to-role link(s). Existing reactions were synced; no new panel was created.');
+  } catch (error) {
+    console.error('[REACTION_ROLE_REPAIR]', error);
+    if (interaction.deferred || interaction.replied) return interaction.editReply('Yachiyo could not repair that panel. Check the bot’s Manage Roles, Add Reactions, View Channel, and role hierarchy permissions.');
+    return interaction.reply({ content: 'Yachiyo could not repair that panel.', ephemeral: true }).catch(() => null);
+  }
+});
 async function publishQuizRound(session) {
   const channel=await client.channels.fetch(session.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
   const round=Number(session.current_round)+1, question=await nextQuestion(session); if(!question) return;
