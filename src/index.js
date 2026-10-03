@@ -349,8 +349,14 @@ async function importGuildData(guildId, tables) {
     const allowed = new Map();
     const columnTypes = new Map();
     for (const column of schema) { if (!allowed.has(column.table_name)) allowed.set(column.table_name, new Set()); allowed.get(column.table_name).add(column.column_name); if (!columnTypes.has(column.table_name)) columnTypes.set(column.table_name, new Map()); columnTypes.get(column.table_name).set(column.column_name, column.data_type); }
-    const priority = ['guild_settings', 'confessions', 'confession_counters', 'confession_replies'];
-    const orderedTables = Object.keys(tables).filter(table => allowed.has(table)).sort((left, right) => (priority.indexOf(left) === -1 ? 999 : priority.indexOf(left)) - (priority.indexOf(right) === -1 ? 999 : priority.indexOf(right)));
+    // Insert panel parents before options; reverse deletion removes children first.
+    const priority = ['guild_settings', 'reaction_role_panels', 'confessions', 'confession_counters', 'confession_replies'];
+    const childPriority = ['reaction_role_options'];
+    const orderedTables = Object.keys(tables).filter(table => allowed.has(table)).sort((left, right) => {
+      const leftOrder = priority.includes(left) ? priority.indexOf(left) : childPriority.includes(left) ? 1000 + childPriority.indexOf(left) : 500;
+      const rightOrder = priority.includes(right) ? priority.indexOf(right) : childPriority.includes(right) ? 1000 + childPriority.indexOf(right) : 500;
+      return leftOrder - rightOrder || left.localeCompare(right);
+    });
     for (const table of [...orderedTables].reverse()) {
       if (!Array.isArray(tables[table]) || !tables[table].length || !allowed.get(table).has('guild_id')) continue;
       const safeTable = table.replace(/"/g, '""');
@@ -472,12 +478,19 @@ async function runReactionRoleWizard(interaction) {
     const uniqueRoleIds = [...new Set(roleIds)];
     if (!uniqueRoleIds.length) throw new Error('Mention at least one role in the description before continuing.');
     if (uniqueRoleIds.length > 25) throw new Error('Discord allows 25 reactions per panel. Create another panel for more roles.');
+    const botMember = interaction.guild.members.me ?? await interaction.guild.members.fetch(client.user.id).catch(() => null);
+    if (!botMember?.permissions.has(PermissionFlagsBits.ManageRoles)) throw new Error('Yachiyo needs the **Manage Roles** permission to assign reaction roles.');
+    const channelPermissions = channel.permissionsFor(botMember);
+    const requiredChannelPermissions = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AddReactions, PermissionFlagsBits.ReadMessageHistory];
+    if (!channelPermissions?.has(requiredChannelPermissions)) throw new Error('In the selected panel channel, Yachiyo needs **View Channel**, **Send Messages**, **Embed Links**, **Add Reactions**, and **Read Message History**.');
+    if (!interaction.channel.permissionsFor(botMember)?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AddReactions, PermissionFlagsBits.ReadMessageHistory])) throw new Error('In the setup channel, Yachiyo needs **View Channel**, **Send Messages**, **Add Reactions**, and **Read Message History** to collect emoji choices.');
     const preview = await interaction.channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle(title).setDescription(description)]});
     await interaction.channel.send('୨୧ React to the preview panel with the emoji for each role. I will ask one by one, and confirm every match.');
     const roles=[];
     for (const roleId of uniqueRoleIds) {
       let role = await interaction.guild.roles.fetch(roleId).catch(() => null);
       if (!role) { await interaction.channel.send('⚠️ I could not find one of the mentioned roles. Please continue by checking the role mention in your description and run the setup again if needed.'); throw new Error('A mentioned role could not be found.'); }
+      if (!role.editable) throw new Error('Yachiyo cannot assign **'+role.name+'**. Give Yachiyo Manage Roles and move its bot role above that role.');
       await interaction.channel.send('What reaction emoji should be used for **'+role.name+'**? React to the preview panel above now. Server emojis are supported. You have 10 minutes.');
       const collected = await preview.awaitReactions({filter: (reaction,user) => user.id === interaction.user.id, max: 1, time: 600_000, errors: ['time']}).catch(() => null);
       if (!collected?.size) throw new Error('No reaction was received for '+role.name+' within 10 minutes.');
@@ -494,9 +507,16 @@ async function runReactionRoleWizard(interaction) {
     const rows=[];
     for (let index=0; index<complete.options.length; index+=5) rows.push(new ActionRowBuilder().addComponents(complete.options.slice(index,index+5).map(option=>new ButtonBuilder().setCustomId('rr_role:'+complete.id+':'+option.role_id).setLabel((interaction.guild.roles.cache.get(option.role_id)?.name ?? 'Role').slice(0,80)).setEmoji(option.emoji).setStyle(ButtonStyle.Secondary))));
     const message = await channel.send({embeds:[new EmbedBuilder().setColor(complete.color).setTitle(complete.title).setDescription(complete.description).setFooter({text:'React to receive or remove a role.'})]});
-    for (const option of complete.options) await message.react(option.emoji).catch(error => console.error('[REACTION_ROLE_EMOJI]', error));
     await setReactionRolePanelMessage(complete.id,message.id);
-    await interaction.channel.send('✅ **'+name+' is complete and ready!** The panel has been published in '+channel+'.');
+    for (const option of complete.options) {
+      try { await message.react(option.emoji); }
+      catch (error) {
+        await message.delete().catch(() => null);
+        await deleteReactionRolePanel(complete.id, interaction.guildId).catch(() => null);
+        throw new Error('Discord would not add '+option.emoji+' to the role panel. Check Yachiyo’s Add Reactions permission and confirm the server emoji is available to Yachiyo. The unfinished panel was removed.');
+      }
+    }
+ The panel has been published in '+channel+'.');
   } catch (error) {
     await interaction.channel.send('⚠️ '+error.message).catch(() => null);
   } finally { reactionRoleWizards.delete(key); }
@@ -897,8 +917,16 @@ client.on('bumpPanelRefresh', async guildId => {
   const panel=await channel.send({embeds:[new EmbedBuilder().setColor(0xd9b8e8).setTitle('°❀⋆.ೃ࿔*:･ BUMP CORNER °❀⋆.ೃ࿔*:･').setDescription('₊˚⊹ᰔ Help the server grow and keep your personal bump streak glowing.\n\nBefore clicking **Remind me to bump**, please use Carl-bot’s `/bump` command first.\n\nYachiyo starts your reminder only after Carl confirms a successful bump. ♡')],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('bump_remind').setLabel('🔔 Remind me to bump').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('bump_my_status').setLabel('⏳ My timer').setStyle(ButtonStyle.Secondary))]});
   await setBumpPanelMessage(guildId,panel.id);
 });
+async function hydrateReactionEvent(reaction) {
+  if (reaction.partial) reaction = await reaction.fetch();
+  if (reaction.message?.partial) await reaction.message.fetch();
+  return reaction;
+}
 client.on('messageReactionAdd', async (reaction, user) => {
-  if (user.bot || !reaction.message.guild) return;
+  if (user.bot) return;
+  try { reaction = await hydrateReactionEvent(reaction); }
+  catch (error) { console.error('[REACTION_PARTIAL_FETCH]', error); return; }
+  if (!reaction.message.guild) return;
   const giveawayId = client.pendingGiveawayEmoji?.get(reaction.message.id);
   if (giveawayId) {
     const giveaway = await getGiveaway(giveawayId).catch(() => null);
@@ -915,7 +943,9 @@ client.on('messageReactionAdd', async (reaction, user) => {
   if (reactionRole) {
     const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
     const role = await reaction.message.guild.roles.fetch(reactionRole.role_id).catch(() => null);
-    if (member && role?.editable) await member.roles.add(role, 'Reaction role selection').catch(console.error);
+    if (!member || !role) return console.error(`[REACTION_ROLE] Could not load member or role for guild ${reaction.message.guild.id}.`);
+    if (!role.editable) return console.error(`[REACTION_ROLE] Cannot assign role ${role.id} in guild ${reaction.message.guild.id}; check Manage Roles and role hierarchy.`);
+    await member.roles.add(role, 'Reaction role selection').catch(error => console.error(`[REACTION_ROLE] Failed to assign ${role.id} to ${user.id} in ${reaction.message.guild.id}:`, error));
     return;
   }
   const giveaway = await getGiveawayByMessage(reaction.message.id);
@@ -925,14 +955,19 @@ client.on('messageReactionAdd', async (reaction, user) => {
   await addGiveawayEntry(giveaway.id, user.id);
 });
 client.on('messageReactionRemove', async (reaction, user) => {
-  if (user.bot || !reaction.message.guild) return;
+  if (user.bot) return;
+  try { reaction = await hydrateReactionEvent(reaction); }
+  catch (error) { console.error('[REACTION_PARTIAL_FETCH]', error); return; }
+  if (!reaction.message.guild) return;
   const reactionRole = await getReactionRoleByMessage(reaction.message.id, reaction.emoji.toString()).catch(() => null);
   if (!reactionRole) return;
   const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
   const role = await reaction.message.guild.roles.fetch(reactionRole.role_id).catch(() => null);
-  if (member && role?.editable) await member.roles.remove(role, 'Reaction role selection removed').catch(console.error);
+  if (!member || !role) return console.error(`[REACTION_ROLE] Could not load member or role for guild ${reaction.message.guild.id}.`);
+  if (!role.editable) return console.error(`[REACTION_ROLE] Cannot remove role ${role.id} in guild ${reaction.message.guild.id}; check Manage Roles and role hierarchy.`);
+  await member.roles.remove(role, 'Reaction role selection removed').catch(error => console.error(`[REACTION_ROLE] Failed to remove ${role.id} from ${user.id} in ${reaction.message.guild.id}:`, error));
 });
-client.on('introductionPanelRefresh', (guildId) => {
+, (guildId) => {
   clearTimeout(introductionPanelTimers.get(guildId));
   introductionPanelTimers.set(guildId, setTimeout(() => refreshIntroductionPanel(guildId).catch(console.error), 1500));
 });
