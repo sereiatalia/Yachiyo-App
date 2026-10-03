@@ -649,6 +649,7 @@ client.once('ready', async () => {
     console.error('[COMMAND_DEPLOY]', error?.rawError ? JSON.stringify(error.rawError, null, 2) : (error?.stack || error));
   }
   console.log(`Yachiyo is online as ${client.user.tag}`);
+  await restoreExistingReactionRoles();
   startFirebaseBackups(client);
   client.user.setPresence({
     activities: [{ name: 'Yachiyo', state: 'Managing Servers', type: ActivityType.Custom }],
@@ -986,6 +987,43 @@ async function findReactionRoleForEvent(reaction) {
     return null;
   });
   return mapping;
+}
+async function restoreExistingReactionRoles() {
+  for (const guild of client.guilds.cache.values()) {
+    const panels = await getReactionRolePanels(guild.id).catch(error => {
+      console.error('[REACTION_ROLE_STARTUP]', guild.id, error);
+      return [];
+    });
+    for (const panel of panels) {
+      try {
+        await recoverReactionRoleOptions(panel, guild);
+        const restored = await getReactionRolePanel(panel.id, guild.id);
+        if (!restored?.options.length) continue;
+        const channel = await guild.channels.fetch(restored.channel_id).catch(() => null);
+        if (!channel?.isTextBased()) continue;
+        const message = await channel.messages.fetch(restored.message_id).catch(() => null);
+        if (!message || message.author.id !== client.user?.id) continue;
+        for (const option of restored.options) {
+          const reaction = message.reactions.cache.find(item => reactionEmojiKey(item.emoji.toString()) === reactionEmojiKey(option.emoji));
+          const role = await guild.roles.fetch(option.role_id).catch(() => null);
+          if (!reaction || !role?.editable) continue;
+          const users = await reaction.users.fetch().catch(error => {
+            console.error('[REACTION_ROLE_SYNC] Could not load reactors for panel ' + message.id + ':', error);
+            return null;
+          });
+          if (!users) continue;
+          for (const user of users.values()) {
+            if (user.bot) continue;
+            const member = await guild.members.fetch(user.id).catch(() => null);
+            if (member && !member.roles.cache.has(role.id)) {
+              await member.roles.add(role, 'Restore existing reaction-role selection').catch(error => console.error('[REACTION_ROLE_SYNC] Could not restore role ' + role.id + ' for ' + user.id + ':', error));
+          }
+        }
+      } catch (error) {
+        console.error('[REACTION_ROLE_STARTUP] Failed to restore panel ' + panel.message_id + ' in guild ' + guild.id + ':', error);
+      }
+    }
+  }
 }
 async function hydrateReactionEvent(reaction) {
   if (reaction.partial) reaction = await reaction.fetch();
