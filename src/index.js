@@ -1195,12 +1195,26 @@ client.on('interactionCreate', async interaction => {
     await deleteReactionRolePanel(panelId,interaction.guildId); return interaction.update({content:'✅ Reaction-role panel deleted.',embeds:[],components:[]});
   }
   if (interaction.isButton() && interaction.customId.startsWith('rr_role:')) {
-    const [,panelId,roleId]=interaction.customId.split(':'), panel=await getReactionRolePanel(panelId,interaction.guildId), option=panel?.options.find(item=>item.role_id===roleId);
-    if (!option) return interaction.reply({content:'That role option is no longer available.',ephemeral:true});
-    const role=await interaction.guild.roles.fetch(roleId).catch(()=>null); if(!role) return interaction.reply({content:'That role no longer exists.',ephemeral:true});
-    if (!role.editable) return interaction.reply({content:'Yachiyo cannot manage that role. Move Yachiyo’s bot role above it.',ephemeral:true});
-    const member=await interaction.guild.members.fetch(interaction.user.id); const has=member.roles.cache.has(role.id);
-    await member.roles[has?'remove':'add'](role,'Reaction role panel selection'); return interaction.reply({content:(has?'➖ Removed ':'✅ Added ')+role+' '+option.emoji,ephemeral:true});
+    try {
+      const [, panelId, roleId] = interaction.customId.split(':');
+      const panel = await getReactionRolePanel(panelId, interaction.guildId);
+      const option = panel?.options.find(item => item.role_id === roleId);
+      if (!option) return interaction.reply({ content: 'That role option is no longer available.', ephemeral: true });
+      const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
+      if (!role) return interaction.reply({ content: 'That role no longer exists.', ephemeral: true });
+      const botMember = interaction.guild.members.me ?? await interaction.guild.members.fetch(client.user.id).catch(() => null);
+      if (!botMember?.permissions.has(PermissionFlagsBits.ManageRoles)) return interaction.reply({ content: 'Yachiyo is missing the Manage Roles permission.', ephemeral: true });
+      if (!role.editable) return interaction.reply({ content: 'Yachiyo cannot manage that role. Move Yachiyo’s bot role above it and check Manage Roles.', ephemeral: true });
+      const member = await interaction.guild.members.fetch(interaction.user.id);
+      const has = member.roles.cache.has(role.id);
+      await member.roles[has ? 'remove' : 'add'](role, 'Reaction role panel selection');
+      return interaction.reply({ content: (has ? '➖ Removed ' : '✅ Added ') + role + ' ' + option.emoji, ephemeral: true });
+    } catch (error) {
+      console.error('[REACTION_ROLE_BUTTON]', error);
+      const message = { content: 'Yachiyo could not update that role. Please ask an admin to check Yachiyo’s role permissions and position.', ephemeral: true };
+      if (interaction.replied || interaction.deferred) return interaction.followUp(message).catch(() => null);
+      return interaction.reply(message).catch(() => null);
+    }
   }
   if (interaction.isButton() && interaction.customId === 'server_info_staffs') {
     return interaction.reply({content:'The staff list is no longer shown here. Ask a staff member directly, or open a ticket if you need help.',ephemeral:true});
