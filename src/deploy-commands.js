@@ -8,7 +8,7 @@ const guildId = process.env.DISCORD_GUILD_ID;
 const guildIds = (guildId || '').split(',').map(id => id.trim()).filter(Boolean);
 const clearGuildIds = (process.env.CLEAR_GUILD_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
 const deployGlobally = process.env.DEPLOY_GLOBAL === 'true' || !guildId;
-const disabledEconomyCommands = new Set(['balance','daily','work','fish','economy-add','admin-abuse','pay','deposit','withdraw','leaderboard','level','fish-setup','fishinventory','fishalmanac','give','gamble','rob','fishprofile','fishleaderboard','server-shop','server-inventory','fishshop','fishrod','fishstatuseffects','fishdrink','fishmarket','fishaquarium','fishbattle','fishbattlepvp']);
+const disabledEconomyCommands = new Set(['balance','daily','work','fish','economy-add','admin-abuse','pay','deposit','withdraw','level','fish-setup','fishinventory','fishalmanac','give','gamble','rob','fishprofile','fishleaderboard','server-shop','server-inventory','fishshop','fishrod','fishstatuseffects','fishdrink','fishmarket','fishaquarium','fishbattle','fishbattlepvp']);
 const registeredCommands = commands.filter(command => !disabledEconomyCommands.has(command.name));
 
 if (deployGlobally) {

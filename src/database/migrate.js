@@ -208,6 +208,10 @@ CREATE TABLE IF NOT EXISTS guild_member_activity (
   voice_seconds BIGINT NOT NULL DEFAULT 0, voice_started_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id,user_id)
 );
+CREATE TABLE IF NOT EXISTS activity_leaderboard_settings (
+  guild_id TEXT PRIMARY KEY, chat_reward_role_id TEXT, voice_reward_role_id TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 CREATE TABLE IF NOT EXISTS truth_or_dare_settings (
   guild_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, panel_message_id TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

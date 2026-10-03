@@ -23,7 +23,8 @@ import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpRe
 import { getServerInfo, saveServerInfoPanel, updateServerInfoField, updateServerInfoBanner, recordProfileMessage, replaceProfileMessageCounts, hasGeneratedServerInfo, stripGeneratedServerInfo } from './services/serverInfoService.js';
 import { getShopSettings, listPurchases } from './services/serverShopService.js';
 import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './services/offlineBrainService.js';
-import { startVoiceActivity, stopVoiceActivity } from './services/activityLeaderboardService.js';
+import { startVoiceActivity, stopVoiceActivity, addChatXp, eligibleActivityRewards, getActivityLeaderboardSettings } from './services/activityLeaderboardService.js';
+import { buildActivityLeaderboardEmbed, activityLeaderboardButtons } from './ui/activityLeaderboard.js';
 import { getTruthOrDareSettings, saveTruthOrDarePanel, randomTruthOrDare, SAFE_TRUTHS, SAFE_DARES } from './services/truthOrDareService.js';
 import { getAutoReacts } from './services/autoReactService.js';
 import { getTempVoiceSettings, saveTempVoicePanel, createTempVoiceChannel, getTempVoiceChannel, getTempVoiceForOwner, deleteTempVoiceChannel } from './services/tempVoiceService.js';
@@ -627,6 +628,35 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
+async function grantEligibleActivityRewards(guild) {
+  const settings = await getActivityLeaderboardSettings(guild.id);
+  if (!settings?.chat_reward_role_id && !settings?.voice_reward_role_id) return;
+  const botMember = guild.members.me ?? await guild.members.fetch(client.user.id).catch(() => null);
+  if (!botMember?.permissions.has(PermissionFlagsBits.ManageRoles)) return;
+  const eligible = await eligibleActivityRewards(guild.id);
+  for (const row of eligible) {
+    const member = guild.members.cache.get(row.user_id) ?? await guild.members.fetch(row.user_id).catch(() => null);
+    if (!member) continue;
+    const rewards = [];
+    if (Number(row.chat_xp) >= 10000 && settings.chat_reward_role_id) rewards.push([settings.chat_reward_role_id, '10,000 chat XP']);
+    if (Number(row.total_voice_seconds) >= 360000 && settings.voice_reward_role_id) rewards.push([settings.voice_reward_role_id, '100 voice hours']);
+    for (const [roleId, reason] of rewards) {
+      if (member.roles.cache.has(roleId)) continue;
+      const role = guild.roles.cache.get(roleId) ?? await guild.roles.fetch(roleId).catch(() => null);
+      if (!role?.editable) {
+        console.error(`[ACTIVITY_REWARD] Cannot assign role ${roleId} in ${guild.id}; check that it exists and is below Yachiyo's role.`);
+        continue;
+      }
+      await member.roles.add(role, `Yachiyo leaderboard reward: ${reason}`).catch(error => console.error(`[ACTIVITY_REWARD] Failed to give ${roleId} to ${member.id}:`, error));
+    }
+  }
+}
+client.checkActivityRewards = grantEligibleActivityRewards;
+const activityRewardTimer = setInterval(() => {
+  for (const guild of client.guilds.cache.values()) grantEligibleActivityRewards(guild).catch(error => console.error('[ACTIVITY_REWARD_SCAN]', error));
+}, 5 * 60 * 1000);
+activityRewardTimer.unref?.();
+
 client.once('ready', async () => {
   try {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -684,13 +714,16 @@ const currentServerIds = client.guilds.cache.map(guild => guild.id);
     }
   }
 });
-const disabledEconomyCommands = new Set(['balance','daily','work','fish','economy-add','admin-abuse','pay','deposit','withdraw','leaderboard','level','fish-setup','fishinventory','fishalmanac','give','gamble','rob','fishprofile','fishleaderboard','server-shop','server-inventory','fishshop','fishrod','fishstatuseffects','fishdrink','fishmarket','fishaquarium','fishbattle','fishbattlepvp','bump-panel','bump-status']);
+const disabledEconomyCommands = new Set(['balance','daily','work','fish','economy-add','admin-abuse','pay','deposit','withdraw','level','fish-setup','fishinventory','fishalmanac','give','gamble','rob','fishprofile','fishleaderboard','server-shop','server-inventory','fishshop','fishrod','fishstatuseffects','fishdrink','fishmarket','fishaquarium','fishbattle','fishbattlepvp','bump-panel','bump-status']);
 const registeredCommands = commands.filter(command => !disabledEconomyCommands.has(command.name));
 const configuredGuildIds = (process.env.DISCORD_GUILD_ID || '').split(',').map(id => id.trim()).filter(Boolean);
 client.on('voiceStateUpdate', async (oldState, newState) => {
   if (!newState.member?.user.bot) {
     if (!oldState.channelId && newState.channelId) await startVoiceActivity(newState.guild.id,newState.id).catch(console.error);
-    if (oldState.channelId && !newState.channelId) await stopVoiceActivity(newState.guild.id,newState.id).catch(console.error);
+    if (oldState.channelId && !newState.channelId) {
+      await stopVoiceActivity(newState.guild.id,newState.id).catch(console.error);
+      await grantEligibleActivityRewards(newState.guild).catch(error => console.error('[ACTIVITY_REWARDS]',error));
+    }
   }
   for (const channelId of new Set([oldState.channelId, newState.channelId].filter(Boolean))) {
     const record = await getTempVoiceChannel(channelId).catch(() => null);
@@ -1243,6 +1276,10 @@ async function publishQuizRound(session) {
   await activateQuiz(session.id,round,session.panel_message_id,panel.id);
 }
 client.on('interactionCreate', async interaction => {
+  if (interaction.isButton() && interaction.customId.startsWith('activity_leaderboard:')) {
+    const type = interaction.customId.endsWith(':voice') ? 'voice' : 'chat';
+    return interaction.update({ embeds:[await buildActivityLeaderboardEmbed(interaction.guildId,type)], components:activityLeaderboardButtons(type) });
+  }
   if (interaction.isButton() && interaction.customId==='games_quiz') return interaction.reply({content:'Use `/quiz start` to open a Quiz Bee with rounds, difficulty, and topics.',ephemeral:true});
   if (interaction.isButton() && interaction.customId==='games_question') return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('☾ Question of the moment').setDescription('If you could instantly master one school subject, which would you choose and why?')]});
   if (interaction.isButton() && interaction.customId==='games_daily') return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('☾ DAILY QUESTION').setDescription('What is one small achievement you are proud of this week?')],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('daily_question_next').setLabel('New Question').setStyle(ButtonStyle.Secondary))]});
@@ -1715,6 +1752,10 @@ client.on('messageCreate', async message => {
     return;
   }
   if (message.author.bot) return;
+  if (await checkRapidSpam(message)) return;
+  const chatXp=await addChatXp(message.guild.id,message.author.id).catch(error=>{console.error(error);return null;});
+  if(chatXp===10000) await grantEligibleActivityRewards(message.guild).catch(error=>console.error('[ACTIVITY_REWARDS]',error));
+  await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   const quizSession=await getActiveQuiz(message.guild.id,message.channelId).catch(()=>null);
   if (quizSession?.status==='active') {
     const quizRound=await getCurrentRound(quizSession.id).catch(()=>null);
@@ -1728,8 +1769,6 @@ client.on('messageCreate', async message => {
       }
     }
   }
-  if (await checkRapidSpam(message)) return;
-  await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   const timeKey=message.guild.id+':'+message.author.id;
   const pendingTime=pendingTimeQuestions.get(timeKey);
   if (!message.mentions.everyone && pendingTime && pendingTime.expiresAt>Date.now()) {
