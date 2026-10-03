@@ -23,7 +23,7 @@ import { recordBump, getBumpTimer, getBumpPanel, setBumpPanelMessage, saveBumpRe
 import { getServerInfo, saveServerInfoPanel, updateServerInfoField, updateServerInfoBanner, recordProfileMessage, replaceProfileMessageCounts, hasGeneratedServerInfo, stripGeneratedServerInfo } from './services/serverInfoService.js';
 import { getShopSettings, listPurchases } from './services/serverShopService.js';
 import { getOfflineBrainReply, isTimeQuestion, findCountryTime } from './services/offlineBrainService.js';
-import { startVoiceActivity, stopVoiceActivity, addChatXp, eligibleActivityRewards, getActivityLeaderboardSettings } from './services/activityLeaderboardService.js';
+import { startVoiceActivity, stopVoiceActivity, reconcileVoiceActivity, addChatXp, eligibleActivityRewards, getActivityLeaderboardSettings } from './services/activityLeaderboardService.js';
 import { matchingRewardAnnouncements } from './services/rewardAnnouncementService.js';
 import { buildActivityLeaderboardEmbed, activityLeaderboardButtons } from './ui/activityLeaderboard.js';
 import { getTruthOrDareSettings, saveTruthOrDarePanel, randomTruthOrDare, SAFE_TRUTHS, SAFE_DARES } from './services/truthOrDareService.js';
@@ -645,6 +645,17 @@ async function announceActivityReward(guild, member, role, conditionKey) {
 }
 client.announceRoleReward=announceActivityReward;
 
+async function syncGuildVoiceActivity(guild) {
+  const activeUserIds=[...guild.voiceStates.cache.values()]
+    .filter(state=>state.channelId && !state.member?.user.bot)
+    .map(state=>state.id);
+  await reconcileVoiceActivity(guild.id,activeUserIds);
+}
+
+const voiceActivityReconcileTimer=setInterval(()=>{
+  for(const guild of client.guilds.cache.values()) syncGuildVoiceActivity(guild).catch(error=>console.error(`[VOICE_ACTIVITY_RECONCILE] ${guild.id}`,error));
+},60_000);
+voiceActivityReconcileTimer.unref?.();
 
 async function grantEligibleActivityRewards(guild) {
   const settings = await getActivityLeaderboardSettings(guild.id);
@@ -732,9 +743,7 @@ const currentServerIds = client.guilds.cache.map(guild => guild.id);
   for (const reminder of await pendingBumpReminders().catch(() => [])) scheduleBumpReminder(reminder.guild_id,reminder.user_id,reminder.remind_at);
   for (const guild of client.guilds.cache.values()) {
     client.emit('serverInfoPanelRefresh',guild.id);
-    for (const state of guild.voiceStates.cache.values()) {
-      if (state.channelId && !state.member?.user.bot) startVoiceActivity(guild.id,state.id).catch(console.error);
-    }
+    await syncGuildVoiceActivity(guild).catch(error=>console.error(`[VOICE_ACTIVITY_RECONCILE] ${guild.id}`,error));
   }
 });
 const disabledEconomyCommands = new Set(['balance','daily','work','fish','economy-add','admin-abuse','pay','deposit','withdraw','level','fish-setup','fishinventory','fishalmanac','give','gamble','rob','fishprofile','fishleaderboard','server-shop','server-inventory','fishshop','fishrod','fishstatuseffects','fishdrink','fishmarket','fishaquarium','fishbattle','fishbattlepvp','bump-panel','bump-status']);
@@ -1300,8 +1309,8 @@ async function publishQuizRound(session) {
 }
 client.on('interactionCreate', async interaction => {
   if (interaction.isButton() && interaction.customId.startsWith('activity_leaderboard:')) {
-    const type = interaction.customId.endsWith(':voice') ? 'voice' : 'chat';
-    return interaction.update({ embeds:[await buildActivityLeaderboardEmbed(interaction.guildId,type)], components:activityLeaderboardButtons(type) });
+    const type = interaction.customId.split(':').at(-1) === 'voice' ? 'voice' : 'chat';
+    return interaction.update({ embeds:[await buildActivityLeaderboardEmbed(interaction.guildId,type,interaction.user.id)], components:activityLeaderboardButtons(type) });
   }
   if (interaction.isButton() && interaction.customId==='games_quiz') return interaction.reply({content:'Use `/quiz start` to open a Quiz Bee with rounds, difficulty, and topics.',ephemeral:true});
   if (interaction.isButton() && interaction.customId==='games_question') return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('☾ Question of the moment').setDescription('If you could instantly master one school subject, which would you choose and why?')]});

@@ -57,9 +57,31 @@ export async function stopVoiceActivity(guildId, userId) {
     WHERE guild_id=$1 AND user_id=$2 AND voice_started_at IS NOT NULL`, [guildId,userId]);
 }
 
+// Heal missed gateway transitions by reconciling stored sessions with Discord's live cache.
+export async function reconcileVoiceActivity(guildId, activeUserIds) {
+  await ensureActivityTable();
+  const ids=[...new Set(activeUserIds.map(String))];
+  if(ids.length) await query(`INSERT INTO guild_member_activity (guild_id,user_id,voice_started_at)
+    SELECT $1,active.user_id,NOW() FROM unnest($2::text[]) AS active(user_id)
+    ON CONFLICT (guild_id,user_id) DO UPDATE
+      SET voice_started_at=COALESCE(guild_member_activity.voice_started_at,NOW()),updated_at=NOW()`,[guildId,ids]);
+  await query(`UPDATE guild_member_activity
+    SET voice_seconds=voice_seconds+GREATEST(0,EXTRACT(EPOCH FROM (NOW()-voice_started_at))::BIGINT),
+      voice_started_at=NULL,updated_at=NOW()
+    WHERE guild_id=$1 AND voice_started_at IS NOT NULL AND NOT (user_id=ANY($2::text[]))`,[guildId,ids]);
+}
+
 export async function chatXpLeaderboard(guildId, limit=10) {
   await ensureActivityTable();
   return (await query('SELECT user_id,chat_xp FROM guild_member_activity WHERE guild_id=$1 AND chat_xp>0 ORDER BY chat_xp DESC,user_id ASC LIMIT $2',[guildId,limit])).rows.map(row=>({...row,level:chatLevelFromXp(row.chat_xp)}));
+}
+
+export async function chatXpMemberRank(guildId, userId) {
+  await ensureActivityTable();
+  return (await query(`WITH ranked AS (
+    SELECT user_id,chat_xp,ROW_NUMBER() OVER (ORDER BY chat_xp DESC,user_id ASC) AS rank
+    FROM guild_member_activity WHERE guild_id=$1 AND chat_xp>0
+  ) SELECT rank,chat_xp FROM ranked WHERE user_id=$2`,[guildId,userId])).rows[0] ?? null;
 }
 
 export async function voiceLeaderboard(guildId, limit=10) {
@@ -67,6 +89,16 @@ export async function voiceLeaderboard(guildId, limit=10) {
   return (await query(`SELECT user_id,voice_seconds+CASE WHEN voice_started_at IS NULL THEN 0 ELSE GREATEST(0,EXTRACT(EPOCH FROM (NOW()-voice_started_at))::BIGINT) END AS total_seconds
     FROM guild_member_activity WHERE guild_id=$1 AND (voice_seconds>0 OR voice_started_at IS NOT NULL)
     ORDER BY total_seconds DESC,user_id ASC LIMIT $2`,[guildId,limit])).rows;
+}
+
+export async function voiceMemberRank(guildId, userId) {
+  await ensureActivityTable();
+  return (await query(`WITH ranked AS (
+    SELECT user_id,
+      voice_seconds+CASE WHEN voice_started_at IS NULL THEN 0 ELSE GREATEST(0,EXTRACT(EPOCH FROM (NOW()-voice_started_at))::BIGINT) END AS total_seconds,
+      ROW_NUMBER() OVER (ORDER BY voice_seconds+CASE WHEN voice_started_at IS NULL THEN 0 ELSE GREATEST(0,EXTRACT(EPOCH FROM (NOW()-voice_started_at))::BIGINT) END DESC,user_id ASC) AS rank
+    FROM guild_member_activity WHERE guild_id=$1 AND (voice_seconds>0 OR voice_started_at IS NOT NULL)
+  ) SELECT rank,total_seconds FROM ranked WHERE user_id=$2`,[guildId,userId])).rows[0] ?? null;
 }
 
 export async function getActivityLeaderboardSettings(guildId) {

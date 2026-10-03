@@ -593,7 +593,7 @@ if(name==='fishalmanac') {
   if(['deposit','withdraw'].includes(name)) { try { const b=await bankMove(interaction.user.id,interaction.options.getInteger('amount'),name); return interaction.reply({embeds:[yEmbed(name==='deposit'?'🏦 Deposit Complete':'💳 Withdrawal Complete',`Wallet: **${b.wallet.toLocaleString()}** coins\nBank: **${b.bank.toLocaleString()}** coins`)]}); } catch(e) { return interaction.reply({content:e.message,ephemeral:true}); } }
   if(name==='leaderboard') {
     const type=interaction.options.getString('type')==='voice'?'voice':'chat';
-    return interaction.reply({embeds:[await buildActivityLeaderboardEmbed(interaction.guildId,type)],components:activityLeaderboardButtons(type)});
+    return interaction.reply({embeds:[await buildActivityLeaderboardEmbed(interaction.guildId,type,interaction.user.id)],components:activityLeaderboardButtons(type)});
   }
   if(name==='leaderboard-reward-setup') {
     const chatRole=interaction.options.getRole('chat_role');
