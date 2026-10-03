@@ -967,7 +967,7 @@ client.on('messageReactionRemove', async (reaction, user) => {
   if (!role.editable) return console.error(`[REACTION_ROLE] Cannot remove role ${role.id} in guild ${reaction.message.guild.id}; check Manage Roles and role hierarchy.`);
   await member.roles.remove(role, 'Reaction role selection removed').catch(error => console.error(`[REACTION_ROLE] Failed to remove ${role.id} from ${user.id} in ${reaction.message.guild.id}:`, error));
 });
-, (guildId) => {
+client.on('introductionPanelRefresh', (guildId) => {
   clearTimeout(introductionPanelTimers.get(guildId));
   introductionPanelTimers.set(guildId, setTimeout(() => refreshIntroductionPanel(guildId).catch(console.error), 1500));
 });
