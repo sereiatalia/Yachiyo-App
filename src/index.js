@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes, ChannelType, ActivityType, AuditLogEvent } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes, ChannelType, ActivityType, AuditLogEvent, UserSelectMenuBuilder } from 'discord.js';
 import { commands, handleCommand, buildHelpView, GUESS_CHARACTERS } from './commands.js';
 import { ensureGuild, getFishChannel, getVoiceChannels } from './services/guildService.js';
 import { sendAuditLog } from './services/auditService.js';
@@ -28,7 +28,7 @@ import { matchingRewardAnnouncements } from './services/rewardAnnouncementServic
 import { buildActivityLeaderboardEmbed, activityLeaderboardButtons } from './ui/activityLeaderboard.js';
 import { getTruthOrDareSettings, saveTruthOrDarePanel, randomTruthOrDare, SAFE_TRUTHS, SAFE_DARES } from './services/truthOrDareService.js';
 import { getAutoReacts } from './services/autoReactService.js';
-import { getTempVoiceSettings, saveTempVoicePanel, createTempVoiceChannel, getTempVoiceChannel, getTempVoiceForOwner, deleteTempVoiceChannel } from './services/tempVoiceService.js';
+import { getTempVoiceSettings, saveTempVoicePanel, createTempVoiceChannel, getTempVoiceChannel, getTempVoiceForOwner, getTempVoicePreference, saveTempVoicePreference, addTempVoiceGuest, removeTempVoiceGuest, listTempVoiceGuests, deleteTempVoiceChannel } from './services/tempVoiceService.js';
 import { getSpamSettings, recordSpamWarning, resetSpamWarnings } from './services/spamService.js';
 import { RETIRED_PANELS, getRetiredPanel, clearRetiredPanel } from './services/retiredPanelsService.js';
 import { getRobloxProfile, resolveRobloxUser } from './services/robloxService.js';
@@ -566,8 +566,30 @@ async function checkRapidSpam(message) {
 function tempVoiceControls() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('temp_vc_rename').setLabel('Edit name').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('temp_vc_status').setLabel('Edit status').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('temp_vc_status').setLabel('Edit status').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('temp_vc_privacy').setLabel('Room privacy').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('temp_vc_guests').setLabel('Guest access').setStyle(ButtonStyle.Secondary)
   );
+}
+function tempVoicePrivacyControls() {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('temp_vc_lock').setLabel('Lock room').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('temp_vc_unlock').setLabel('Unlock room').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('temp_vc_hide').setLabel('Hide room').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('temp_vc_show').setLabel('Show room').setStyle(ButtonStyle.Secondary)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('temp_vc_limit').setLabel('Set user limit').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('temp_vc_unlimit').setLabel('Remove user limit').setStyle(ButtonStyle.Secondary)
+    )
+  ];
+}
+function tempVoiceGuestControls() {
+  return [
+    new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('temp_vc_guest_add').setPlaceholder('Choose a member to allow').setMinValues(1).setMaxValues(1)),
+    new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('temp_vc_guest_remove').setPlaceholder('Choose a guest to remove').setMinValues(1).setMaxValues(1))
+  ];
 }
 async function findOwnedTempVoice(interaction) {
   const record = await getTempVoiceForOwner(interaction.guildId, interaction.user.id);
@@ -579,7 +601,8 @@ async function createTempVoiceForMember(guild, member, settings) {
   const trigger = await guild.channels.fetch(settings.panel_channel_id).catch(() => null);
   if (!trigger?.isVoiceBased()) throw new Error('Join to Create voice channel is unavailable.');
   const parent = settings.category_id ? await guild.channels.fetch(settings.category_id).catch(() => null) : trigger.parent;
-  const name = `${member.displayName}'s VC`.replace(/[\\/:*?"<>|]/g, '').slice(0, 90) || 'Temporary VC';
+  const savedName = await getTempVoicePreference(guild.id,member.id).catch(()=>null);
+  const name = (savedName || `${member.displayName}'s VC`).replace(/[\\/:*?"<>|]/g, '').slice(0, 90) || 'Temporary VC';
   const channel = await guild.channels.create({name,type:ChannelType.GuildVoice,parent:parent?.type===ChannelType.GuildCategory ? parent.id : undefined,reason:'Temporary VC created by '+member.user.tag});
   if (!settings.category_id) await channel.setPosition((trigger.rawPosition ?? trigger.position ?? 0) + 1).catch(console.error);
   await createTempVoiceChannel(guild.id,channel.id,member.id);
@@ -587,7 +610,16 @@ async function createTempVoiceForMember(guild, member, settings) {
     await channel.send({
       content:'<@'+member.id+'>',
       allowedMentions:{users:[member.id]},
-      embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('୨୧ Your temporary VC is ready').setDescription('♡ Welcome to your room! Use `/my-vc` whenever you want to edit the **name** or **status**.\n\nThis VC will delete itself **10 seconds after it becomes empty**.').setFooter({text:'Yachiyo • temporary voice room'})]
+      embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('୨୧ Your temporary VC is ready').setDescription(
+        '♡ Welcome to your room! Open **`/my-voice`** any time to manage it.\n\n' +
+        '**Room settings**\n' +
+        '✦ Change the channel name or its status. Your name is saved and reused the next time you make a room.\n' +
+        '✦ **Lock / unlock** controls who can join; **hide / show** controls who can see the room.\n' +
+        '✦ Set a member limit, or remove it to make the room unlimited.\n\n' +
+        '**Guest access**\n' +
+        '♡ Allow specific members into your room, or remove their special access whenever you like.\n\n' +
+        'A little note: the room is temporary and will be deleted **10 seconds after it becomes empty**.'
+      ).setFooter({text:'Yachiyo • temporary voice room'})]
     }).catch(error => console.error('[TEMP_VC_WELCOME]', error));
   }
   await member.voice.setChannel(channel, 'Moving member into their temporary VC');
@@ -667,7 +699,7 @@ async function grantEligibleActivityRewards(guild) {
     const member = guild.members.cache.get(row.user_id) ?? await guild.members.fetch(row.user_id).catch(() => null);
     if (!member) continue;
     const rewards = [];
-    if (Number(row.chat_xp) >= 10000 && settings.chat_reward_role_id) rewards.push([settings.chat_reward_role_id, '10,000 chat XP','leaderboard_chat']);
+    if (Number(row.chat_xp) >= 5000 && settings.chat_reward_role_id) rewards.push([settings.chat_reward_role_id, '5,000 chat XP','leaderboard_chat']);
     if (Number(row.total_voice_seconds) >= 360000 && settings.voice_reward_role_id) rewards.push([settings.voice_reward_role_id, '100 voice hours','leaderboard_voice']);
     for (const [roleId, reason, conditionKey] of rewards) {
       if (member.roles.cache.has(roleId)) continue;
@@ -832,13 +864,13 @@ client.on('tempVoicePanelRefresh', async guildId => {
   const settings = await getTempVoiceSettings(guildId).catch(() => null); if (!settings) return;
   const channel = await client.channels.fetch(settings.panel_channel_id).catch(() => null); if (!channel?.isTextBased()) return;
   if (settings.panel_message_id) { const old = await channel.messages.fetch(settings.panel_message_id).catch(() => null); if (old?.author?.id === client.user?.id) await old.delete().catch(() => null); }
-  const panel = await channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('୨୧ Create your own VC').setDescription('Click below to create a temporary voice channel just for you.\n\nYou can rename it or set its status after it is made. It automatically disappears **10 seconds after it becomes empty**.').setFooter({text:'Yachiyo • temporary voice rooms'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('temp_vc_create').setLabel('Create your own VC').setStyle(ButtonStyle.Primary))]});
+  const panel = await channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('୨୧ Create your own VC').setDescription('Join the voice channel below to create a room just for you. Use `/my-voice` to customize it; Yachiyo remembers your chosen name for next time. Empty rooms disappear **10 seconds after they become empty**.').setFooter({text:'Yachiyo • temporary voice rooms'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('temp_vc_create').setLabel('Create your own VC').setStyle(ButtonStyle.Primary))]});
   await saveTempVoicePanel(guildId, panel.id);
 });
 client.on('tempVoiceControlsRequest', async interaction => {
   const channel = await findOwnedTempVoice(interaction);
   if (!channel) return interaction.reply({content:'You do not have an active temporary voice channel. Create one from the panel first.',ephemeral:true});
-  return interaction.reply({content:'♡ **Your temporary VC:** '+channel+'\nUse these controls whenever you want to update it.',components:[tempVoiceControls()],ephemeral:true});
+  return interaction.reply({content:'♡ **Your voice room:** '+channel+'\nYour saved room name will be reused next time. Choose a setting below:',components:[tempVoiceControls()],ephemeral:true});
 });
 async function createServerInfoEmbed(guild, info) {
   const owner=await guild.fetchOwner().catch(()=>null);
@@ -1343,6 +1375,51 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isButton() && interaction.customId === 'temp_vc_create') {
     return interaction.reply({content:'Join the configured **Create your own VC** voice channel to receive your room.',ephemeral:true});
   }
+  if (interaction.isButton() && (interaction.customId === 'temp_vc_privacy' || interaction.customId === 'temp_vc_guests')) {
+    const channel = await findOwnedTempVoice(interaction);
+    if (!channel) return interaction.reply({content:'Your voice room is no longer active.',ephemeral:true});
+    if (interaction.customId === 'temp_vc_privacy') return interaction.reply({content:'୨୧ **Room privacy and capacity**\nLock or unlock who can join, hide or show your room, and set its member limit.',components:tempVoicePrivacyControls(),ephemeral:true});
+    return interaction.reply({content:'୨୧ **Guest access**\nChoose a member to allow into your room, or select a guest to remove their access.',components:tempVoiceGuestControls(),ephemeral:true});
+  }
+  if (interaction.isButton() && ['temp_vc_lock','temp_vc_unlock','temp_vc_hide','temp_vc_show','temp_vc_unlimit'].includes(interaction.customId)) {
+    const channel = await findOwnedTempVoice(interaction);
+    if (!channel) return interaction.reply({content:'Your voice room is no longer active.',ephemeral:true});
+    const action = interaction.customId;
+    try {
+      if (action === 'temp_vc_unlimit') {
+        await channel.setUserLimit(0,'Temporary VC owner removed the user limit');
+        return interaction.reply({content:'✅ Your room is now unlimited.',ephemeral:true});
+      }
+      const lock = action === 'temp_vc_lock', unlock = action === 'temp_vc_unlock';
+      const hide = action === 'temp_vc_hide', show = action === 'temp_vc_show';
+      if (lock || unlock) {
+        await channel.permissionOverwrites.edit(interaction.guild.id,{Connect:lock?false:null});
+        for (const guestId of await listTempVoiceGuests(interaction.guildId,channel.id)) {
+          await channel.permissionOverwrites.edit(guestId,{ViewChannel:true,Connect:lock?false:true});
+        }
+      }
+      if (hide || show) {
+        await channel.permissionOverwrites.edit(interaction.guild.id,{ViewChannel:hide?false:null});
+        for (const guestId of await listTempVoiceGuests(interaction.guildId,channel.id)) {
+          await channel.permissionOverwrites.edit(guestId,{ViewChannel:true});
+        }
+      }
+      if (lock || unlock || hide || show) await channel.permissionOverwrites.edit(interaction.user.id,{ViewChannel:true,Connect:true});
+      const text = lock?'locked':unlock?'unlocked':hide?'hidden':'visible';
+      return interaction.reply({content:`✅ Your voice room is now **${text}**.`,ephemeral:true});
+    } catch (error) {
+      console.error('[TEMP_VC_PRIVACY]',error);
+      return interaction.reply({content:'Yachiyo could not update that room setting. Please check her **Manage Channels** permission.',ephemeral:true});
+    }
+  }
+  if (interaction.isButton() && interaction.customId === 'temp_vc_limit') {
+    const channel = await findOwnedTempVoice(interaction);
+    if (!channel) return interaction.reply({content:'Your voice room is no longer active.',ephemeral:true});
+    const modal = new ModalBuilder().setCustomId('temp_vc_save_limit').setTitle('Set your room limit');
+    const input = new TextInputBuilder().setCustomId('limit').setLabel('Member limit (1–99, or 0 for unlimited)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2).setValue(String(channel.userLimit||0));
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return interaction.showModal(modal);
+  }
   if (interaction.isButton() && (interaction.customId === 'temp_vc_rename' || interaction.customId === 'temp_vc_status')) {
     const channel = await findOwnedTempVoice(interaction);
     if (!channel) return interaction.reply({content:'Your temporary VC is no longer active.',ephemeral:true});
@@ -1353,13 +1430,25 @@ client.on('interactionCreate', async interaction => {
     modal.addComponents(new ActionRowBuilder().addComponents(input));
     return interaction.showModal(modal);
   }
-  if (interaction.isModalSubmit() && (interaction.customId === 'temp_vc_save_name' || interaction.customId === 'temp_vc_save_status')) {
+  if (interaction.isModalSubmit() && (interaction.customId === 'temp_vc_save_name' || interaction.customId === 'temp_vc_save_status' || interaction.customId === 'temp_vc_save_limit')) {
     const channel = await findOwnedTempVoice(interaction);
     if (!channel) return interaction.reply({content:'Your temporary VC is no longer active.',ephemeral:true});
     try {
-      if (interaction.customId === 'temp_vc_save_name') await channel.setName(interaction.fields.getTextInputValue('name').trim(), 'Temporary VC owner updated the name');
-      else await channel.setStatus(interaction.fields.getTextInputValue('status').trim(), 'Temporary VC owner updated the status');
-      return interaction.reply({content:'✅ Your temporary VC '+(interaction.customId.endsWith('name') ? 'name' : 'status')+' was updated.',ephemeral:true});
+      if (interaction.customId === 'temp_vc_save_name') {
+        const name=interaction.fields.getTextInputValue('name').trim();
+        if(!name) return interaction.reply({content:'Please enter a room name.',ephemeral:true});
+        await channel.setName(name, 'Temporary VC owner updated the name');
+        await saveTempVoicePreference(interaction.guildId,interaction.user.id,name);
+        return interaction.reply({content:'✅ Room name saved. Yachiyo will reuse it the next time you create a room.',ephemeral:true});
+      }
+      if (interaction.customId === 'temp_vc_save_status') {
+        await channel.setStatus(interaction.fields.getTextInputValue('status').trim(), 'Temporary VC owner updated the status');
+        return interaction.reply({content:'✅ Your temporary VC status was updated.',ephemeral:true});
+      }
+      const limit=Number(interaction.fields.getTextInputValue('limit').trim());
+      if(!Number.isInteger(limit)||limit<0||limit>99) return interaction.reply({content:'Enter a whole number from **0 to 99**. Use **0** for unlimited.',ephemeral:true});
+      await channel.setUserLimit(limit,'Temporary VC owner updated the user limit');
+      return interaction.reply({content:limit?`✅ Your room now has a **${limit}-member limit**.`:'✅ Your room is now unlimited.',ephemeral:true});
     } catch (error) {
       console.error('[TEMP_VC_EDIT]',error);
       return interaction.reply({content:'Yachiyo could not update your temporary VC. Check her **Manage Channels** permission.',ephemeral:true});
@@ -1463,6 +1552,28 @@ client.on('interactionCreate', async interaction => {
       const message = { content: 'Yachiyo could not update that role. Please ask an admin to check Yachiyo’s role permissions and position.', ephemeral: true };
       if (interaction.replied || interaction.deferred) return interaction.followUp(message).catch(() => null);
       return interaction.reply(message).catch(() => null);
+    }
+  }
+  if (interaction.isUserSelectMenu() && ['temp_vc_guest_add','temp_vc_guest_remove'].includes(interaction.customId)) {
+    const channel = await findOwnedTempVoice(interaction);
+    if (!channel) return interaction.reply({content:'Your voice room is no longer active.',ephemeral:true});
+    const guestId=interaction.values[0];
+    if(guestId===interaction.user.id) return interaction.reply({content:'You already have access to your own room.',ephemeral:true});
+    const guest=await interaction.guild.members.fetch(guestId).catch(()=>null);
+    if(!guest) return interaction.reply({content:'That member is no longer in this server.',ephemeral:true});
+    try {
+      if(interaction.customId==='temp_vc_guest_add') {
+        const locked=channel.permissionOverwrites.cache.get(interaction.guild.id)?.deny.has(PermissionFlagsBits.Connect)??false;
+        await channel.permissionOverwrites.edit(guestId,{ViewChannel:true,Connect:locked?false:true});
+        await addTempVoiceGuest(interaction.guildId,channel.id,guestId);
+        return interaction.reply({content:`✅ ${guest} can now see your room${locked?' and may join when you unlock it':''}.`,ephemeral:true});
+      }
+      await channel.permissionOverwrites.delete(guestId,'Temporary VC owner removed guest access');
+      await removeTempVoiceGuest(interaction.guildId,channel.id,guestId);
+      return interaction.reply({content:`✅ ${guest} no longer has special access to your room.`,ephemeral:true});
+    } catch(error) {
+      console.error('[TEMP_VC_GUEST]',error);
+      return interaction.reply({content:'Yachiyo could not change guest access. Please check her **Manage Channels** permission.',ephemeral:true});
     }
   }
   if (interaction.isButton() && interaction.customId === 'server_info_staffs') {
@@ -1788,7 +1899,7 @@ client.on('messageCreate', async message => {
   if (message.author.bot) return;
   if (await checkRapidSpam(message)) return;
   const chatXp=await addChatXp(message.guild.id,message.author.id).catch(error=>{console.error(error);return null;});
-  if(chatXp===10000) await grantEligibleActivityRewards(message.guild).catch(error=>console.error('[ACTIVITY_REWARDS]',error));
+  if(chatXp===5000) await grantEligibleActivityRewards(message.guild).catch(error=>console.error('[ACTIVITY_REWARDS]',error));
   await recordProfileMessage(message.guild.id,message.author.id).catch(console.error);
   const quizSession=await getActiveQuiz(message.guild.id,message.channelId).catch(()=>null);
   if (quizSession?.status==='active') {

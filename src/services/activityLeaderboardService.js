@@ -121,5 +121,5 @@ export async function eligibleActivityRewards(guildId) {
   return (await query(`SELECT user_id,chat_xp,
     voice_seconds+CASE WHEN voice_started_at IS NULL THEN 0 ELSE GREATEST(0,EXTRACT(EPOCH FROM (NOW()-voice_started_at))::BIGINT) END AS total_voice_seconds
     FROM guild_member_activity WHERE guild_id=$1 AND
-      (chat_xp >= 10000 OR voice_seconds+CASE WHEN voice_started_at IS NULL THEN 0 ELSE GREATEST(0,EXTRACT(EPOCH FROM (NOW()-voice_started_at))::BIGINT) END >= 360000)`,[guildId])).rows;
+      (chat_xp >= 5000 OR voice_seconds+CASE WHEN voice_started_at IS NULL THEN 0 ELSE GREATEST(0,EXTRACT(EPOCH FROM (NOW()-voice_started_at))::BIGINT) END >= 360000)`,[guildId])).rows;
 }

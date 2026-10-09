@@ -31,7 +31,7 @@ export async function buildActivityLeaderboardEmbed(guildId, type = 'chat', view
   const personalLine = viewerId && !rows.some(row => row.user_id === viewerId)
     ? `\n\n♡ **Your spot**\n${viewerRank ? `#${Number(viewerRank.rank).toLocaleString()}  <@${viewerId}>  ·  **${Number(viewerRank.chat_xp).toLocaleString()} XP**` : `<@${viewerId}>  ·  *Not ranked yet—send a message to start!*`}`
     : '';
-  const rewardLine = settings?.chat_reward_role_id ? `\n\n✧ **10,000 XP** earns <@&${settings.chat_reward_role_id}>` : '';
+  const rewardLine = settings?.chat_reward_role_id ? `\n\n✧ **5,000 XP** earns <@&${settings.chat_reward_role_id}>` : '';
   return new EmbedBuilder().setColor(0xf3a6c7)
     .setTitle('🍓  Chat Garden Leaderboard')
     .setDescription(`୨୧ Every eligible message grows your score by 1 XP ୨୧\nMessages in **any server chat channel** count automatically.\n\n${lines.join('\n') || 'No chat XP yet—say your first hello! ♡'}${personalLine}${rewardLine}`)

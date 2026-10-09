@@ -236,6 +236,14 @@ CREATE TABLE IF NOT EXISTS temp_voice_channels (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS temp_voice_channels_guild_idx ON temp_voice_channels(guild_id);
+CREATE TABLE IF NOT EXISTS temp_voice_preferences (
+  guild_id TEXT NOT NULL, owner_id TEXT NOT NULL, preferred_name TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id,owner_id)
+);
+CREATE TABLE IF NOT EXISTS temp_voice_guests (
+  guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, guest_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (guild_id,channel_id,guest_id)
+);
 CREATE TABLE IF NOT EXISTS spam_settings (
   guild_id TEXT PRIMARY KEY, enabled BOOLEAN NOT NULL DEFAULT FALSE,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
