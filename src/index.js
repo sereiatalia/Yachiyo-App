@@ -1378,7 +1378,7 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isButton() && (interaction.customId === 'temp_vc_privacy' || interaction.customId === 'temp_vc_guests')) {
     const channel = await findOwnedTempVoice(interaction);
     if (!channel) return interaction.reply({content:'Your voice room is no longer active.',ephemeral:true});
-    if (interaction.customId === 'temp_vc_privacy') return interaction.reply({content:'୨୧ **Room privacy and capacity**\nLock or unlock who can join, hide or show your room, and set its member limit.',components:tempVoicePrivacyControls(),ephemeral:true});
+    if (interaction.customId === 'temp_vc_privacy') return interaction.reply({content:'୨୧ **Room privacy and capacity**\nLock or unlock who can join, hide or show your room, and set its member limit. The limit prevents new joins; it will not remove people already inside. Members with **Move Members** or **Administrator** permission may bypass Discord’s limit.',components:tempVoicePrivacyControls(),ephemeral:true});
     return interaction.reply({content:'୨୧ **Guest access**\nChoose a member to allow into your room, or select a guest to remove their access.',components:tempVoiceGuestControls(),ephemeral:true});
   }
   if (interaction.isButton() && ['temp_vc_lock','temp_vc_unlock','temp_vc_hide','temp_vc_show','temp_vc_unlimit'].includes(interaction.customId)) {
@@ -1388,6 +1388,8 @@ client.on('interactionCreate', async interaction => {
     try {
       if (action === 'temp_vc_unlimit') {
         await channel.setUserLimit(0,'Temporary VC owner removed the user limit');
+        const updated = await interaction.guild.channels.fetch(channel.id);
+        if (updated.userLimit !== 0) throw new Error(`Expected unlimited room, received limit ${updated.userLimit}`);
         return interaction.reply({content:'✅ Your room is now unlimited.',ephemeral:true});
       }
       const lock = action === 'temp_vc_lock', unlock = action === 'temp_vc_unlock';
@@ -1416,7 +1418,7 @@ client.on('interactionCreate', async interaction => {
     const channel = await findOwnedTempVoice(interaction);
     if (!channel) return interaction.reply({content:'Your voice room is no longer active.',ephemeral:true});
     const modal = new ModalBuilder().setCustomId('temp_vc_save_limit').setTitle('Set your room limit');
-    const input = new TextInputBuilder().setCustomId('limit').setLabel('Member limit (1–99, or 0 for unlimited)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2).setValue(String(channel.userLimit||0));
+    const input = new TextInputBuilder().setCustomId('limit').setLabel('Member limit (1–99, or 0 for unlimited)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2).setValue(String(channel.userLimit||0)).setPlaceholder('Stops new joins; existing members stay connected');
     modal.addComponents(new ActionRowBuilder().addComponents(input));
     return interaction.showModal(modal);
   }
@@ -1448,7 +1450,9 @@ client.on('interactionCreate', async interaction => {
       const limit=Number(interaction.fields.getTextInputValue('limit').trim());
       if(!Number.isInteger(limit)||limit<0||limit>99) return interaction.reply({content:'Enter a whole number from **0 to 99**. Use **0** for unlimited.',ephemeral:true});
       await channel.setUserLimit(limit,'Temporary VC owner updated the user limit');
-      return interaction.reply({content:limit?`✅ Your room now has a **${limit}-member limit**.`:'✅ Your room is now unlimited.',ephemeral:true});
+      const updated = await interaction.guild.channels.fetch(channel.id);
+      if (updated.userLimit !== limit) throw new Error(`Expected room limit ${limit}, received ${updated.userLimit}`);
+      return interaction.reply({content:limit?`✅ Discord confirmed a **${updated.userLimit}-member limit** for your room. This blocks new joins, but does not remove anyone already inside. Members with **Move Members** or **Administrator** permission may bypass the limit.`:'✅ Discord confirmed your room is now unlimited.',ephemeral:true});
     } catch (error) {
       console.error('[TEMP_VC_EDIT]',error);
       return interaction.reply({content:'Yachiyo could not update your temporary VC. Check her **Manage Channels** permission.',ephemeral:true});
