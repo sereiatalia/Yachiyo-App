@@ -13,8 +13,9 @@ import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurs
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
 import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, getIntroductionSettings, resetIntroduction, saveIntroductionSettings, clearIntroductionRecords } from './services/introductionService.js';
-import { createGiveaway, setGiveawayMessage, setGiveawayEmoji, getGiveawayByMessageId, getMostRecentEndedGiveaway, getGiveawayEntries, getPreviousGiveawayWinners, setGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
+import { createGiveaway, setGiveawayMessage, setGiveawayEmoji, getGiveawayByMessageId, getMostRecentEndedGiveaway, getPreviousGiveawayWinners, setGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
 import { selectGiveawayWinners } from './services/giveawayRandom.js';
+import { getEligibleGiveawayEntrants } from './services/giveawayParticipants.js';
 import { setupRules, getRules, updateRule, updateRulesBanner } from './services/rulesService.js';
 import { saveTicketSettings, addTicketAccessRole, removeTicketAccessRole, getTicketAccessRoles } from './services/ticketService.js';
 import { getBumpTimer, saveBumpPanel } from './services/bumpService.js';
@@ -336,7 +337,7 @@ export async function handleCommand(interaction) {
       const channel = await interaction.client.channels.fetch(giveaway.channel_id).catch(() => null);
       if (!channel?.isTextBased()) return interaction.editReply({content:'I couldn’t find the giveaway channel to announce the result.'});
       if (giveaway.status === 'active') {
-        const [entries, previousWinners] = await Promise.all([getGiveawayEntries(giveaway.id), getPreviousGiveawayWinners(giveaway.guild_id,giveaway.id)]);
+        const [entries, previousWinners] = await Promise.all([getEligibleGiveawayEntrants(interaction.client,giveaway), getPreviousGiveawayWinners(giveaway.guild_id,giveaway.id)]);
         const initialWinners = selectGiveawayWinners(entries,giveaway.winner_count,previousWinners);
         await finishGiveaway(giveaway.id,initialWinners);
         giveaway.status='ended';
@@ -345,7 +346,7 @@ export async function handleCommand(interaction) {
         await channel.send('🎉 The giveaway has ended! Winner(s): ' + (initialWinners.length ? initialWinners.map(id => '<@' + id + '>').join(', ') : 'No eligible participants this time.'));
       }
       if (giveaway.status !== 'ended') return interaction.editReply({content:'This giveaway can’t be rerolled.'});
-      const [entries, previousWinners] = await Promise.all([getGiveawayEntries(giveaway.id), getPreviousGiveawayWinners(giveaway.guild_id,giveaway.id)]);
+      const [entries, previousWinners] = await Promise.all([getEligibleGiveawayEntrants(interaction.client,giveaway), getPreviousGiveawayWinners(giveaway.guild_id,giveaway.id)]);
       const excludedWinners = [...new Set([...previousWinners,...(giveaway.winner_user_ids ?? []).map(String)])];
       const winners = selectGiveawayWinners(entries,giveaway.winner_count,excludedWinners);
       if (!winners.length) return interaction.editReply({content:'There are no eligible replacement winners. The current winner stays unchanged.'});

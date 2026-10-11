@@ -15,8 +15,9 @@ import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, it
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 import { getCurseSettings, findMatchedCurseWords, recordCurseWarning, getCurseExemptRoles } from './services/curseService.js';
 import { getIntroductionSettings, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
-import { getGiveaway, getGiveawayByMessage, getActiveGiveaways, getDueGiveaways, setGiveawayEmoji, addGiveawayEntry, getGiveawayEntries, getPreviousGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
+import { getGiveaway, getGiveawayByMessage, getActiveGiveaways, getDueGiveaways, setGiveawayEmoji, addGiveawayEntry, getPreviousGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
 import { selectGiveawayWinners } from './services/giveawayRandom.js';
+import { getEligibleGiveawayEntrants } from './services/giveawayParticipants.js';
 import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js';
 import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket, getTicketAccessRoles } from './services/ticketService.js';
 import { joinVoiceChannel, VoiceConnectionStatus, entersState } from '@discordjs/voice';
@@ -836,7 +837,7 @@ client.on('giveawayEnd', async giveawayId => {
   try {
     const giveaway = await getGiveaway(giveawayId);
     if (!giveaway || giveaway.status !== 'active' || !giveaway.emoji) return;
-    const [entries, previousWinners] = await Promise.all([getGiveawayEntries(giveawayId), getPreviousGiveawayWinners(giveaway.guild_id,giveawayId)]);
+    const [entries, previousWinners] = await Promise.all([getEligibleGiveawayEntrants(client,giveaway), getPreviousGiveawayWinners(giveaway.guild_id,giveawayId)]);
     const winners = selectGiveawayWinners(entries, giveaway.winner_count, previousWinners);
     const channel = await client.channels.fetch(giveaway.channel_id);
     if (!channel?.isTextBased()) throw new Error(`Channel ${giveaway.channel_id} is unavailable or not text-based.`);
