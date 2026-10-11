@@ -1478,8 +1478,9 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({content:'✅ Room name saved. Yachiyo will reuse it the next time you create a room.',ephemeral:true});
       }
       if (interaction.customId === 'temp_vc_save_status') {
-        await channel.setStatus(interaction.fields.getTextInputValue('status').trim(), 'Temporary VC owner updated the status');
-        return interaction.reply({content:'✅ Your temporary VC status was updated.',ephemeral:true});
+        const status=interaction.fields.getTextInputValue('status').trim();
+        await interaction.client.rest.put(`/channels/${channel.id}/voice-status`,{body:{status}});
+        return interaction.reply({content:status?'✅ Your temporary VC status was updated.':'✅ Your temporary VC status was cleared.',ephemeral:true});
       }
       const limit=Number(interaction.fields.getTextInputValue('limit').trim());
       if(!Number.isInteger(limit)||limit<0||limit>99) return interaction.reply({content:'Enter a whole number from **0 to 99**. Use **0** for unlimited.',ephemeral:true});
