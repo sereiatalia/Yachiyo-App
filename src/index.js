@@ -1265,7 +1265,7 @@ client.on('messageDelete', async msg => {
     }) ?? null;
   }
   const deleterId = entry?.executor?.id ?? null;
-  sendAuditLog(client, msg.guild, { eventType:'message.delete', actorId:deleterId, targetId:msg.channelId, data:{ channelName:msg.channel?.name, messageId:msg.id, authorId:deletedMessage.author.id, deleterId, deleterFallback:!entry, createdTimestamp:deletedMessage.createdTimestamp, content:deletedMessage.content, attachments:attachments.length, attachmentUrls:attachments.map(a => a.url), attachmentDetails:attachments.map(a => ({name:a.name,url:a.url,contentType:a.contentType})), summary:'A message was deleted.' } }).catch(console.error);
+  sendAuditLog(client, msg.guild, { eventType:'message.delete', actorId:deleterId, targetId:msg.channelId, data:{ channelName:msg.channel?.name, messageId:msg.id, authorId:deletedMessage.author.id, deleterId, deleterFallback:!entry, createdTimestamp:deletedMessage.createdTimestamp, content:deletedMessage.content, attachments:attachments.length, attachmentUrls:attachments.map(a => a.url), attachmentDetails:attachments.map(a => ({name:a.name,url:a.url,contentType:a.contentType,size:a.size})), summary:'A message was deleted.' } }).catch(console.error);
 });
 client.on('messageUpdate', async (oldMsg, newMsg) => {
   if (!newMsg.guild || (oldMsg.content === newMsg.content && oldMsg.attachments?.size === newMsg.attachments?.size)) return;

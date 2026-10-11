@@ -1,4 +1,4 @@
-import { EmbedBuilder } from 'discord.js';
+import { AttachmentBuilder, EmbedBuilder } from 'discord.js';
 import { query } from '../database/db.js';
 
 const MAX_CONTENT = 1024;
@@ -73,12 +73,10 @@ function formatEvent(payload) {
   const attachmentDetails = data.attachmentDetails ?? [];
   const mediaFiles = attachmentDetails.filter(file => /^(image|video)\//i.test(file.contentType || '') || /\.(png|jpe?g|gif|webp|mp4|webm|mov|m4v)(\?|$)/i.test(file.url || ''));
   const nonMediaFiles = attachmentDetails.filter(file => !mediaFiles.includes(file));
-  if (nonMediaFiles.length) {
-    embed.addFields({ name: 'Deleted attachments', value: nonMediaFiles.map(file => '[' + clip(file.name || 'attachment', 80) + '](' + file.url + ')').join('\n').slice(0, 1024), inline: false });
-  }
+  if (nonMediaFiles.length) embed.addFields({ name: 'Deleted files', value: nonMediaFiles.map(file => clip(file.name || 'attachment', 80)).join('\n').slice(0, 1024), inline: false });
   const mediaUrls = mediaFiles.map(file => file.url).filter(Boolean);
   const image = mediaFiles.find(file => /^(image)\//i.test(file.contentType || '') || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(file.url || ''));
-  if (image) embed.setImage(image.url);
+  if (image?.url) embed.setImage(image.url);
   if (data.attachmentUrls?.length) {
     const knownMediaUrls = new Set(mediaUrls);
     const remainingUrls = data.attachmentUrls.filter(url => !knownMediaUrls.has(url));
@@ -86,9 +84,7 @@ function formatEvent(payload) {
       const fallbackImage = remainingUrls.find(url => /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url));
       if (fallbackImage) embed.setImage(fallbackImage);
     }
-    if (remainingUrls.length) {
-      embed.addFields({ name: 'Saved attachment links', value: remainingUrls.map((url, index) => '[' + (index + 1) + '](' + url + ')').join('\\n').slice(0, 1024), inline: false });
-    }
+    if (remainingUrls.length) embed.addFields({ name: 'Deleted file links (could not re-upload)', value: remainingUrls.map((url, index) => '[' + (index + 1) + '](' + url + ')').join('\n').slice(0, 1024), inline: false });
   }
   if (data.previousAttachmentUrls?.length) embed.addFields({ name: 'Previous attachment links', value: data.previousAttachmentUrls.map((url, index) => '[' + (index + 1) + '](' + url + ')').join('\\n').slice(0, 1024), inline: false });
   return embed;
@@ -97,6 +93,36 @@ function formatEvent(payload) {
 export async function recordAudit({ guildId, eventType, actorId = null, targetId = null, data = {} }) {
   await query('INSERT INTO audit_logs (guild_id,event_type,actor_user_id,target_id,data) VALUES ($1,$2,$3,$4,$5)', [guildId, eventType, actorId, targetId, JSON.stringify(data)]);
 }
+
+async function reuploadDeletedAttachments(details = []) {
+  const files = [];
+  const failedUrls = [];
+  let totalBytes = 0;
+  for (const [index, detail] of details.slice(0, 10).entries()) {
+    let url;
+    try {
+      url = new URL(detail.url);
+      if (url.protocol !== 'https:' || !/(^|\.)(discordapp\.com|discordapp\.net)$/.test(url.hostname)) throw new Error('Attachment URL is not a Discord CDN URL');
+      if (Number(detail.size) > 24 * 1024 * 1024 || totalBytes + Number(detail.size || 0) > 24 * 1024 * 1024) throw new Error('Attachment exceeds the log-upload size allowance');
+      const response = await fetch(url, { signal: AbortSignal.timeout(12_000) });
+      if (!response.ok) throw new Error('Discord CDN returned HTTP ' + response.status);
+      const declaredSize = Number(response.headers.get('content-length') || 0);
+      if (declaredSize > 24 * 1024 * 1024 || totalBytes + declaredSize > 24 * 1024 * 1024) throw new Error('Attachment exceeds the log-upload size allowance');
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length > 24 * 1024 * 1024 || totalBytes + buffer.length > 24 * 1024 * 1024) throw new Error('Attachment exceeds the log-upload size allowance');
+      totalBytes += buffer.length;
+      const rawName = String(detail.name || `deleted-attachment-${index + 1}`).split(/[\\/]/).pop();
+      const safeName = rawName.replace(/[^\w. ()-]/g, '_').slice(0, 100) || `deleted-attachment-${index + 1}`;
+      files.push({ attachment: new AttachmentBuilder(buffer, { name: safeName }), name: safeName, contentType: detail.contentType || response.headers.get('content-type') || '', previewUrl: `attachment://${safeName}` });
+    } catch (error) {
+      console.warn('[AUDIT_ATTACHMENT_REUPLOAD]', detail.name || detail.url, error.message);
+      if (detail.url) failedUrls.push(detail.url);
+    }
+  }
+  for (const detail of details.slice(10)) if (detail.url) failedUrls.push(detail.url);
+  return { files, failedUrls };
+}
+
 export async function sendAuditLog(client, guild, payload) {
   if (payload.actorId && payload.actorId === client.user?.id) return;
   if (payload.data?.isBotEvent) return;
@@ -111,17 +137,12 @@ export async function sendAuditLog(client, guild, payload) {
   if (!channelId) return;
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (channel?.isTextBased()) {
-    const mediaFiles = payload.data?.attachmentDetails?.filter(file =>
-      /^(image|video)\//i.test(file.contentType || '') ||
-      /\.(png|jpe?g|gif|webp|mp4|webm|mov|m4v)(\?|$)/i.test(file.url || '')
-    ) ?? [];
-    const videoUrls = mediaFiles
-      .filter(file => /^(video)\//i.test(file.contentType || '') || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(file.url || ''))
-      .map(file => file.url)
-      .filter(Boolean);
-    const message = { embeds: [formatEvent(payload)] };
-    // Discord renders direct video URLs as playable previews in the log channel.
-    if (videoUrls.length) message.content = videoUrls.join('\n');
+    const uploaded = payload.eventType === 'message.delete' ? await reuploadDeletedAttachments(payload.data?.attachmentDetails) : { files: [], failedUrls: [] };
+    const uploadedDetails = uploaded.files.map(file => ({ name: file.name, contentType: file.contentType, url: file.previewUrl }));
+    const message = { embeds: [formatEvent({ ...payload, data: { ...payload.data, attachmentDetails: uploadedDetails, attachmentUrls: uploaded.failedUrls } })] };
+    if (uploaded.files.length) message.files = uploaded.files.map(file => file.attachment);
+    // Re-uploading turns deleted media into native Discord attachments: images
+    // preview and videos/files render as normal attachments in the audit channel.
     await channel.send(message).catch(() => null);
   }
 }
