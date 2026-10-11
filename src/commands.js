@@ -321,6 +321,7 @@ export async function handleCommand(interaction) {
     const section=interaction.options.getInteger('section'), current=rules.sections[section-1]; const modal=new ModalBuilder().setCustomId('rules_edit:'+section).setTitle('Edit rule '+section); modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Section title').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setValue(current.title)),new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('content').setLabel('Rule content').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000).setValue(current.content))); return interaction.showModal(modal);
   }
   if (name === 'giveaway') {
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ephemeral:true});
     const action = interaction.options.getSubcommand();
     if (action === 'repick') {
       const giveaway = await getGiveaway(interaction.options.getInteger('giveaway_id'));
@@ -328,11 +329,11 @@ export async function handleCommand(interaction) {
       const [entries, previousWinners] = await Promise.all([getGiveawayEntries(giveaway.id), getPreviousGiveawayWinners(giveaway.guild_id,giveaway.id)]);
       const winners = selectGiveawayWinners(entries,giveaway.winner_count,previousWinners);
       await finishGiveaway(giveaway.id, winners);
-      return interaction.reply({content: winners.length ? '🎉 New random winner(s): ' + winners.map(id => '<@' + id + '>').join(', ') : 'There are no eligible participants.'});
+      return interaction.editReply({content: winners.length ? '🎉 New random winner(s): ' + winners.map(id => '<@' + id + '>').join(', ') : 'There are no eligible participants.'});
     }
     const duration = interaction.options.getString('duration');
     const match = duration.match(/^(\d+)\s*(s|m|h|d)$/i);
-    if (!match) return interaction.reply({content:'Duration must look like `30m`, `1h`, or `2d`.', ephemeral:true});
+    if (!match) return interaction.editReply({content:'Duration must look like `30m`, `1h`, or `2d`.'});
     const multipliers = {s:1000,m:60000,h:3600000,d:86400000};
     const endsAt = new Date(Date.now() + Number(match[1]) * multipliers[match[2].toLowerCase()]);
     const channel = interaction.options.getChannel('channel');
@@ -342,11 +343,11 @@ export async function handleCommand(interaction) {
     let entryEmoji = rawEmoji;
     if (customEmojiMatch) {
       const customEmoji = await interaction.guild.emojis.fetch(customEmojiMatch[2]).catch(() => null);
-      if (!customEmoji) return interaction.reply({content:'I couldn’t find that custom emoji in this server. Choose a server emoji or a standard emoji.',ephemeral:true});
+      if (!customEmoji) return interaction.editReply({content:'I couldn’t find that custom emoji in this server. Choose a server emoji or a standard emoji.'});
       entryEmoji = customEmoji.toString();
     } else {
       const graphemes = [...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(rawEmoji)];
-      if (graphemes.length !== 1 || !/[\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3]/u.test(rawEmoji)) return interaction.reply({content:'Enter one standard emoji (for example 🎉) or a custom emoji from this server.',ephemeral:true});
+      if (graphemes.length !== 1 || !/[\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3]/u.test(rawEmoji)) return interaction.editReply({content:'Enter one standard emoji (for example 🎉) or a custom emoji from this server.'});
     }
     const giveaway = await createGiveaway({guildId:interaction.guildId,channelId:channel.id,hostUserId:host.id,prize:interaction.options.getString('prize'),endsAt,winnerCount:interaction.options.getInteger('winners'),requiredRoleId:interaction.options.getRole('required_role')?.id ?? null});
     const hostMember = await interaction.guild.members.fetch(host.id).catch(() => null);
@@ -361,12 +362,12 @@ export async function handleCommand(interaction) {
     });
     if (!reaction) {
       await finishGiveaway(giveaway.id,[]).catch(console.error);
-      return interaction.reply({content:'I couldn’t add that emoji. Please check that I have **Add Reactions** permission, then try again.',ephemeral:true});
+      return interaction.editReply({content:'I couldn’t add that emoji. Please check that I have **Add Reactions** permission, then try again.'});
     }
     await setGiveawayMessage(giveaway.id, message.id);
     await setGiveawayEmoji(giveaway.id, reaction.emoji.toString());
     setTimeout(() => interaction.client.emit('giveawayEnd', giveaway.id), Math.max(1000, endsAt.getTime() - Date.now()));
-    return interaction.reply({content:'✅ Giveaway **#'+giveaway.id+'** is live in <#'+channel.id+'>. Your chosen emoji is ready for members to click!', ephemeral:true});
+    return interaction.editReply({content:'✅ Giveaway is live in <#'+channel.id+'>. Your chosen emoji is ready for members to click!'});
   }
   if (name === 'emoji-upload') {
     if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ManageEmojisAndStickers)) return interaction.reply({content:'Yachiyo needs **Manage Expressions** to create server emojis.', ephemeral:true});

@@ -15,7 +15,7 @@ import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, it
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 import { getCurseSettings, findMatchedCurseWords, recordCurseWarning, getCurseExemptRoles } from './services/curseService.js';
 import { getIntroductionSettings, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
-import { getGiveaway, getGiveawayByMessage, getActiveGiveaways, setGiveawayEmoji, addGiveawayEntry, getGiveawayEntries, getPreviousGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
+import { getGiveaway, getGiveawayByMessage, getActiveGiveaways, getDueGiveaways, setGiveawayEmoji, addGiveawayEntry, getGiveawayEntries, getPreviousGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
 import { selectGiveawayWinners } from './services/giveawayRandom.js';
 import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js';
 import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket, getTicketAccessRoles } from './services/ticketService.js';
@@ -782,6 +782,13 @@ const currentServerIds = client.guilds.cache.map(guild => guild.id);
       console.log(`[GIVEAWAY_RESTORE] Scheduled giveaway ending for guild ${guild.id}.`);
     }
   }
+  const checkDueGiveaways = async () => {
+    const dueGiveaways = await getDueGiveaways().catch(error => { console.error('[GIVEAWAY_DUE_CHECK]',error); return []; });
+    for (const {id} of dueGiveaways) client.emit('giveawayEnd',id);
+  };
+  await checkDueGiveaways();
+  const giveawayPoll = setInterval(checkDueGiveaways,15_000);
+  giveawayPoll.unref?.();
   for (const guild of client.guilds.cache.values()) {
     client.emit('serverInfoPanelRefresh',guild.id);
     await syncGuildVoiceActivity(guild).catch(error=>console.error(`[VOICE_ACTIVITY_RECONCILE] ${guild.id}`,error));
@@ -822,14 +829,25 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   if (voice) setTimeout(() => keepVoiceConnection(newState.guild.id, voice.joinConfig.channelId).catch(console.error), 2000);
 });
 client.on('voiceJoinRequest', (guildId, channelId) => keepVoiceConnection(guildId, channelId).catch(console.error));
+const giveawaysEnding = new Set();
 client.on('giveawayEnd', async giveawayId => {
-  const giveaway = await getGiveaway(giveawayId).catch(() => null);
-  if (!giveaway || giveaway.status !== 'active' || !giveaway.emoji) return;
-  const [entries, previousWinners] = await Promise.all([getGiveawayEntries(giveawayId), getPreviousGiveawayWinners(giveaway.guild_id,giveawayId)]);
-  const winners = selectGiveawayWinners(entries, giveaway.winner_count, previousWinners);
-  await finishGiveaway(giveawayId, winners);
-  const channel = await client.channels.fetch(giveaway.channel_id).catch(() => null);
-  if (channel?.isTextBased()) await channel.send('🎉 The giveaway has ended! Winner(s): ' + (winners.length ? winners.map(id => '<@' + id + '>').join(', ') : 'No eligible participants this time.') );
+  if (giveawaysEnding.has(String(giveawayId))) return;
+  giveawaysEnding.add(String(giveawayId));
+  try {
+    const giveaway = await getGiveaway(giveawayId);
+    if (!giveaway || giveaway.status !== 'active' || !giveaway.emoji) return;
+    const [entries, previousWinners] = await Promise.all([getGiveawayEntries(giveawayId), getPreviousGiveawayWinners(giveaway.guild_id,giveawayId)]);
+    const winners = selectGiveawayWinners(entries, giveaway.winner_count, previousWinners);
+    const channel = await client.channels.fetch(giveaway.channel_id);
+    if (!channel?.isTextBased()) throw new Error(`Channel ${giveaway.channel_id} is unavailable or not text-based.`);
+    await channel.send('🎉 The giveaway has ended! Winner(s): ' + (winners.length ? winners.map(id => '<@' + id + '>').join(', ') : 'No eligible participants this time.'));
+    await finishGiveaway(giveawayId, winners);
+    console.log(`[GIVEAWAY_END] Finalized giveaway ${giveawayId} with ${winners.length} winner(s).`);
+  } catch (error) {
+    console.error(`[GIVEAWAY_END] Failed to finalize giveaway ${giveawayId}; it will be retried.`,error);
+  } finally {
+    giveawaysEnding.delete(String(giveawayId));
+  }
 });
 client.on('rulesPanelRefresh', async guildId => {
   const rules=await getRules(guildId).catch(()=>null); if(!rules) return;
@@ -1888,7 +1906,8 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand()) {
     handleCommand(interaction).catch(async error => {
       console.error(error);
-      if (!interaction.replied && !interaction.deferred) await interaction.reply({content:'Yachiyo encountered an error.',ephemeral:true});
+      if (interaction.deferred && !interaction.replied) await interaction.editReply({content:'Yachiyo encountered an error. Please check the bot logs for details.'}).catch(console.error);
+      else if (!interaction.replied) await interaction.reply({content:'Yachiyo encountered an error. Please check the bot logs for details.',ephemeral:true}).catch(console.error);
     });
   }
 });
