@@ -13,7 +13,7 @@ import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurs
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
 import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, getIntroductionSettings, resetIntroduction, saveIntroductionSettings, clearIntroductionRecords } from './services/introductionService.js';
-import { createGiveaway, setGiveawayMessage, setGiveawayEmoji, getGiveaway, getMostRecentEndedGiveaway, getGiveawayEntries, getPreviousGiveawayWinners, setGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
+import { createGiveaway, setGiveawayMessage, setGiveawayEmoji, getGiveawayByMessageId, getMostRecentEndedGiveaway, getGiveawayEntries, getPreviousGiveawayWinners, setGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
 import { selectGiveawayWinners } from './services/giveawayRandom.js';
 import { setupRules, getRules, updateRule, updateRulesBanner } from './services/rulesService.js';
 import { saveTicketSettings, addTicketAccessRole, removeTicketAccessRole, getTicketAccessRoles } from './services/ticketService.js';
@@ -98,7 +98,7 @@ export const commands = [
   ,new SlashCommandBuilder().setName('emoji-upload').setDescription('Upload multiple images as server emojis.').setDefaultMemberPermissions(PermissionFlagsBits.ManageEmojisAndStickers).setDMPermission(false)
   ,new SlashCommandBuilder().setName('giveaway').setDescription('Create and manage giveaways.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).setDMPermission(false)
     .addSubcommand(s=>s.setName('start').setDescription('Start a giveaway.').addStringOption(o=>o.setName('prize').setDescription('What is being given away').setRequired(true).setMaxLength(200)).addStringOption(o=>o.setName('duration').setDescription('Duration, e.g. 30m, 1h, 2d').setRequired(true)).addChannelOption(o=>o.setName('channel').setDescription('Giveaway channel').setRequired(true)).addIntegerOption(o=>o.setName('winners').setDescription('Number of winners').setMinValue(1).setMaxValue(20).setRequired(true)).addStringOption(o=>o.setName('emoji').setDescription('Reaction emoji members click to enter').setRequired(true).setMaxLength(100)).addUserOption(o=>o.setName('host').setDescription('Giveaway host').setRequired(false)).addRoleOption(o=>o.setName('required_role').setDescription('Role required to enter').setRequired(false)))
-    .addSubcommand(s=>s.setName('repick').setDescription('Randomly choose replacement giveaway winner(s).').addIntegerOption(o=>o.setName('giveaway_id').setDescription('Optional ID; leave blank to use the latest ended giveaway').setRequired(false)))
+    .addSubcommand(s=>s.setName('repick').setDescription('Randomly choose replacement giveaway winner(s).').addStringOption(o=>o.setName('message_id').setDescription('Giveaway panel message ID; leave blank for the latest ended giveaway').setRequired(false).setMinLength(17).setMaxLength(20)))
   ,new SlashCommandBuilder().setName('rules-setup').setDescription('Set up the rulebook panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Rulebook channel').setRequired(true)).addAttachmentOption(o=>o.setName('banner').setDescription('Optional rulebook banner image').setRequired(false))
   ,new SlashCommandBuilder().setName('rules-panel').setDescription('Refresh the rulebook panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
   ,new SlashCommandBuilder().setName('rules-edit').setDescription('Edit a rulebook section.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addIntegerOption(o=>o.setName('section').setDescription('Section number 1-6').setMinValue(1).setMaxValue(6).setRequired(true))
@@ -324,9 +324,10 @@ export async function handleCommand(interaction) {
     if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ephemeral:true});
     const action = interaction.options.getSubcommand();
     if (action === 'repick') {
-      const giveawayId = interaction.options.getInteger('giveaway_id');
-      const giveaway = giveawayId ? await getGiveaway(giveawayId) : await getMostRecentEndedGiveaway(interaction.guildId);
-      if (!giveaway) return interaction.editReply({content: giveawayId ? 'Giveaway not found.' : 'There are no ended giveaways to reroll yet.'});
+      const messageId = interaction.options.getString('message_id')?.trim();
+      if (messageId && !/^\d{17,20}$/.test(messageId)) return interaction.editReply({content:'Enter the 17–20 digit Discord message ID from the giveaway panel.'});
+      const giveaway = messageId ? await getGiveawayByMessageId(messageId) : await getMostRecentEndedGiveaway(interaction.guildId);
+      if (!giveaway) return interaction.editReply({content: messageId ? 'I couldn’t find a giveaway for that panel message ID.' : 'There are no ended giveaways to reroll yet.'});
       if (giveaway.guild_id !== interaction.guildId) return interaction.editReply({content:'That giveaway belongs to a different server.'});
       if (giveaway.status !== 'ended') return interaction.editReply({content:'You can only reroll a giveaway after it has ended.'});
       const [entries, previousWinners] = await Promise.all([getGiveawayEntries(giveaway.id), getPreviousGiveawayWinners(giveaway.guild_id,giveaway.id)]);
