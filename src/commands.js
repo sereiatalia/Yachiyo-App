@@ -13,7 +13,8 @@ import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurs
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
 import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, getIntroductionSettings, resetIntroduction, saveIntroductionSettings, clearIntroductionRecords } from './services/introductionService.js';
-import { createGiveaway, setGiveawayMessage, getGiveaway, getGiveawayEntries, finishGiveaway } from './services/giveawayService.js';
+import { createGiveaway, setGiveawayMessage, getGiveaway, getGiveawayEntries, getPreviousGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
+import { selectGiveawayWinners } from './services/giveawayRandom.js';
 import { setupRules, getRules, updateRule, updateRulesBanner } from './services/rulesService.js';
 import { saveTicketSettings, addTicketAccessRole, removeTicketAccessRole, getTicketAccessRoles } from './services/ticketService.js';
 import { getBumpTimer, saveBumpPanel } from './services/bumpService.js';
@@ -324,8 +325,8 @@ export async function handleCommand(interaction) {
     if (action === 'repick') {
       const giveaway = await getGiveaway(interaction.options.getInteger('giveaway_id'));
       if (!giveaway) return interaction.reply({content:'Giveaway not found.', ephemeral:true});
-      const entries = await getGiveawayEntries(giveaway.id);
-      const winners = entries.sort(() => Math.random() - 0.5).slice(0, giveaway.winner_count);
+      const [entries, previousWinners] = await Promise.all([getGiveawayEntries(giveaway.id), getPreviousGiveawayWinners(giveaway.guild_id,giveaway.id)]);
+      const winners = selectGiveawayWinners(entries,giveaway.winner_count,previousWinners);
       await finishGiveaway(giveaway.id, winners);
       return interaction.reply({content: winners.length ? '🎉 New random winner(s): ' + winners.map(id => '<@' + id + '>').join(', ') : 'There are no eligible participants.'});
     }
@@ -351,7 +352,7 @@ export async function handleCommand(interaction) {
     const hostMember = await interaction.guild.members.fetch(host.id).catch(() => null);
     const hostName = hostMember?.displayName || host.globalName || host.username;
     const role = interaction.options.getRole('required_role');
-    const embed = new EmbedBuilder().setColor(0xf3a6c7).setAuthor({name:'Hosted by '+hostName,iconURL:host.displayAvatarURL()}).setTitle('🎉 Giveaway #'+giveaway.id).setDescription('# 🎁 '+giveaway.prize+'\n\n**Winners:** '+giveaway.winner_count+'\n**Ends:** <t:'+Math.floor(endsAt.getTime()/1000)+':R>\n**Required role:** '+(role ? '<@&'+role.id+'>' : 'None — everyone may enter')+'\n\n✧ Click the **'+entryEmoji+'** reaction below to join! ♡');
+    const embed = new EmbedBuilder().setColor(0xf3a6c7).setAuthor({name:'Hosted by '+hostName,iconURL:host.displayAvatarURL()}).setTitle('🎉 Giveaway').setDescription('# 🎁 '+giveaway.prize+'\n\n**Winners:** '+giveaway.winner_count+'\n**Ends:** <t:'+Math.floor(endsAt.getTime()/1000)+':R>\n**Required role:** '+(role ? '<@&'+role.id+'>' : 'None — everyone may enter')+'\n\n✧ Click the **'+entryEmoji+'** reaction below to join! ♡\n♡ Past winners can join the next giveaway, then become eligible to win again.');
     const message = await channel.send({embeds:[embed]});
     const reaction = await message.react(entryEmoji).catch(async error => {
       await message.delete().catch(() => null);
