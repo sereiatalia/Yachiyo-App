@@ -15,7 +15,7 @@ import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, it
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 import { getCurseSettings, findMatchedCurseWords, recordCurseWarning, getCurseExemptRoles } from './services/curseService.js';
 import { getIntroductionSettings, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
-import { getGiveaway, getGiveawayByMessage, setGiveawayEmoji, addGiveawayEntry, getGiveawayEntries, getPreviousGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
+import { getGiveaway, getGiveawayByMessage, getActiveGiveaways, setGiveawayEmoji, addGiveawayEntry, getGiveawayEntries, getPreviousGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
 import { selectGiveawayWinners } from './services/giveawayRandom.js';
 import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js';
 import { getTicketSettings, setTicketPanel, createTicket, getTicketByChannel, deleteTicket, getTicketAccessRoles } from './services/ticketService.js';
@@ -774,6 +774,14 @@ const currentServerIds = client.guilds.cache.map(guild => guild.id);
 
   for (const voice of await getVoiceChannels().catch(() => [])) keepVoiceConnection(voice.guild_id, voice.voice_channel_id).catch(console.error);
   for (const reminder of await pendingBumpReminders().catch(() => [])) scheduleBumpReminder(reminder.guild_id,reminder.user_id,reminder.remind_at);
+  for (const guild of client.guilds.cache.values()) {
+    for (const giveaway of await getActiveGiveaways(guild.id).catch(error => { console.error('[GIVEAWAY_RESTORE]',error); return []; })) {
+      if (!giveaway.emoji || !giveaway.message_id) continue;
+      const delay = Math.max(1_000,new Date(giveaway.ends_at).getTime()-Date.now());
+      setTimeout(() => client.emit('giveawayEnd',giveaway.id),delay).unref?.();
+      console.log(`[GIVEAWAY_RESTORE] Scheduled giveaway ending for guild ${guild.id}.`);
+    }
+  }
   for (const guild of client.guilds.cache.values()) {
     client.emit('serverInfoPanelRefresh',guild.id);
     await syncGuildVoiceActivity(guild).catch(error=>console.error(`[VOICE_ACTIVITY_RECONCILE] ${guild.id}`,error));
