@@ -96,7 +96,7 @@ export const commands = [
   ,new SlashCommandBuilder().setName('introduction-reward-cleanup').setDescription('Remove legacy introduction rewards and clear old records.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
   ,new SlashCommandBuilder().setName('emoji-upload').setDescription('Upload multiple images as server emojis.').setDefaultMemberPermissions(PermissionFlagsBits.ManageEmojisAndStickers).setDMPermission(false)
   ,new SlashCommandBuilder().setName('giveaway').setDescription('Create and manage giveaways.').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).setDMPermission(false)
-    .addSubcommand(s=>s.setName('start').setDescription('Start a giveaway.').addStringOption(o=>o.setName('prize').setDescription('What is being given away').setRequired(true)).addStringOption(o=>o.setName('duration').setDescription('Duration, e.g. 30m, 1h, 2d').setRequired(true)).addChannelOption(o=>o.setName('channel').setDescription('Giveaway channel').setRequired(true)).addIntegerOption(o=>o.setName('winners').setDescription('Number of winners').setMinValue(1).setMaxValue(20).setRequired(true)).addUserOption(o=>o.setName('host').setDescription('Giveaway host').setRequired(false)).addRoleOption(o=>o.setName('required_role').setDescription('Role required to enter').setRequired(false)))
+    .addSubcommand(s=>s.setName('start').setDescription('Start a giveaway.').addStringOption(o=>o.setName('prize').setDescription('What is being given away').setRequired(true).setMaxLength(200)).addStringOption(o=>o.setName('duration').setDescription('Duration, e.g. 30m, 1h, 2d').setRequired(true)).addChannelOption(o=>o.setName('channel').setDescription('Giveaway channel').setRequired(true)).addIntegerOption(o=>o.setName('winners').setDescription('Number of winners').setMinValue(1).setMaxValue(20).setRequired(true)).addStringOption(o=>o.setName('emoji').setDescription('Reaction emoji members click to enter').setRequired(true).setMaxLength(100)).addUserOption(o=>o.setName('host').setDescription('Giveaway host').setRequired(false)).addRoleOption(o=>o.setName('required_role').setDescription('Role required to enter').setRequired(false)))
     .addSubcommand(s=>s.setName('repick').setDescription('Randomly repick winners.').addIntegerOption(o=>o.setName('giveaway_id').setDescription('Giveaway ID').setRequired(true)))
   ,new SlashCommandBuilder().setName('rules-setup').setDescription('Set up the rulebook panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addChannelOption(o=>o.setName('channel').setDescription('Rulebook channel').setRequired(true)).addAttachmentOption(o=>o.setName('banner').setDescription('Optional rulebook banner image').setRequired(false))
   ,new SlashCommandBuilder().setName('rules-panel').setDescription('Refresh the rulebook panel.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
@@ -335,12 +335,37 @@ export async function handleCommand(interaction) {
     const multipliers = {s:1000,m:60000,h:3600000,d:86400000};
     const endsAt = new Date(Date.now() + Number(match[1]) * multipliers[match[2].toLowerCase()]);
     const channel = interaction.options.getChannel('channel');
-    const giveaway = await createGiveaway({guildId:interaction.guildId,channelId:channel.id,hostUserId:interaction.options.getUser('host')?.id ?? interaction.user.id,prize:interaction.options.getString('prize'),endsAt,winnerCount:interaction.options.getInteger('winners'),requiredRoleId:interaction.options.getRole('required_role')?.id ?? null});
-    const message = await channel.send({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('🎉 Giveaway').setDescription('**Prize:** '+giveaway.prize+'\n**Winners:** '+giveaway.winner_count+'\n**Ends:** <t:'+Math.floor(endsAt.getTime()/1000)+':R>\n\nThe host must react to this message with the emoji members should use to enter.') ]});
+    const host = interaction.options.getUser('host') ?? interaction.user;
+    const rawEmoji = interaction.options.getString('emoji').trim();
+    const customEmojiMatch = rawEmoji.match(/^<a?:(\w{2,32}):(\d{17,20})>$/);
+    let entryEmoji = rawEmoji;
+    if (customEmojiMatch) {
+      const customEmoji = await interaction.guild.emojis.fetch(customEmojiMatch[2]).catch(() => null);
+      if (!customEmoji) return interaction.reply({content:'I couldn’t find that custom emoji in this server. Choose a server emoji or a standard emoji.',ephemeral:true});
+      entryEmoji = customEmoji.toString();
+    } else {
+      const graphemes = [...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(rawEmoji)];
+      if (graphemes.length !== 1 || !/[\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3]/u.test(rawEmoji)) return interaction.reply({content:'Enter one standard emoji (for example 🎉) or a custom emoji from this server.',ephemeral:true});
+    }
+    const giveaway = await createGiveaway({guildId:interaction.guildId,channelId:channel.id,hostUserId:host.id,prize:interaction.options.getString('prize'),endsAt,winnerCount:interaction.options.getInteger('winners'),requiredRoleId:interaction.options.getRole('required_role')?.id ?? null});
+    const hostMember = await interaction.guild.members.fetch(host.id).catch(() => null);
+    const hostName = hostMember?.displayName || host.globalName || host.username;
+    const role = interaction.options.getRole('required_role');
+    const embed = new EmbedBuilder().setColor(0xf3a6c7).setAuthor({name:'Hosted by '+hostName,iconURL:host.displayAvatarURL()}).setTitle('🎉 Giveaway #'+giveaway.id).setDescription('# 🎁 '+giveaway.prize+'\n\n**Winners:** '+giveaway.winner_count+'\n**Ends:** <t:'+Math.floor(endsAt.getTime()/1000)+':R>\n**Required role:** '+(role ? '<@&'+role.id+'>' : 'None — everyone may enter')+'\n\n✧ Click the **'+entryEmoji+'** reaction below to join! ♡');
+    const message = await channel.send({embeds:[embed]});
+    const reaction = await message.react(entryEmoji).catch(async error => {
+      await message.delete().catch(() => null);
+      console.error('[GIVEAWAY_REACTION]',error);
+      return null;
+    });
+    if (!reaction) {
+      await finishGiveaway(giveaway.id,[]).catch(console.error);
+      return interaction.reply({content:'I couldn’t add that emoji. Please check that I have **Add Reactions** permission, then try again.',ephemeral:true});
+    }
     await setGiveawayMessage(giveaway.id, message.id);
-    (interaction.client.pendingGiveawayEmoji ??= new Map()).set(message.id, giveaway.id);
+    await setGiveawayEmoji(giveaway.id, reaction.emoji.toString());
     setTimeout(() => interaction.client.emit('giveawayEnd', giveaway.id), Math.max(1000, endsAt.getTime() - Date.now()));
-    return interaction.reply({content:'✅ Giveaway **#'+giveaway.id+'** created in <#'+channel.id+'>. React to the giveaway message with your chosen emoji to activate entries.', ephemeral:true});
+    return interaction.reply({content:'✅ Giveaway **#'+giveaway.id+'** is live in <#'+channel.id+'>. Your chosen emoji is ready for members to click!', ephemeral:true});
   }
   if (name === 'emoji-upload') {
     if (!interaction.guild.members.me?.permissions.has(PermissionFlagsBits.ManageEmojisAndStickers)) return interaction.reply({content:'Yachiyo needs **Manage Expressions** to create server emojis.', ephemeral:true});
