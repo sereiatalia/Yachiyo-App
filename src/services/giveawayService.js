@@ -9,6 +9,7 @@ export async function createGiveaway(data) {
 export async function setGiveawayMessage(id, messageId) { await query('UPDATE giveaways SET message_id=$2 WHERE id=$1', [id, messageId]); }
 export async function setGiveawayEmoji(id, emoji) { const { rows } = await query('UPDATE giveaways SET emoji=$2 WHERE id=$1 RETURNING *', [id, emoji]); return rows[0]; }
 export async function getGiveaway(id) { const { rows } = await query('SELECT * FROM giveaways WHERE id=$1', [id]); return rows[0] ?? null; }
+export async function getMostRecentEndedGiveaway(guildId) { const { rows } = await query("SELECT * FROM giveaways WHERE guild_id=$1 AND status='ended' ORDER BY COALESCE(ended_at,created_at) DESC,id DESC LIMIT 1",[guildId]); return rows[0] ?? null; }
 export async function getGiveawayByMessage(messageId) { const { rows } = await query("SELECT * FROM giveaways WHERE message_id=$1 AND status='active'", [messageId]); return rows[0] ?? null; }
 export async function getActiveGiveaways(guildId) { return (await query("SELECT * FROM giveaways WHERE guild_id=$1 AND status='active' ORDER BY ends_at ASC",[guildId])).rows; }
 export async function getDueGiveaways() { return (await query("SELECT id FROM giveaways WHERE status='active' AND ends_at<=NOW() ORDER BY ends_at ASC")).rows; }
@@ -18,4 +19,5 @@ export async function getPreviousGiveawayWinners(guildId, excludeId) {
   const { rows } = await query("SELECT winner_user_ids FROM giveaways WHERE guild_id=$1 AND status='ended' AND id<>$2 ORDER BY COALESCE(ended_at,created_at) DESC,id DESC LIMIT 1", [guildId, excludeId]);
   return rows[0]?.winner_user_ids ?? [];
 }
+export async function setGiveawayWinners(id, winners) { await query("UPDATE giveaways SET winner_user_ids=$2 WHERE id=$1 AND status='ended'",[id,winners]); }
 export async function finishGiveaway(id, winners) { await query("UPDATE giveaways SET status='ended', winner_user_ids=$2, ended_at=NOW() WHERE id=$1", [id, winners]); }
