@@ -329,15 +329,28 @@ export async function handleCommand(interaction) {
       const giveaway = messageId ? await getGiveawayByMessageId(messageId) : await getMostRecentEndedGiveaway(interaction.guildId);
       if (!giveaway) return interaction.editReply({content: messageId ? 'I couldn’t find a giveaway for that panel message ID.' : 'There are no ended giveaways to reroll yet.'});
       if (giveaway.guild_id !== interaction.guildId) return interaction.editReply({content:'That giveaway belongs to a different server.'});
-      if (giveaway.status !== 'ended') return interaction.editReply({content:'You can only reroll a giveaway after it has ended.'});
+      const now=Date.now(), endsAtMs=new Date(giveaway.ends_at).getTime();
+      if (endsAtMs>now) return interaction.editReply({content:'You can reroll after this giveaway ends.'});
+      const endTimeMs=new Date(giveaway.ended_at ?? giveaway.ends_at).getTime();
+      if (now-endTimeMs>24*60*60*1000) return interaction.editReply({content:'The 24-hour reroll window for this giveaway has passed.'});
+      const channel = await interaction.client.channels.fetch(giveaway.channel_id).catch(() => null);
+      if (!channel?.isTextBased()) return interaction.editReply({content:'I couldn’t find the giveaway channel to announce the result.'});
+      if (giveaway.status === 'active') {
+        const [entries, previousWinners] = await Promise.all([getGiveawayEntries(giveaway.id), getPreviousGiveawayWinners(giveaway.guild_id,giveaway.id)]);
+        const initialWinners = selectGiveawayWinners(entries,giveaway.winner_count,previousWinners);
+        await finishGiveaway(giveaway.id,initialWinners);
+        giveaway.status='ended';
+        giveaway.winner_user_ids=initialWinners;
+        giveaway.ended_at=new Date();
+        await channel.send('🎉 The giveaway has ended! Winner(s): ' + (initialWinners.length ? initialWinners.map(id => '<@' + id + '>').join(', ') : 'No eligible participants this time.'));
+      }
+      if (giveaway.status !== 'ended') return interaction.editReply({content:'This giveaway can’t be rerolled.'});
       const [entries, previousWinners] = await Promise.all([getGiveawayEntries(giveaway.id), getPreviousGiveawayWinners(giveaway.guild_id,giveaway.id)]);
       const excludedWinners = [...new Set([...previousWinners,...(giveaway.winner_user_ids ?? []).map(String)])];
       const winners = selectGiveawayWinners(entries,giveaway.winner_count,excludedWinners);
       if (!winners.length) return interaction.editReply({content:'There are no eligible replacement winners. The current winner stays unchanged.'});
       const allGiveawayWinners = [...new Set([...(giveaway.winner_user_ids ?? []).map(String),...winners])];
       await setGiveawayWinners(giveaway.id,allGiveawayWinners);
-      const channel = await interaction.client.channels.fetch(giveaway.channel_id).catch(() => null);
-      if (!channel?.isTextBased()) return interaction.editReply({content:'I picked the replacement winner(s), but couldn’t find the giveaway channel to announce them.'});
       await channel.send('🎉 The giveaway was rerolled! New winner(s): ' + winners.map(id => '<@' + id + '>').join(', '));
       return interaction.editReply({content:'🎉 Replacement winner(s) announced in <#'+giveaway.channel_id+'>: '+winners.map(id => '<@'+id+'>').join(', ')});
     }
