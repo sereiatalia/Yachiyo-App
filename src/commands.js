@@ -13,7 +13,7 @@ import { parseCurseWords, addCurseWords, setCurseWords, setCurseEnabled, getCurs
 import { getMarketSnapshot, getMarketFish, formatMarketLines, recordSupply } from './services/fishMarketService.js';
 import { ROD_TIERS, getRod, upgradeRod, evolveRod, getActiveEffects, getFishingBonuses, buyItem, drinkItem, itemInventory } from './services/fishingProgression.js';
 import { DEFAULT_INTRODUCTION_TEMPLATE, getIntroductionStatus, getIntroductionSettings, resetIntroduction, saveIntroductionSettings, clearIntroductionRecords } from './services/introductionService.js';
-import { createGiveaway, setGiveawayMessage, getGiveaway, getGiveawayEntries, getPreviousGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
+import { createGiveaway, setGiveawayMessage, setGiveawayEmoji, getGiveaway, getGiveawayEntries, getPreviousGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
 import { selectGiveawayWinners } from './services/giveawayRandom.js';
 import { setupRules, getRules, updateRule, updateRulesBanner } from './services/rulesService.js';
 import { saveTicketSettings, addTicketAccessRole, removeTicketAccessRole, getTicketAccessRoles } from './services/ticketService.js';
