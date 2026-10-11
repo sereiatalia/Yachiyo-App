@@ -2,6 +2,7 @@ import { AttachmentBuilder, EmbedBuilder } from 'discord.js';
 import { query } from '../database/db.js';
 
 const MAX_CONTENT = 1024;
+const LOG_TIME_ZONE = 'Asia/Manila';
 function clip(value, max = MAX_CONTENT) { const text = String(value ?? ''); return text.length > max ? text.slice(0, max - 3) + '...' : text; }
 
 function formatEvent(payload) {
@@ -46,15 +47,15 @@ function formatEvent(payload) {
     embed.addFields(
       { name: 'Member Who Leave', value: data.displayName || 'Unknown member', inline: false },
       { name: 'Username', value: data.username || 'Unknown username', inline: false },
-      { name: 'When', value: data.leftAt ? new Date(data.leftAt).toLocaleDateString() : 'Unknown date', inline: false },
-      { name: 'Time', value: data.leftAt ? new Date(data.leftAt).toLocaleTimeString() : 'Unknown time', inline: false }
+      { name: 'When', value: data.leftAt ? new Date(data.leftAt).toLocaleDateString('en-US', { timeZone: LOG_TIME_ZONE }) : 'Unknown date', inline: false },
+      { name: 'Time', value: data.leftAt ? new Date(data.leftAt).toLocaleTimeString('en-US', { timeZone: LOG_TIME_ZONE }) : 'Unknown time', inline: false }
     );
   } else if (payload.eventType === 'moderation.kick' || (payload.eventType === 'moderation.action' && /completed a kick action/i.test(data.summary || ''))) {
     embed.addFields(
       { name: 'Username Kicked', value: data.targetUsername || (payload.targetId ? '<@' + payload.targetId + '>' : 'Unknown username'), inline: false },
       { name: 'Responsible Moderator', value: payload.actorId ? '<@' + payload.actorId + '>' : 'Unknown moderator', inline: false },
-      { name: 'Date', value: data.kickedAt ? new Date(data.kickedAt).toLocaleDateString() : new Date().toLocaleDateString(), inline: false },
-      { name: 'Time', value: data.kickedAt ? new Date(data.kickedAt).toLocaleTimeString() : new Date().toLocaleTimeString(), inline: false }
+      { name: 'Date', value: data.kickedAt ? new Date(data.kickedAt).toLocaleDateString('en-US', { timeZone: LOG_TIME_ZONE }) : new Date().toLocaleDateString('en-US', { timeZone: LOG_TIME_ZONE }), inline: false },
+      { name: 'Time', value: data.kickedAt ? new Date(data.kickedAt).toLocaleTimeString('en-US', { timeZone: LOG_TIME_ZONE }) : new Date().toLocaleTimeString('en-US', { timeZone: LOG_TIME_ZONE }), inline: false }
     );
   } else if (data.actorLabel || payload.actorId) embed.addFields({ name: data.actorLabel ?? 'Sender', value: data.actorLabel ? clip(data.actorLabel) : '<@' + payload.actorId + '>', inline: false });
   if (data.messageId && !['message.delete','message.edit'].includes(payload.eventType)) embed.addFields({ name: 'Message ID', value: '`' + data.messageId + '`', inline: false });
