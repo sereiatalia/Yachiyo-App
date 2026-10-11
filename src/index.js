@@ -841,7 +841,7 @@ client.on('giveawayEnd', async giveawayId => {
     const winners = selectGiveawayWinners(entries, giveaway.winner_count, previousWinners);
     const channel = await client.channels.fetch(giveaway.channel_id);
     if (!channel?.isTextBased()) throw new Error(`Channel ${giveaway.channel_id} is unavailable or not text-based.`);
-    await channel.send('🎉 The giveaway has ended! Winner(s): ' + (winners.length ? winners.map(id => '<@' + id + '>').join(', ') : 'No eligible participants this time.'));
+    await channel.send('🎉 The giveaway for **'+giveaway.prize+'** has ended! Winner(s): ' + (winners.length ? winners.map(id => '<@' + id + '>').join(', ') : 'No eligible participants this time.'));
     await finishGiveaway(giveawayId, winners);
     console.log(`[GIVEAWAY_END] Finalized giveaway ${giveawayId} with ${winners.length} winner(s).`);
   } catch (error) {

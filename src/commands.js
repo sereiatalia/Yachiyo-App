@@ -343,7 +343,7 @@ export async function handleCommand(interaction) {
         giveaway.status='ended';
         giveaway.winner_user_ids=initialWinners;
         giveaway.ended_at=new Date();
-        await channel.send('🎉 The giveaway has ended! Winner(s): ' + (initialWinners.length ? initialWinners.map(id => '<@' + id + '>').join(', ') : 'No eligible participants this time.'));
+        await channel.send('🎉 The giveaway for **'+giveaway.prize+'** has ended! Winner(s): ' + (initialWinners.length ? initialWinners.map(id => '<@' + id + '>').join(', ') : 'No eligible participants this time.'));
       }
       if (giveaway.status !== 'ended') return interaction.editReply({content:'This giveaway can’t be rerolled.'});
       const [entries, previousWinners] = await Promise.all([getEligibleGiveawayEntrants(interaction.client,giveaway), getPreviousGiveawayWinners(giveaway.guild_id,giveaway.id)]);
@@ -352,7 +352,7 @@ export async function handleCommand(interaction) {
       if (!winners.length) return interaction.editReply({content:'There are no eligible replacement winners. The current winner stays unchanged.'});
       const allGiveawayWinners = [...new Set([...(giveaway.winner_user_ids ?? []).map(String),...winners])];
       await setGiveawayWinners(giveaway.id,allGiveawayWinners);
-      await channel.send('🎉 The giveaway was rerolled! New winner(s): ' + winners.map(id => '<@' + id + '>').join(', '));
+      await channel.send('🎉 New winner(s) of **'+giveaway.prize+'**: ' + winners.map(id => '<@' + id + '>').join(', '));
       return interaction.editReply({content:'🎉 Replacement winner(s) announced in <#'+giveaway.channel_id+'>: '+winners.map(id => '<@'+id+'>').join(', ')});
     }
     const duration = interaction.options.getString('duration');
