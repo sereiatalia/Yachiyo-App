@@ -5,7 +5,7 @@ import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client, GatewayIntentBits, Partials, PermissionFlagsBits, REST, Routes, ChannelType, ActivityType, AuditLogEvent, UserSelectMenuBuilder } from 'discord.js';
 import { commands, handleCommand, buildHelpView, GUESS_CHARACTERS } from './commands.js';
-import { ensureGuild, getFishChannel, getVoiceChannels } from './services/guildService.js';
+import { ensureGuild, getFishChannel, getVoiceChannels, getVoiceChannelId } from './services/guildService.js';
 import { sendAuditLog } from './services/auditService.js';
 import { fishInventory, fishAlmanac, fishCollection } from './services/economyService.js';
 import { buildAlmanacView } from './ui/almanac.js';
@@ -653,9 +653,27 @@ async function keepVoiceConnection(guildId, channelId) {
   voiceConnections.set(guildId,connection);
   connection.on(VoiceConnectionStatus.Disconnected, async () => {
     try { await entersState(connection, VoiceConnectionStatus.Ready, 5_000); }
-    catch { if (voiceConnections.get(guildId)===connection) { connection.destroy(); setTimeout(()=>keepVoiceConnection(guildId,channelId).catch(console.error),2_000); } }
+    catch { if (voiceConnections.get(guildId)===connection) { connection.destroy(); setTimeout(()=>ensureSavedVoiceConnection(guildId).catch(error=>console.error('[VOICE_RECONNECT]',error)),2_000); } }
   });
   connection.on('error', error => console.error('[VOICE]', error));
+  await entersState(connection,VoiceConnectionStatus.Ready,15_000);
+}
+const voiceReconnectTasks = new Map();
+async function ensureSavedVoiceConnection(guildId) {
+  if (voiceReconnectTasks.has(guildId)) return voiceReconnectTasks.get(guildId);
+  const task = (async () => {
+    const channelId = await getVoiceChannelId(guildId);
+    if (!channelId) return;
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return;
+    const connection = voiceConnections.get(guildId);
+    const connectedToTarget = guild.members.me?.voice.channelId === channelId;
+    const connectionHealthy = connection?.joinConfig.channelId === channelId && connection.state.status === VoiceConnectionStatus.Ready;
+    if (connectedToTarget && connectionHealthy) return;
+    await keepVoiceConnection(guildId,channelId);
+  })();
+  voiceReconnectTasks.set(guildId,task);
+  try { await task; } finally { voiceReconnectTasks.delete(guildId); }
 }
 const guessSessions = new Map();
 const client = new Client({
@@ -773,7 +791,13 @@ const currentServerIds = client.guilds.cache.map(guild => guild.id);
       console.error("Failed to sync servers to PostgreSQL:", error);
   }
 
-  for (const voice of await getVoiceChannels().catch(() => [])) keepVoiceConnection(voice.guild_id, voice.voice_channel_id).catch(console.error);
+  for (const voice of await getVoiceChannels().catch(() => [])) ensureSavedVoiceConnection(voice.guild_id).catch(error=>console.error('[VOICE_STARTUP]',error));
+  const voiceWatchdog = setInterval(async () => {
+    for (const voice of await getVoiceChannels().catch(error=>{console.error('[VOICE_WATCHDOG]',error);return [];})) {
+      ensureSavedVoiceConnection(voice.guild_id).catch(error=>console.error('[VOICE_WATCHDOG]',voice.guild_id,error));
+    }
+  },30_000);
+  voiceWatchdog.unref?.();
   for (const reminder of await pendingBumpReminders().catch(() => [])) scheduleBumpReminder(reminder.guild_id,reminder.user_id,reminder.remind_at);
   for (const guild of client.guilds.cache.values()) {
     for (const giveaway of await getActiveGiveaways(guild.id).catch(error => { console.error('[GIVEAWAY_RESTORE]',error); return []; })) {
@@ -825,9 +849,9 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
       } catch (error) { console.error('[TEMP_VC_JOIN_TO_CREATE]', error); }
     }
   }
-  if (newState.id !== client.user?.id || newState.channelId) return;
-  const voice = voiceConnections.get(newState.guild.id);
-  if (voice) setTimeout(() => keepVoiceConnection(newState.guild.id, voice.joinConfig.channelId).catch(console.error), 2000);
+  if (newState.id === client.user?.id) {
+    setTimeout(() => ensureSavedVoiceConnection(newState.guild.id).catch(error=>console.error('[VOICE_STATE_RESTORE]',error)),1_500);
+  }
 });
 client.on('voiceJoinRequest', (guildId, channelId) => keepVoiceConnection(guildId, channelId).catch(console.error));
 const giveawaysEnding = new Set();
