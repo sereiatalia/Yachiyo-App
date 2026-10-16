@@ -853,7 +853,19 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     setTimeout(() => ensureSavedVoiceConnection(newState.guild.id).catch(error=>console.error('[VOICE_STATE_RESTORE]',error)),1_500);
   }
 });
-client.on('voiceJoinRequest', (guildId, channelId) => keepVoiceConnection(guildId, channelId).catch(console.error));
+client.on('voiceJoinRequest', async (guildId, channelId, respond) => {
+  try {
+    const savedChannelId=await getVoiceChannelId(guildId);
+    if (savedChannelId !== channelId) throw new Error('The saved voice channel changed before the connection started. Run `/vc-join` again.');
+    await ensureSavedVoiceConnection(guildId);
+    const guild=client.guilds.cache.get(guildId);
+    if (guild?.members.me?.voice.channelId !== channelId) throw new Error('Discord did not confirm that Yachiyo joined the selected channel.');
+    respond?.({ok:true});
+  } catch (error) {
+    console.error(`[VOICE_JOIN_REQUEST] Failed to join ${channelId} in guild ${guildId}:`,error);
+    respond?.({ok:false,error:error.message});
+  }
+});
 const giveawaysEnding = new Set();
 client.on('giveawayEnd', async giveawayId => {
   if (giveawaysEnding.has(String(giveawayId))) return;
