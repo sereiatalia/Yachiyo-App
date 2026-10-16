@@ -129,7 +129,7 @@ const websiteServer = createServer(async (request, response) => {
       const savedVoiceChannelId = (await query('SELECT voice_channel_id FROM guild_settings WHERE guild_id=$1', [guildId])).rows[0]?.voice_channel_id;
       if (savedVoiceChannelId) {
         try {
-          await keepVoiceConnection(guildId, savedVoiceChannelId);
+          await ensureSavedVoiceConnection(guildId);
           voiceReconnected = true;
         } catch (error) {
           console.warn(`[DASHBOARD_IMPORT_VOICE] Could not reconnect in ${guildId} to ${savedVoiceChannelId}:`, error.message);
@@ -160,7 +160,7 @@ const websiteServer = createServer(async (request, response) => {
       let voiceReconnected = false;
       const savedVoiceChannelId = (await query('SELECT voice_channel_id FROM guild_settings WHERE guild_id=$1', [guildId])).rows[0]?.voice_channel_id;
       if (savedVoiceChannelId) {
-        try { await keepVoiceConnection(guildId, savedVoiceChannelId); voiceReconnected = true; }
+        try { await ensureSavedVoiceConnection(guildId); voiceReconnected = true; }
         catch (error) { console.warn(`[AUTO_REDEPLOY_VOICE] ${guildId}:`, error.message); }
       }
       return sendJson(response, 200, { ok: true, guildId, sourceExportedAt: backup.exportedAt, safetyBackupAt: safetyBackup.exportedAt, imported, voiceReconnected });
@@ -668,8 +668,12 @@ async function ensureSavedVoiceConnection(guildId) {
     if (!guild) return;
     const connection = voiceConnections.get(guildId);
     const connectedToTarget = guild.members.me?.voice.channelId === channelId;
-    const connectionHealthy = connection?.joinConfig.channelId === channelId && connection.state.status === VoiceConnectionStatus.Ready;
-    if (connectedToTarget && connectionHealthy) return;
+    const sameTarget = connection?.joinConfig.channelId === channelId;
+    if (sameTarget && [VoiceConnectionStatus.Signalling,VoiceConnectionStatus.Connecting].includes(connection.state.status)) {
+      await entersState(connection,VoiceConnectionStatus.Ready,15_000);
+      return;
+    }
+    if (connectedToTarget && sameTarget && connection.state.status === VoiceConnectionStatus.Ready) return;
     await keepVoiceConnection(guildId,channelId);
   })();
   voiceReconnectTasks.set(guildId,task);
@@ -858,8 +862,8 @@ client.on('voiceJoinRequest', async (guildId, channelId, respond) => {
     const savedChannelId=await getVoiceChannelId(guildId);
     if (savedChannelId !== channelId) throw new Error('The saved voice channel changed before the connection started. Run `/vc-join` again.');
     await ensureSavedVoiceConnection(guildId);
-    const guild=client.guilds.cache.get(guildId);
-    if (guild?.members.me?.voice.channelId !== channelId) throw new Error('Discord did not confirm that Yachiyo joined the selected channel.');
+    const connection=voiceConnections.get(guildId);
+    if (connection?.joinConfig.channelId !== channelId || connection.state.status !== VoiceConnectionStatus.Ready) throw new Error('Discord did not confirm that Yachiyo joined the selected channel.');
     respond?.({ok:true});
   } catch (error) {
     console.error(`[VOICE_JOIN_REQUEST] Failed to join ${channelId} in guild ${guildId}:`,error);
