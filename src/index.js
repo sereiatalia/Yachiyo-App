@@ -648,12 +648,13 @@ function scheduleBumpReminder(guildId, userId, remindAt) {
 async function keepVoiceConnection(guildId, channelId) {
   const guild=client.guilds.cache.get(guildId); const channel=await client.channels.fetch(channelId).catch(()=>null);
   if(!guild || !channel?.isVoiceBased()) throw new Error('Voice channel unavailable.');
-  const old=voiceConnections.get(guildId); old?.destroy();
+  const old=voiceConnections.get(guildId);
+  if (old && old.state.status !== VoiceConnectionStatus.Destroyed) old.destroy();
   const connection=joinVoiceChannel({channelId:channel.id,guildId:guild.id,adapterCreator:guild.voiceAdapterCreator,selfDeaf:false,selfMute:true});
   voiceConnections.set(guildId,connection);
   connection.on(VoiceConnectionStatus.Disconnected, async () => {
     try { await entersState(connection, VoiceConnectionStatus.Ready, 5_000); }
-    catch { if (voiceConnections.get(guildId)===connection) { connection.destroy(); setTimeout(()=>ensureSavedVoiceConnection(guildId).catch(error=>console.error('[VOICE_RECONNECT]',error)),2_000); } }
+    catch { if (voiceConnections.get(guildId)===connection) { if (connection.state.status !== VoiceConnectionStatus.Destroyed) connection.destroy(); setTimeout(()=>ensureSavedVoiceConnection(guildId).catch(error=>console.error('[VOICE_RECONNECT]',error)),2_000); } }
   });
   connection.on('error', error => console.error('[VOICE]', error));
   await entersState(connection,VoiceConnectionStatus.Ready,15_000);
