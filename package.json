@@ -11,10 +11,10 @@
     "db:migrate": "node src/database/migrate.js",
     "commands:deploy": "node src/deploy-commands.js"
   },
-  "engines": { "node": ">=20" },
+  "engines": { "node": ">=22.12.0" },
   "dependencies": {
     "discord.js": "^14.25.1",
-    "@discordjs/voice": "^0.18.0",
+    "@discordjs/voice": "^0.19.2",
     "dotenv": "^17.2.3",
     "pg": "^8.16.3",
     "zod": "^3.25.76",
