@@ -668,13 +668,26 @@ async function ensureSavedVoiceConnection(guildId) {
     const guild = client.guilds.cache.get(guildId);
     if (!guild) return;
     const connection = voiceConnections.get(guildId);
-    const connectedToTarget = guild.members.me?.voice.channelId === channelId;
     const sameTarget = connection?.joinConfig.channelId === channelId;
     if (sameTarget && [VoiceConnectionStatus.Signalling,VoiceConnectionStatus.Connecting].includes(connection.state.status)) {
       await entersState(connection,VoiceConnectionStatus.Ready,15_000);
       return;
     }
-    if (connectedToTarget && sameTarget && connection.state.status === VoiceConnectionStatus.Ready) return;
+    if (sameTarget && connection.state.status === VoiceConnectionStatus.Ready) {
+      try {
+        // The gateway member cache can lag behind a healthy voice connection. Check
+        // Discord's current voice state before replacing it, and detect silent kicks.
+        const voiceState = await guild.voiceStates.fetch('@me', { force: true });
+        if (voiceState.channelId === channelId) return;
+        console.warn(`[VOICE_RESTORE] ${guildId}: voice moved away from the saved channel; rejoining.`);
+      } catch (error) {
+        if (error.status !== 404) {
+          console.warn(`[VOICE_RESTORE] ${guildId}: could not verify voice state; keeping the current connection:`, error.message);
+          return;
+        }
+        console.warn(`[VOICE_RESTORE] ${guildId}: bot is no longer in voice; rejoining.`);
+      }
+    }
     await keepVoiceConnection(guildId,channelId);
   })();
   voiceReconnectTasks.set(guildId,task);
