@@ -15,7 +15,7 @@ import { ROD_TIERS, buyItem, getRod, upgradeRod, evolveRod, getActiveEffects, it
 import { createConfession, getConfessionChannel, attachConfessionMessage, getConfession, createConfessionReply } from './services/confessionService.js';
 import { getCurseSettings, findMatchedCurseWords, recordCurseWarning, getCurseExemptRoles } from './services/curseService.js';
 import { getIntroductionSettings, recordIntroduction, setIntroductionPanelMessage, renderServerEmojis, getIntroductionByMessageId, resetIntroduction } from './services/introductionService.js';
-import { getGiveaway, getGiveawayByMessage, getActiveGiveaways, getDueGiveaways, setGiveawayEmoji, addGiveawayEntry, getPreviousGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
+import { getGiveaway, getGiveawayByMessage, getActiveGiveaways, getDueGiveaways, setGiveawayEmoji, addGiveawayEntry, removeGiveawayEntry, getPreviousGiveawayWinners, finishGiveaway } from './services/giveawayService.js';
 import { selectGiveawayWinners } from './services/giveawayRandom.js';
 import { getEligibleGiveawayEntrants } from './services/giveawayParticipants.js';
 import { getRules, saveRulesPanel, updateRule } from './services/rulesService.js';
@@ -1266,17 +1266,28 @@ client.on('messageReactionAdd', async (reaction, user) => {
     return;
   }
   const giveaway = await getGiveawayByMessage(reaction.message.id);
-  if (!giveaway || giveaway.status !== 'active' || giveaway.emoji !== reaction.emoji.toString()) return;
+  if (!giveaway || giveaway.status !== 'active' || giveaway.emoji !== reaction.emoji.toString() || new Date(giveaway.ends_at).getTime() <= Date.now()) return;
   const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
+  if (!member) return;
   const canBypassRoleRequirement = user.id === reaction.message.guild.ownerId || member?.permissions.has(PermissionFlagsBits.Administrator) || member?.permissions.has(PermissionFlagsBits.ManageGuild);
   if (giveaway.required_role_id && !member?.roles.cache.has(giveaway.required_role_id) && !canBypassRoleRequirement) return reaction.users.remove(user.id).catch(() => null);
-  await addGiveawayEntry(giveaway.id, user.id);
+  try {
+    const newlyEntered = await addGiveawayEntry(giveaway.id, user.id);
+    if (newlyEntered) {
+      const giveawayLink = `https://discord.com/channels/${giveaway.guild_id}/${giveaway.channel_id}/${giveaway.message_id}`;
+      await user.send({ content: `♡ You're in the giveaway for **${giveaway.prize}**! Good luck ✧\n${giveawayLink}`, allowedMentions: { parse: [] } }).catch(() => null);
+    }
+  } catch (error) { console.error('[GIVEAWAY_ENTRY]', giveaway.id, user.id, error); }
 });
 client.on('messageReactionRemove', async (reaction, user) => {
   if (user.bot) return;
   try { reaction = await hydrateReactionEvent(reaction); }
   catch (error) { console.error('[REACTION_PARTIAL_FETCH]', error); return; }
   if (!reaction.message.guild) return;
+  const giveaway = await getGiveawayByMessage(reaction.message.id);
+  if (giveaway?.emoji === reaction.emoji.toString()) {
+    await removeGiveawayEntry(giveaway.id, user.id).catch(error => console.error('[GIVEAWAY_ENTRY_REMOVE]', giveaway.id, user.id, error));
+  }
   const reactionRole = await findReactionRoleForEvent(reaction);
   if (!reactionRole) return;
   const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);

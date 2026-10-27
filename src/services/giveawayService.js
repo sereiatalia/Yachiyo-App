@@ -14,7 +14,11 @@ export async function getMostRecentEndedGiveaway(guildId) { const { rows } = awa
 export async function getGiveawayByMessage(messageId) { const { rows } = await query("SELECT * FROM giveaways WHERE message_id=$1 AND status='active'", [messageId]); return rows[0] ?? null; }
 export async function getActiveGiveaways(guildId) { return (await query("SELECT * FROM giveaways WHERE guild_id=$1 AND status='active' ORDER BY ends_at ASC",[guildId])).rows; }
 export async function getDueGiveaways() { return (await query("SELECT id FROM giveaways WHERE status='active' AND ends_at<=NOW() ORDER BY ends_at ASC")).rows; }
-export async function addGiveawayEntry(id, userId) { await query('INSERT INTO giveaway_entries (giveaway_id,user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, userId]); }
+export async function addGiveawayEntry(id, userId) {
+  const result = await query('INSERT INTO giveaway_entries (giveaway_id,user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING user_id', [id, userId]);
+  return result.rowCount > 0;
+}
+export async function removeGiveawayEntry(id, userId) { await query('DELETE FROM giveaway_entries WHERE giveaway_id=$1 AND user_id=$2', [id, userId]); }
 export async function getGiveawayEntries(id) { const { rows } = await query('SELECT user_id FROM giveaway_entries WHERE giveaway_id=$1', [id]); return rows.map(row => row.user_id); }
 export async function getPreviousGiveawayWinners(guildId, excludeId) {
   const { rows } = await query("SELECT winner_user_ids FROM giveaways WHERE guild_id=$1 AND status='ended' AND id<>$2 ORDER BY COALESCE(ended_at,created_at) DESC,id DESC LIMIT 1", [guildId, excludeId]);

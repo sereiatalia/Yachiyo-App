@@ -382,7 +382,7 @@ export async function handleCommand(interaction) {
     const hostMember = await interaction.guild.members.fetch(host.id).catch(() => null);
     const hostName = hostMember?.displayName || host.globalName || host.username;
     const role = interaction.options.getRole('required_role');
-    const embed = new EmbedBuilder().setColor(0xf3a6c7).setAuthor({name:'Hosted by '+hostName,iconURL:host.displayAvatarURL()}).setTitle('Ი ᰍ Giveaway Alert ⭑.ᐟ').setDescription('**PRIZE ⋮**\n# '+giveaway.prize+'\n﹏﹏﹏﹏\n**Winners:** '+giveaway.winner_count+'\n**Ends:** <t:'+Math.floor(endsAt.getTime()/1000)+':R>\n**Required Role:** '+(role ? '<@&'+role.id+'>' : 'None — everyone may enter')).setFooter({text:'✧ Click the emoji below to join! ♡'});
+    const embed = new EmbedBuilder().setColor(0xf3a6c7).setAuthor({name:'Hosted by '+hostName,iconURL:host.displayAvatarURL()}).setTitle('Ი ᰍ Giveaway Alert ⭑.ᐟ').setDescription('**PRIZE ⋮**\n# '+giveaway.prize+'\n﹏﹏﹏﹏\n**Winners:** '+giveaway.winner_count+'\n**Ends:** <t:'+Math.floor(endsAt.getTime()/1000)+':R>\n**Required Role:** '+(role ? '<@&'+role.id+'>' : 'None — everyone may enter')).setFooter({text:'✧ Click the emoji to join — Yachiyo will DM your confirmation! ♡'});
     const message = await channel.send({embeds:[embed]});
     const reaction = await message.react(entryEmoji).catch(async error => {
       await message.delete().catch(() => null);
