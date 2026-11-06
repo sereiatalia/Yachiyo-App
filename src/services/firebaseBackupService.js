@@ -1,6 +1,7 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { query } from '../database/db.js';
+import { isGuildPaused } from './botPauseService.js';
 
 let firestore = null;
 
@@ -47,6 +48,7 @@ export async function getGuildBackup(guildId, snapshotId) {
 export function startFirebaseBackups(client, intervalMs = 15 * 60 * 1000) {
   const run = async () => {
     for (const guild of client.guilds.cache.values()) {
+      if (isGuildPaused(guild.id)) continue;
       await backupGuildToFirebase(guild.id).catch(error => console.error('[FIREBASE_BACKUP]', guild.id, error));
     }
   };

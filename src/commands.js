@@ -1,5 +1,8 @@
 import { buildAlmanacView } from './ui/almanac.js';
 import { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } from 'discord.js';
+import { isGuildPaused, setGuildPaused } from './services/botPauseService.js';
+import { query } from './database/db.js';
+import { reconcileVoiceActivity } from './services/activityLeaderboardService.js';
 import { balance, claim, castFish, addMoney, transfer, bankMove, leaderboard, fishPointsLeaderboard, rollFish, saveFish, fishInventory, fishAlmanac, fishCollection, cooldownRemaining } from './services/economyService.js';
 import { FISH_RARITIES, FISH_TABLE } from './config/fishRarities.js';
 import { createFishCard } from './ui/fishCard.js';
@@ -152,6 +155,7 @@ export const commands = [
   ,new SlashCommandBuilder().setName('pay').setDescription('Transfer global coins.').addUserOption(o=>o.setName('user').setDescription('Recipient').setRequired(true)).addIntegerOption(o=>o.setName('amount').setDescription('Amount').setRequired(true))
   ,new SlashCommandBuilder().setName('deposit').setDescription('Move coins into your bank.').addIntegerOption(o=>o.setName('amount').setDescription('Amount').setRequired(true))
   ,new SlashCommandBuilder().setName('withdraw').setDescription('Withdraw coins from your bank.').addIntegerOption(o=>o.setName('amount').setDescription('Amount').setRequired(true))
+  ,new SlashCommandBuilder().setName('yachiyo-mode').setDescription('Turn Yachiyo features off or on; VC Join and Create VC stay active.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addStringOption(o=>o.setName('action').setDescription('Choose VC-only mode, resume, or check status').setRequired(true).addChoices({name:'Off • VC only',value:'off'},{name:'On • all features',value:'on'},{name:'Status',value:'status'}))
   ,new SlashCommandBuilder().setName('leaderboard').setDescription('View this server’s chat or voice leaderboard.').setDMPermission(false).addStringOption(o=>o.setName('type').setDescription('Choose Chat or Voice').setRequired(false).addChoices({name:'Chat • 1 XP per message',value:'chat'},{name:'Voice • time in channel',value:'voice'}))
   ,new SlashCommandBuilder().setName('leaderboard-reward-setup').setDescription('Choose reward roles for chat XP and voice-time milestones.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false).addRoleOption(o=>o.setName('chat_role').setDescription('Role awarded at 5,000 chat XP').setRequired(true)).addRoleOption(o=>o.setName('voice_role').setDescription('Role awarded at 100 voice hours').setRequired(true))
   ,new SlashCommandBuilder().setName('announcement-reward').setDescription('Manage announcements for earned role rewards.').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).setDMPermission(false)
@@ -182,8 +186,23 @@ export const commands = [
   ,new SlashCommandBuilder().setName('fishbattlepvp').setDescription('Challenge another fisher.').addUserOption(o=>o.setName('user').setDescription('Opponent').setRequired(true))
 ].filter(c=>!['balance','daily','work','fish','economy-add','admin-abuse','pay','deposit','withdraw','level','fish-setup','fishinventory','fishalmanac','give','gamble','rob','fishprofile','fishleaderboard','server-shop','server-inventory','fishshop','fishrod','fishstatuseffects','fishdrink','fishmarket','fishaquarium','fishbattle','fishbattlepvp','bump-panel','bump-status'].includes(c.name)).map(c=>c.toJSON());
 export async function handleCommand(interaction) {
-  await ensureGuild(interaction.guildId);
   const name=interaction.commandName;
+  if (name==='yachiyo-mode') {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return interaction.reply({content:'Only server administrators can change Yachiyo’s mode.',ephemeral:true});
+    const action=interaction.options.getString('action');
+    if (action==='status') return interaction.reply({content:isGuildPaused(interaction.guildId)?'Yachiyo is paused here. VC Join and Create VC stay active; saved data is kept.':'Yachiyo is active in this server.',ephemeral:true});
+    await interaction.deferReply({ephemeral:true});
+    if (action==='off') {
+      await query(`UPDATE guild_member_activity SET voice_seconds=voice_seconds+GREATEST(0,EXTRACT(EPOCH FROM (NOW()-voice_started_at))::BIGINT),voice_started_at=NULL,updated_at=NOW() WHERE guild_id=$1 AND voice_started_at IS NOT NULL`,[interaction.guildId]);
+      await setGuildPaused(interaction.guildId,true);
+      return interaction.editReply('Yachiyo is now in VC-only mode here. VC Join and Create VC remain active. Existing data is saved; leaderboard activity will not be recorded.');
+    }
+    await setGuildPaused(interaction.guildId,false);
+    const activeIds=[...interaction.guild.voiceStates.cache.values()].filter(state=>state.channelId && !state.member?.user.bot).map(state=>state.id);
+    await reconcileVoiceActivity(interaction.guildId,activeIds);
+    return interaction.editReply('Yachiyo is active again. Saved data is ready to use.');
+  }
+  await ensureGuild(interaction.guildId);
   if (name==='yachiyo') return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('🍓 Yachiyo Dashboard').setDescription('Open the cute Yachiyo website to manage your server, view backups, check setup, and explore commands.')],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('OPEN YACHIYO WEBSITE').setEmoji('🐰').setStyle(ButtonStyle.Link).setURL('https://sereiatalia.github.io/Yachiyo-Website/'))]});
   if (name==='report-bug') return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('☾ Report a bug or error').setDescription('Found something that is not working correctly? Please use the form below to send the details to Yachiyo’s developer.\n\nInclude what you were trying to do, what happened, and any useful screenshots or error messages.' ).setFooter({text:'Yachiyo • Thank you for helping improve the app.'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('REPORT HERE').setStyle(ButtonStyle.Link).setURL('https://docs.google.com/forms/d/e/1FAIpQLSfAF3EVdTzeAm51EjUxOf6fMvpXdJvxCAAVE9yCMf0OBNNRsg/viewform?usp=sharing&ouid=110698965186717204096'))]});
   if (name==='want-your-own-bot') return interaction.reply({embeds:[new EmbedBuilder().setColor(0xf3a6c7).setTitle('☾ Want your own bot?').setDescription('Would you like a custom Discord bot for your own community?\n\nMessage Yachiyo’s creator on Telegram to discuss your idea and requirements.\n\n୨୧ A small fee may apply depending on the workload, features, and time needed for your bot. We’ll discuss everything clearly before starting.').setFooter({text:'Yachiyo • Created by. Sereia'})],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('MESSAGE ON TELEGRAM').setStyle(ButtonStyle.Link).setURL('https://t.me/sereiatalia'))]});

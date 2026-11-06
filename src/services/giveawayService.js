@@ -13,7 +13,7 @@ export async function getGiveawayByMessageId(messageId) { const { rows } = await
 export async function getMostRecentEndedGiveaway(guildId) { const { rows } = await query("SELECT * FROM giveaways WHERE guild_id=$1 AND status='ended' ORDER BY COALESCE(ended_at,created_at) DESC,id DESC LIMIT 1",[guildId]); return rows[0] ?? null; }
 export async function getGiveawayByMessage(messageId) { const { rows } = await query("SELECT * FROM giveaways WHERE message_id=$1 AND status='active'", [messageId]); return rows[0] ?? null; }
 export async function getActiveGiveaways(guildId) { return (await query("SELECT * FROM giveaways WHERE guild_id=$1 AND status='active' ORDER BY ends_at ASC",[guildId])).rows; }
-export async function getDueGiveaways() { return (await query("SELECT id FROM giveaways WHERE status='active' AND ends_at<=NOW() ORDER BY ends_at ASC")).rows; }
+export async function getDueGiveaways() { return (await query("SELECT id,guild_id FROM giveaways WHERE status='active' AND ends_at<=NOW() ORDER BY ends_at ASC")).rows; }
 export async function addGiveawayEntry(id, userId) {
   const result = await query('INSERT INTO giveaway_entries (giveaway_id,user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING user_id', [id, userId]);
   return result.rowCount > 0;

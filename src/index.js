@@ -32,6 +32,7 @@ import { getTruthOrDareSettings, saveTruthOrDarePanel, randomTruthOrDare, SAFE_T
 import { getAutoReacts } from './services/autoReactService.js';
 import { getTempVoiceSettings, saveTempVoicePanel, createTempVoiceChannel, getTempVoiceChannel, getTempVoiceForOwner, getTempVoicePreference, saveTempVoicePreference, addTempVoiceGuest, removeTempVoiceGuest, listTempVoiceGuests, deleteTempVoiceChannel } from './services/tempVoiceService.js';
 import { getSpamSettings, recordSpamWarning, resetSpamWarnings } from './services/spamService.js';
+import { isGuildPaused, loadPausedGuilds } from './services/botPauseService.js';
 import { RETIRED_PANELS, getRetiredPanel, clearRetiredPanel } from './services/retiredPanelsService.js';
 import { getRobloxProfile, resolveRobloxUser } from './services/robloxService.js';
 import { getMlbbProfile } from './services/mlbbService.js';
@@ -642,7 +643,7 @@ function scheduleTempVoiceDeletion(channel) {
 function scheduleBumpReminder(guildId, userId, remindAt) {
   const key=guildId+':'+userId; clearTimeout(bumpReminderTimers.get(key));
   const delay=Math.max(0,new Date(remindAt).getTime()-Date.now());
-  bumpReminderTimers.set(key,setTimeout(async()=>{ const user=await client.users.fetch(userId).catch(()=>null); if(user) await user.send('₊˚⊹ᰔ Your Carl-bot bump cooldown is over. You can use `/bump` again now!').catch(()=>null); await markBumpReminderNotified(guildId,userId).catch(console.error); },delay));
+  bumpReminderTimers.set(key,setTimeout(async()=>{ if(isGuildPaused(guildId)) return; const user=await client.users.fetch(userId).catch(()=>null); if(user) await user.send('₊˚⊹ᰔ Your Carl-bot bump cooldown is over. You can use `/bump` again now!').catch(()=>null); await markBumpReminderNotified(guildId,userId).catch(console.error); },delay));
 }
 
 async function keepVoiceConnection(guildId, channelId) {
@@ -723,11 +724,12 @@ async function syncGuildVoiceActivity(guild) {
 }
 
 const voiceActivityReconcileTimer=setInterval(()=>{
-  for(const guild of client.guilds.cache.values()) syncGuildVoiceActivity(guild).catch(error=>console.error(`[VOICE_ACTIVITY_RECONCILE] ${guild.id}`,error));
+  for(const guild of client.guilds.cache.values()) if(!isGuildPaused(guild.id)) syncGuildVoiceActivity(guild).catch(error=>console.error(`[VOICE_ACTIVITY_RECONCILE] ${guild.id}`,error));
 },60_000);
 voiceActivityReconcileTimer.unref?.();
 
 async function grantEligibleActivityRewards(guild) {
+  if (isGuildPaused(guild.id)) return;
   const settings = await getActivityLeaderboardSettings(guild.id);
   if (!settings?.chat_reward_role_id && !settings?.voice_reward_role_id) return;
   const botMember = guild.members.me ?? await guild.members.fetch(client.user.id).catch(() => null);
@@ -827,21 +829,23 @@ const currentServerIds = client.guilds.cache.map(guild => guild.id);
   }
   const checkDueGiveaways = async () => {
     const dueGiveaways = await getDueGiveaways().catch(error => { console.error('[GIVEAWAY_DUE_CHECK]',error); return []; });
-    for (const {id} of dueGiveaways) client.emit('giveawayEnd',id);
+    for (const {id,guild_id} of dueGiveaways) if (!isGuildPaused(guild_id)) client.emit('giveawayEnd',id);
   };
   await checkDueGiveaways();
   const giveawayPoll = setInterval(checkDueGiveaways,15_000);
   giveawayPoll.unref?.();
   for (const guild of client.guilds.cache.values()) {
-    client.emit('serverInfoPanelRefresh',guild.id);
-    await syncGuildVoiceActivity(guild).catch(error=>console.error(`[VOICE_ACTIVITY_RECONCILE] ${guild.id}`,error));
+    if (!isGuildPaused(guild.id)) {
+      client.emit('serverInfoPanelRefresh',guild.id);
+      await syncGuildVoiceActivity(guild).catch(error=>console.error(`[VOICE_ACTIVITY_RECONCILE] ${guild.id}`,error));
+    }
   }
 });
 const disabledEconomyCommands = new Set(['balance','daily','work','fish','economy-add','admin-abuse','pay','deposit','withdraw','level','fish-setup','fishinventory','fishalmanac','give','gamble','rob','fishprofile','fishleaderboard','server-shop','server-inventory','fishshop','fishrod','fishstatuseffects','fishdrink','fishmarket','fishaquarium','fishbattle','fishbattlepvp','bump-panel','bump-status']);
 const registeredCommands = commands.filter(command => !disabledEconomyCommands.has(command.name));
 const configuredGuildIds = (process.env.DISCORD_GUILD_ID || '').split(',').map(id => id.trim()).filter(Boolean);
 client.on('voiceStateUpdate', async (oldState, newState) => {
-  if (!newState.member?.user.bot) {
+  if (!isGuildPaused(newState.guild.id) && !newState.member?.user.bot) {
     if (!oldState.channelId && newState.channelId) await startVoiceActivity(newState.guild.id,newState.id).catch(console.error);
     if (oldState.channelId && !newState.channelId) {
       await stopVoiceActivity(newState.guild.id,newState.id).catch(console.error);
@@ -890,6 +894,7 @@ client.on('giveawayEnd', async giveawayId => {
   giveawaysEnding.add(String(giveawayId));
   try {
     const giveaway = await getGiveaway(giveawayId);
+    if (isGuildPaused(giveaway?.guild_id)) return;
     if (!giveaway || giveaway.status !== 'active' || !giveaway.emoji) return;
     const [entries, previousWinners] = await Promise.all([getEligibleGiveawayEntrants(client,giveaway), getPreviousGiveawayWinners(giveaway.guild_id,giveawayId)]);
     const winners = selectGiveawayWinners(entries, giveaway.winner_count, previousWinners);
@@ -905,6 +910,7 @@ client.on('giveawayEnd', async giveawayId => {
   }
 });
 client.on('rulesPanelRefresh', async guildId => {
+  if (isGuildPaused(guildId)) return;
   const rules=await getRules(guildId).catch(()=>null); if(!rules) return;
   const channel=await client.channels.fetch(rules.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
   if(rules.panel_message_id) { const old=await channel.messages.fetch(rules.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
@@ -914,6 +920,7 @@ client.on('rulesPanelRefresh', async guildId => {
   await saveRulesPanel(guildId,panel.id);
 });
 client.on('truthOrDarePanelRefresh', async guildId => {
+  if (isGuildPaused(guildId)) return;
   const settings=await getTruthOrDareSettings(guildId).catch(()=>null); if(!settings) return;
   const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
   if(settings.panel_message_id) { const old=await channel.messages.fetch(settings.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
@@ -1081,6 +1088,7 @@ client.refreshServerPanels = async guild => {
 };
 
 client.on('serverInfoPanelRefresh', async (guildId, options = {}) => {
+  if (isGuildPaused(guildId)) return;
   const info=await getServerInfo(guildId).catch(()=>null); if(!info) return;
   const channel=await client.channels.fetch(info.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
   const buttons=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('server_info_profile').setLabel('YOUR PROFILE ♡').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('server_info_bot').setLabel('SERVER BOT ˚').setStyle(ButtonStyle.Secondary));
@@ -1104,8 +1112,9 @@ async function refreshTicketPanel(guildId) {
   await setTicketPanel(guildId,panel.id);
 }
 client.refreshTicketPanel = refreshTicketPanel;
-client.on('ticketPanelRefresh', guildId => refreshTicketPanel(guildId).catch(console.error));
+client.on('ticketPanelRefresh', guildId => { if (!isGuildPaused(guildId)) refreshTicketPanel(guildId).catch(console.error); });
 client.on('bumpPanelRefresh', async guildId => {
+  if (isGuildPaused(guildId)) return;
   const settings=await getBumpPanel(guildId).catch(()=>null); if(!settings) return;
   const channel=await client.channels.fetch(settings.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
   if(settings.panel_message_id) { const old=await channel.messages.fetch(settings.panel_message_id).catch(()=>null); if(old?.author?.id===client.user?.id) await old.delete().catch(()=>null); }
@@ -1183,6 +1192,7 @@ async function findReactionRoleForEvent(reaction) {
 }
 async function restoreExistingReactionRoles(onlyGuildId = null, onlyMessageId = null) {
   for (const guild of client.guilds.cache.values()) {
+    if (isGuildPaused(guild.id)) continue;
     if (onlyGuildId && guild.id !== onlyGuildId) continue;
     const panels = await getReactionRolePanels(guild.id).catch(error => {
       console.error('[REACTION_ROLE_STARTUP]', guild.id, error);
@@ -1231,6 +1241,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
   try { reaction = await hydrateReactionEvent(reaction); }
   catch (error) { console.error('[REACTION_PARTIAL_FETCH]', error); return; }
   if (!reaction.message.guild) return;
+  if (isGuildPaused(reaction.message.guild.id)) return;
   const giveawayId = client.pendingGiveawayEmoji?.get(reaction.message.id);
   if (giveawayId) {
     const giveaway = await getGiveaway(giveawayId).catch(() => null);
@@ -1284,6 +1295,7 @@ client.on('messageReactionRemove', async (reaction, user) => {
   try { reaction = await hydrateReactionEvent(reaction); }
   catch (error) { console.error('[REACTION_PARTIAL_FETCH]', error); return; }
   if (!reaction.message.guild) return;
+  if (isGuildPaused(reaction.message.guild.id)) return;
   const giveaway = await getGiveawayByMessage(reaction.message.id);
   if (giveaway?.emoji === reaction.emoji.toString()) {
     await removeGiveawayEntry(giveaway.id, user.id).catch(error => console.error('[GIVEAWAY_ENTRY_REMOVE]', giveaway.id, user.id, error));
@@ -1297,10 +1309,12 @@ client.on('messageReactionRemove', async (reaction, user) => {
   await member.roles.remove(role, 'Reaction role selection removed').catch(error => console.error(`[REACTION_ROLE] Failed to remove ${role.id} from ${user.id} in ${reaction.message.guild.id}:`, error));
 });
 client.on('introductionPanelRefresh', (guildId) => {
+  if (isGuildPaused(guildId)) return;
   clearTimeout(introductionPanelTimers.get(guildId));
   introductionPanelTimers.set(guildId, setTimeout(() => refreshIntroductionPanel(guildId).catch(console.error), 1500));
 });
 async function refreshIntroductionPanel(guildId) {
+  if (isGuildPaused(guildId)) return;
   const settings = await getIntroductionSettings(guildId);
   if (!settings) return;
   const channel = await client.channels.fetch(settings.channel_id).catch(() => null);
@@ -1312,8 +1326,9 @@ async function refreshIntroductionPanel(guildId) {
   const panel = await channel.send({ embeds: [new EmbedBuilder().setColor(0xf3a6c7).setTitle(renderServerEmojis(settings.panel_title, channel.guild)).setDescription(renderServerEmojis(settings.panel_message, channel.guild))], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('introduction_get_template').setLabel('୨୧ Introduction').setStyle(ButtonStyle.Primary))] });
   await setIntroductionPanelMessage(guildId, panel.id);
 }
-client.on('guildCreate', guild => ensureGuild(guild.id).catch(console.error));
+client.on('guildCreate', guild => { if (!isGuildPaused(guild.id)) ensureGuild(guild.id).catch(console.error); });
 client.on('guildMemberAdd', m => {
+  if (isGuildPaused(m.guild.id)) return;
   (async () => {
     const settings = (await query('SELECT audit_channels FROM guild_settings WHERE guild_id=$1', [m.guild.id])).rows[0] ?? {};
     const welcomeChannelId = settings.audit_channels?.welcome;
@@ -1325,10 +1340,12 @@ client.on('guildMemberAdd', m => {
   client.emit('serverInfoPanelRefresh',m.guild.id);
 });
 client.on('guildMemberRemove', m => {
+  if (isGuildPaused(m.guild.id)) return;
   sendAuditLog(client,m.guild,{eventType:'member.leave',targetId:m.id,data:{displayName:m.displayName || m.user.globalName || m.user.username,username:m.user.username,leftAt:new Date().toISOString(),summary:m.user.tag+' left the server.'}}).catch(console.error);
   client.emit('serverInfoPanelRefresh',m.guild.id);
 });
 client.on('messageDelete', async msg => {
+  if (isGuildPaused(msg.guild?.id)) return;
   if (filteredMessageIds.delete(msg.id)) return;
   if (!msg.guild) return;
   const intro = await getIntroductionByMessageId(msg.guild.id, msg.id).catch(() => null);
@@ -1362,6 +1379,7 @@ client.on('messageDelete', async msg => {
   sendAuditLog(client, msg.guild, { eventType:'message.delete', actorId:deleterId, targetId:msg.channelId, data:{ channelName:msg.channel?.name, messageId:msg.id, authorId:deletedMessage.author.id, deleterId, deleterFallback:!entry, createdTimestamp:deletedMessage.createdTimestamp, content:deletedMessage.content, attachments:attachments.length, attachmentUrls:attachments.map(a => a.url), attachmentDetails:attachments.map(a => ({name:a.name,url:a.url,contentType:a.contentType,size:a.size})), summary:'A message was deleted.' } }).catch(console.error);
 });
 client.on('messageUpdate', async (oldMsg, newMsg) => {
+  if (isGuildPaused(newMsg.guild?.id)) return;
   if (!newMsg.guild || (oldMsg.content === newMsg.content && oldMsg.attachments?.size === newMsg.attachments?.size)) return;
   const message = newMsg.partial ? await newMsg.fetch().catch(() => newMsg) : newMsg;
   const author = message.author;
@@ -1371,9 +1389,10 @@ client.on('messageUpdate', async (oldMsg, newMsg) => {
   const entry = audit?.entries.find(item => item.target?.id === author.id && (!item.extra?.channel?.id || item.extra.channel.id === message.channelId));
   sendAuditLog(client, message.guild, { eventType:'message.edit', actorId:entry?.executor?.id ?? author.id, targetId:message.channelId, data:{ channelName:message.channel?.name, messageId:message.id, authorId:author.id, editorId:entry?.executor?.id ?? null, createdTimestamp:message.createdTimestamp, before:oldMsg.content, after:message.content, attachmentUrls:[...message.attachments.values()].map(a => a.url), attachmentDetails:[...message.attachments.values()].map(a => ({name:a.name,url:a.url,contentType:a.contentType})), previousAttachmentUrls:[...(oldMsg.attachments?.values?.() ?? [])].map(a => a.url), summary:'A message was edited.' } }).catch(console.error);
 });
-client.on('roleCreate', role => sendAuditLog(client,role.guild,{eventType:'role.create',targetId:role.id,data:{summary:`Role **${role.name}** was created.`}}).catch(console.error));
-client.on('roleDelete', role => sendAuditLog(client,role.guild,{eventType:'role.delete',targetId:role.id,data:{summary:`Role **${role.name}** was deleted.`}}).catch(console.error));
+client.on('roleCreate', role => { if (!isGuildPaused(role.guild.id)) sendAuditLog(client,role.guild,{eventType:'role.create',targetId:role.id,data:{summary:`Role **${role.name}** was created.`}}).catch(console.error); });
+client.on('roleDelete', role => { if (!isGuildPaused(role.guild.id)) sendAuditLog(client,role.guild,{eventType:'role.delete',targetId:role.id,data:{summary:`Role **${role.name}** was deleted.`}}).catch(console.error); });
 client.on('channelCreate', async channel => {
+  if (isGuildPaused(channel.guild?.id)) return;
   if (!channel.guild) return;
   await new Promise(resolve => setTimeout(resolve, 500));
   const audit = await channel.guild.fetchAuditLogs({ type: AuditLogEvent.ChannelCreate, limit: 8 }).catch(() => null);
@@ -1382,6 +1401,7 @@ client.on('channelCreate', async channel => {
   sendAuditLog(client,channel.guild,{eventType:'channel.create',actorId:entry?.executor?.id ?? null,targetId:channel.id,data:{createdBy,summary:`Channel **${channel.name}** was created by **${entry?.executor?.tag ?? 'an unknown user'}**.`}}).catch(console.error);
 });
 client.on('channelDelete', async channel => {
+  if (isGuildPaused(channel.guild?.id)) return;
   if (!channel.guild) return;
   await new Promise(resolve => setTimeout(resolve, 500));
   const audit = await channel.guild.fetchAuditLogs({ type: AuditLogEvent.ChannelDelete, limit: 8 }).catch(() => null);
@@ -1389,8 +1409,9 @@ client.on('channelDelete', async channel => {
   const deletedBy = entry?.executor ? `${entry.executor.tag} (<@${entry.executor.id}>)` : 'Unknown moderator';
   sendAuditLog(client, channel.guild, { eventType:'channel.delete', actorId:entry?.executor?.id ?? null, targetId:channel.id, data:{channelName:channel.name, deletedBy, summary:`Channel **${channel.name}** was deleted by **${entry?.executor?.tag ?? 'an unknown moderator'}**.`}}).catch(console.error);
 });
-client.on('reactionRoleWizardStart', interaction => runReactionRoleWizard(interaction).catch(error => console.error('[REACTION_ROLE_WIZARD]', error)));
+client.on('reactionRoleWizardStart', interaction => { if (!isGuildPaused(interaction.guildId)) runReactionRoleWizard(interaction).catch(error => console.error('[REACTION_ROLE_WIZARD]', error)); });
 client.on('reactionRoleRepair', async interaction => {
+  if (isGuildPaused(interaction.guildId)) return;
   try {
     await interaction.deferReply({ ephemeral: true });
     const input = interaction.options.getString('message', true).trim();
@@ -1433,6 +1454,7 @@ client.on('reactionRoleRepair', async interaction => {
   }
 });
 async function publishQuizRound(session) {
+  if (isGuildPaused(session.guild_id)) return;
   const channel=await client.channels.fetch(session.channel_id).catch(()=>null); if(!channel?.isTextBased()) return;
   const round=Number(session.current_round)+1, question=await nextQuestion(session); if(!question) return;
   await startRound(session.id,round,question);
@@ -1440,6 +1462,9 @@ async function publishQuizRound(session) {
   await activateQuiz(session.id,round,session.panel_message_id,panel.id);
 }
 client.on('interactionCreate', async interaction => {
+  if (isGuildPaused(interaction.guildId) && !(interaction.isChatInputCommand() && ['yachiyo-mode','vc-join','temp-vc-setup','temp-vc-panel','my-voice','my-vc'].includes(interaction.commandName)) && !(interaction.isButton() && interaction.customId.startsWith('temp_vc_')) && !(interaction.isModalSubmit() && interaction.customId.startsWith('temp_vc_')) && !(interaction.isUserSelectMenu() && interaction.customId.startsWith('temp_vc_'))) {
+    return interaction.reply({content:'Yachiyo is in VC-only mode here. An admin can use `/yachiyo-mode on` to restore all features.',ephemeral:true}).catch(error=>console.error('[PAUSED_INTERACTION]',error));
+  }
   if (interaction.isButton() && interaction.customId.startsWith('activity_leaderboard:')) {
     const type = interaction.customId.split(':').at(-1) === 'voice' ? 'voice' : 'chat';
     return interaction.update({ embeds:[await buildActivityLeaderboardEmbed(interaction.guildId,type,interaction.user.id)], components:activityLeaderboardButtons(type) });
@@ -1980,6 +2005,7 @@ client.on('interactionCreate', async interaction => {
 });
 client.on('messageCreate', async message => {
   if (!message.guild) return;
+  if (isGuildPaused(message.guild.id)) return;
   const interactionName = message.interactionMetadata?.name ?? message.interaction?.commandName;
   if (interactionName === 'bump') {
     const userId = message.interactionMetadata?.user?.id ?? message.interaction?.user?.id ?? (!message.author.bot ? message.author.id : null);
@@ -2097,5 +2123,6 @@ client.on('messageCreate', async message => {
 });
 client.on('error', error => console.error('[DISCORD]', error));
 
+await loadPausedGuilds();
 client.login(process.env.DISCORD_TOKEN);
 
